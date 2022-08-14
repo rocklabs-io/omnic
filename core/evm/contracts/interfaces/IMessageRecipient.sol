@@ -5,9 +5,9 @@ pragma solidity ^0.8.9;
 
 interface IMessageRecipient {
     function handleMessage(
-        uint32 _origin,
+        uint32 _srcChainId,
+        bytes32 _srcSenderAddress,
         uint32 _nonce,
-        bytes32 _sender,
-        bytes memory _message
+        bytes calldata payload
     ) external;
 }
