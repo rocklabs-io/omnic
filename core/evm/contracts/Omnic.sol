@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
+import {QueueLib} from "./libs/Queue.sol";
+import {QueueManager} from "./Queue.sol";
+import {Types} from "./libs/Types.sol";
+import {IMessageRecipient} from "./interfaces/IMessageRecipient.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 // Omnic Crosschain message passing protocol core contract
 
-contract Omnic {
-    address public owner;
+contract Omnic is Ownable, QueueManager {
+
+    using QueueLib for QueueLib.Queue;
+    // ============ Constants ============
+    uint16 public immutable chainId;
     address public omnicCanisterAddr;
 
     // Maximum bytes per message = 2 KiB
@@ -14,58 +23,85 @@ contract Omnic {
     // domain => next available nonce for the domain
     mapping(uint32 => uint32) public nonces;
 
-    // messages
-    struct Message {
-        uint32 origin;
-        uint32 nonce;
-        uint32 destination;
-        bytes32 recipient;
-        bytes message;
-    }
-    Message[] messages;
+    // re-entrancy guard
+    uint8 private entered;
 
     event EnqueueMessage(
         bytes32 indexed messageHash,
-        uint32 indexed destination,
-        uint32 indexed nonce,
-        bytes32 recepient,
-        bytes message
+        uint32 indexed dstNonce,
+        Types.MessageFormat message
     );
 
     event ProcessMessage(
         bytes32 indexed messageHash,
-        uint32 indexed origin,
-        uint32 indexed nonce,
-        bytes32 recepient,
-        bytes message
+        bool indexed success,
+        bytes indexed returnData
     );
 
-    constructor() {
-        owner = msg.sender;
+    constructor(uint16 _chainId) {
+        chainId = _chainId;
     }
 
-    function setOmnicCanisterAddr(address addr) public {
-        require(msg.sender == owner);
+    function initialize() public initializer {
+        // initialize queue, 
+        __QueueManager_initialize();
+        entered = 1;
+    }
+
+    function setOmnicCanisterAddr(address addr) public onlyOwner {
         omnicCanisterAddr = addr;
     }
 
-    // TODO: implementation
-    // // simplify this: https://github.com/nomad-xyz/monorepo/blob/main/packages/contracts-core/contracts/Home.sol#L175
-    // function enqueueMessage(
-    //     uint32 destination,
-    //     bytes32 recipient,
-    //     bytes memory data
-    // ) public {
-    //     require(data.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
-    //     // get the next nonce for the destination domain, then increment it
-    //     uint32 _nonce = nonces[destination];
-    //     nonces[destination] = _nonce + 1;
+    function enqueueMessage(
+        uint32 _dstChainId,
+        bytes32 _recipientAddress,
+        bytes memory payload
+    ) public {
+        require(payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
+        // get the next nonce for the destination domain, then increment it
+        uint32 _nonce = nonces[_dstChainId];
+        nonces[_dstChainId] = _nonce + 1;
+        Types.MessageFormat memory _message = Types.MessageFormat(
+            chainId,
+            bytes32(uint256(uint160(msg.sender))),
+            _nonce,
+            _dstChainId,
+            _recipientAddress,
+            payload
+        );
+        bytes32 _messageHash = keccak256(abi.encode(_message));
+        queue.enqueue(_message);
+        emit EnqueueMessage(
+            _messageHash, 
+            _nonce, 
+            _message
+        );
 
-    // }
+    }
 
-    // // only omnic canister can call this func
-    // function processMessage() public {
-    //     require(msg.sender == omnicCanisterAddr);
+    // only omnic canister can call this func
+    function processMessage(Types.MessageFormat memory _message) public returns (bool success){
+        require(msg.sender == omnicCanisterAddr);
+
+        require(_message._dstChainId == chainId, "!destination");
+        bytes32 _messageHash = keccak256(abi.encode(_message));
+        // check re-entrancy guard
+        require(entered == 1, "!reentrant");
+        entered = 0;
+
+        // call handle function
+        IMessageRecipient(Types.bytes32ToAddress(_message._recipientAddress)).handleMessage(
+            _message._srcChainId,
+            _message._srcSenderAddress,
+            _message._nonce,
+            _message.payload
+        );
+        // emit process results
+        emit ProcessMessage(_messageHash, true, "");
+        // reset re-entrancy guard
+        entered = 1;
+        // return true
+        return true;
         
-    // }
+    }
 }
