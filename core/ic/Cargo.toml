@@ -1,0 +1,18 @@
+[package]
+name = "omnic-core"
+version = "0.1.0"
+description = "Omnic Core"
+homepage = "https://github.com/rocklabs-io/omnic"
+repository = "https://github.com/rocklabs-io/omnic"
+license = "MIT"
+keywords = ["dfinity", "icp", "web3", "ethereum", "crosschain"]
+authors = ["Rocklabs <hello@rocklabs.io>"]
+readme = "README.md"
+edition = "2018"
+
+[[bin]]
+name = "omnic"
+path = "src/main.rs"
+
+[dependencies]
+ic-web3 = "0.1.1"
