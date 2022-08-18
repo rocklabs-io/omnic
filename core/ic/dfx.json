@@ -2,7 +2,7 @@
     "canisters": {
         "omnic": {
 			  "candid": "src/omnic.did",
-			  "package": "omnic-core",
+			  "package": "omnic",
 			  "type": "rust",
 			  "wasm": "target/wasm32-unknown-unknown/release/omnic.wasm",
 			  "build": [

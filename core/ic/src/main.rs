@@ -23,8 +23,8 @@ use ic_web3::{
 // goerli testnet rpc url
 const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd";
 const CHAIN_ID: u64 = 5;
-const ETH_OMNIC_ADDR: &str = "0x0fA355bEEA41d190CAE64F24a58F70ff2912D7df";
-const EVENT_ENQUEUE_MSG: &str = "";
+const ETH_OMNIC_ADDR: &str = "0fA355bEEA41d190CAE64F24a58F70ff2912D7df";
+const EVENT_ENQUEUE_MSG: &str = "49855fe1b89449bbbf62ad50dd54754b7834260e96c7986a103cbcb95883353c";
 
 const KEY_NAME: &str = "dfx_test_key";
 // const TOKEN_ABI: &[u8] = include_bytes!("../src/contract/res/token.json");
@@ -45,7 +45,7 @@ thread_local! {
 
 #[init]
 #[candid_method(init)]
-fn init(args: InitArgs) {
+fn init() {
     cron_enqueue(
         Task::GetLogs,
         ic_cron::types::SchedulingOptions {
@@ -54,6 +54,12 @@ fn init(args: InitArgs) {
             iterations: Iterations::Infinite,
         },
     ).unwrap();
+}
+
+#[update(name = "get_logs")]
+#[candid_method(update, rename = "get_logs")]
+async fn get() {
+    get_logs().await
 }
 
 
@@ -69,14 +75,17 @@ async fn get_logs() {
             None,
             None,
         )
-        .from_block(BlockNumber::Latest)
+        .from_block(BlockNumber::Number(7426080.into())) // omnic contract deploy block id
         .to_block(BlockNumber::Latest)
         .build();
     let w3 = match ICHttp::new(URL, None) {
         Ok(v) => { Web3::new(v) },
         Err(e) => { panic!() },
     };
-    let logs = w3.eth().logs(filter);
+    let logs = w3.eth().logs(filter).await.unwrap();
+    for log in logs {
+        ic_cdk::println!("{}", serde_json::to_string(&log).unwrap());
+    }
 }
 
 #[heartbeat]
