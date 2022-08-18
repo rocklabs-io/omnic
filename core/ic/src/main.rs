@@ -23,7 +23,7 @@ use ic_web3::{
 // goerli testnet rpc url
 const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd";
 const CHAIN_ID: u64 = 5;
-const ETH_OMNIC_ADDR: &str = "";
+const ETH_OMNIC_ADDR: &str = "0x0fA355bEEA41d190CAE64F24a58F70ff2912D7df";
 const EVENT_ENQUEUE_MSG: &str = "";
 
 const KEY_NAME: &str = "dfx_test_key";
