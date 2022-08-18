@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use std::cell::RefCell;
+use std::str;
 
 use omnic::types::{InitArgs, ChainConfig, Message, Task};
 
@@ -17,15 +18,16 @@ use ic_web3::ic::{get_eth_addr, KeyInfo};
 use ic_web3::{
     contract::{Contract, Options},
     ethabi::ethereum_types::{U64, U256, H256, H160},
-    types::{Address, TransactionParameters, BlockId, BlockNumber, FilterBuilder},
+    ethabi::{Event, EventParam, ParamType, Log as ABILog, RawLog},
+    types::{Address, TransactionParameters, BlockId, BlockNumber, FilterBuilder, Log},
 };
 
 // goerli testnet rpc url
 // const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd";
 const URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
 const CHAIN_ID: u64 = 5;
-const ETH_OMNIC_ADDR: &str = "0fa355beea41d190cae64f24a58f70ff2912d7df";
-const EVENT_ENQUEUE_MSG: &str = "49855fe1b89449bbbf62ad50dd54754b7834260e96c7986a103cbcb95883353c";
+const ETH_OMNIC_ADDR: &str = "C3bfE8E4f99C13eb8f92C944a89C71E7be178A6F";
+const EVENT_ENQUEUE_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8ea626c9fb38a90bd8";
 
 const KEY_NAME: &str = "dfx_test_key";
 // const TOKEN_ABI: &[u8] = include_bytes!("../src/contract/res/token.json");
@@ -63,6 +65,31 @@ async fn get() {
     get_logs().await
 }
 
+fn parse_event_enqueue_msg(log: &Log) {
+    let params = vec![
+        EventParam { name: "messageHash".to_string(), kind: ParamType::FixedBytes(32), indexed: true },
+        EventParam { name: "dstNonce".to_string(), kind: ParamType::Uint(32), indexed: true },
+        EventParam { name: "srcChainId".to_string(), kind: ParamType::Uint(32), indexed: false },
+        EventParam { name: "srcSenderAddress".to_string(), kind: ParamType::FixedBytes(32), indexed: false },
+        EventParam { name: "dstChainId".to_string(), kind: ParamType::Uint(32), indexed: false },
+        EventParam { name: "recipient".to_string(), kind: ParamType::FixedBytes(32), indexed: false },
+        EventParam { name: "data".to_string(), kind: ParamType::Bytes, indexed: false }
+    ];
+
+    let event = Event {
+        name: "EnqueueMessage".to_string(),
+        inputs: params,
+        anonymous: false
+    };
+    ic_cdk::println!("event signature: {}", event.signature());
+    let res = event.parse_log(RawLog {
+        topics: vec![event.signature()],
+        data: log.data.clone().0
+    }).unwrap();
+    ic_cdk::println!("parsed log: {}", serde_json::to_string(&res).unwrap());
+    let data = res.params.iter().find(|p| p.name == "data").unwrap();
+    ic_cdk::println!("message from Ethereum: {}", str::from_utf8(&data.value.clone().into_bytes().unwrap()).unwrap());
+}
 
 async fn get_logs() {
     ic_cdk::println!("getting logs now");
@@ -78,7 +105,8 @@ async fn get_logs() {
             None,
         )
         .from_block(BlockNumber::Number(7426080.into())) // omnic contract deploy block id
-        .to_block(BlockNumber::Number(7426080.into()))
+        // .to_block(BlockNumber::Number(7426080.into()))
+        .to_block(BlockNumber::Latest)
         .build();
     let w3 = match ICHttp::new(URL, None) {
         Ok(v) => { Web3::new(v) },
@@ -87,6 +115,8 @@ async fn get_logs() {
     let logs = w3.eth().logs(filter).await.unwrap();
     for log in logs {
         ic_cdk::println!("{}", serde_json::to_string(&log).unwrap());
+        // parse into Message
+        parse_event_enqueue_msg(&log);
     }
 }
 

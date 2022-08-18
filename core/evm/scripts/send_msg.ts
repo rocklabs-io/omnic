@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 // import { Principal } from "@dfinity/principal";
 
 async function main() {
-  const omnic_addr = "0x0fA355bEEA41d190CAE64F24a58F70ff2912D7df";
+  const omnic_addr = "0xC3bfE8E4f99C13eb8f92C944a89C71E7be178A6F";
   // const omnic_canister = Principal.fromText("rdmx6-jaaaa-aaaaa-aaadq-cai");
 
   const omnic = await ethers.getContractAt("Omnic", omnic_addr);

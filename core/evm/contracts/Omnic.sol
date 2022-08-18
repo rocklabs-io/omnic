@@ -29,11 +29,21 @@ contract Omnic is Ownable, QueueManager {
     event EnqueueMessage(
         bytes32 indexed messageHash,
         uint32 indexed dstNonce,
-        Types.MessageFormat message
+        uint32 srcChainId,
+        bytes32 srcSenderAddress,
+        uint32 dstChainId,
+        bytes32 recipient,
+        bytes data
     );
 
     event ProcessMessage(
         bytes32 indexed messageHash,
+        uint32 dstNonce,
+        uint32 srcChainId,
+        bytes32 srcSenderAddress,
+        uint32 dstChainId,
+        bytes32 recipient,
+        bytes data,
         bool indexed success,
         bytes indexed returnData
     );
@@ -74,7 +84,11 @@ contract Omnic is Ownable, QueueManager {
         emit EnqueueMessage(
             _messageHash, 
             _nonce, 
-            _message
+            chainId,
+            bytes32(uint256(uint160(msg.sender))),
+            _dstChainId,
+            _recipientAddress,
+            payload
         );
 
     }
@@ -97,7 +111,17 @@ contract Omnic is Ownable, QueueManager {
             _message.payload
         );
         // emit process results
-        emit ProcessMessage(_messageHash, true, "");
+        emit ProcessMessage(
+            _messageHash, 
+            _message._nonce,
+            _message._srcChainId,
+            _message._srcSenderAddress,
+            _message._dstChainId,
+            _message._recipientAddress,
+            _message.payload,
+            true, 
+            ""
+        );
         // reset re-entrancy guard
         entered = 1;
         // return true

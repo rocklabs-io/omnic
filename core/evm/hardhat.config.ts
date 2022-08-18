@@ -6,6 +6,7 @@ dotenv.config();
 
 const etherscanKey = process.env.ETHERSCAN_API_KEY;
 const infuraKey = process.env.INFURA_API_KEY;
+const alchemyKey = process.env.ALCHEMY_KEY;
 const testPrivKey = process.env.TEST_PRIV_KEY;
 
 module.exports = {
@@ -38,6 +39,7 @@ module.exports = {
     },
     goerli: {
       url: `https://goerli.infura.io/v3/${infuraKey}`,
+      // url: `https://eth-goerli.g.alchemy.com/v2/${alchemyKey}`,
       accounts: [testPrivKey]
     },
     mainnet: {
