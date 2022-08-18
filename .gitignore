@@ -7,3 +7,5 @@ coverage.json
 src.ts/
 dist/
 typechain-types
+Cargo.lock
+target/
