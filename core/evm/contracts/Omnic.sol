@@ -13,7 +13,7 @@ contract Omnic is Ownable, QueueManager {
 
     using QueueLib for QueueLib.Queue;
     // ============ Constants ============
-    uint16 public immutable chainId;
+    uint32 public immutable chainId;
     address public omnicCanisterAddr;
 
     // Maximum bytes per message = 2 KiB
@@ -38,8 +38,8 @@ contract Omnic is Ownable, QueueManager {
         bytes indexed returnData
     );
 
-    constructor(uint16 _chainId) {
-        chainId = _chainId;
+    constructor() {
+        chainId = uint32(block.chainid);
     }
 
     function initialize() public initializer {
