@@ -83,7 +83,7 @@ fn parse_event_enqueue_msg(log: &Log) {
     };
     ic_cdk::println!("event signature: {}", event.signature());
     let res = event.parse_log(RawLog {
-        topics: vec![event.signature()],
+        topics: log.topics.clone(),
         data: log.data.clone().0
     }).unwrap();
     ic_cdk::println!("parsed log: {}", serde_json::to_string(&res).unwrap());
