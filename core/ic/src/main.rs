@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use std::cell::RefCell;
 use std::str;
+use std::collections::HashMap;
 
 use omnic::types::{InitArgs, ChainConfig, Message, Task};
 
@@ -24,9 +25,9 @@ use ic_web3::{
 
 // goerli testnet rpc url
 // const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd";
-const URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
-const CHAIN_ID: u64 = 5;
-const ETH_OMNIC_ADDR: &str = "C3bfE8E4f99C13eb8f92C944a89C71E7be178A6F";
+const GOERLI_URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
+const GOERLI_CHAIN_ID: u32 = 5;
+const GOERLI_OMNIC_ADDR: &str = "C3bfE8E4f99C13eb8f92C944a89C71E7be178A6F";
 const EVENT_ENQUEUE_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8ea626c9fb38a90bd8";
 
 const KEY_NAME: &str = "dfx_test_key";
@@ -38,12 +39,12 @@ ic_cron::implement_cron!();
 
 #[derive(CandidType, Deserialize, Default)]
 struct State {
-    chains: Vec<ChainConfig>, // supported chains
+    chains: HashMap<u32, ChainConfig>, // supported chains
     cron_state: Option<TaskScheduler>,
 }
 
 thread_local! {
-    static CHAINS: RefCell<Vec<ChainConfig>> = RefCell::new(Vec::new());
+    static CHAINS: RefCell<HashMap<u32, ChainConfig>> = RefCell::new(HashMap::new());
 }
 
 #[init]
@@ -57,69 +58,52 @@ fn init() {
             iterations: Iterations::Infinite,
         },
     ).unwrap();
+    // add goerli chain config
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        // ledger.init_metadata(ic_cdk::caller(), args.clone());
+        chains.insert(GOERLI_CHAIN_ID, ChainConfig {
+            chain_id: GOERLI_CHAIN_ID,
+            rpc_url: GOERLI_URL.clone().into(),
+            omnic_addr:GOERLI_OMNIC_ADDR.clone().into(),
+            omnic_start_block: 7426080,
+            current_block: 7426080, 
+            batch_size: 1000,
+        });
+    });
 }
 
 #[update(name = "get_logs")]
 #[candid_method(update, rename = "get_logs")]
 async fn get() {
-    get_logs().await
+    // TODO: fix error
+    let chains = CHAINS.with(|chains| {
+        chains.borrow()
+    });
+    for (id, chain) in &*chains {
+        let msgs = get_chain_msgs(&chain).await.unwrap();
+        ic_cdk::println!("msgs: {:?}", msgs);
+    }
 }
 
-fn parse_event_enqueue_msg(log: &Log) {
-    let params = vec![
-        EventParam { name: "messageHash".to_string(), kind: ParamType::FixedBytes(32), indexed: true },
-        EventParam { name: "dstNonce".to_string(), kind: ParamType::Uint(32), indexed: true },
-        EventParam { name: "srcChainId".to_string(), kind: ParamType::Uint(32), indexed: false },
-        EventParam { name: "srcSenderAddress".to_string(), kind: ParamType::FixedBytes(32), indexed: false },
-        EventParam { name: "dstChainId".to_string(), kind: ParamType::Uint(32), indexed: false },
-        EventParam { name: "recipient".to_string(), kind: ParamType::FixedBytes(32), indexed: false },
-        EventParam { name: "data".to_string(), kind: ParamType::Bytes, indexed: false }
-    ];
-
-    let event = Event {
-        name: "EnqueueMessage".to_string(),
-        inputs: params,
-        anonymous: false
-    };
-    ic_cdk::println!("event signature: {}", event.signature());
-    let res = event.parse_log(RawLog {
-        topics: log.topics.clone(),
-        data: log.data.clone().0
-    }).unwrap();
-    ic_cdk::println!("parsed log: {}", serde_json::to_string(&res).unwrap());
-    let data = res.params.iter().find(|p| p.name == "data").unwrap();
-    ic_cdk::println!("message from Ethereum: {}", str::from_utf8(&data.value.clone().into_bytes().unwrap()).unwrap());
-}
-
-async fn get_logs() {
-    ic_cdk::println!("getting logs now");
-    // ic_cdk::println!("{}", H160::from_str("25816551e0e2e6fc256a0e7bcffdfd1ca3cd390d").unwrap());
-    // should traverse all chains, testing only ETH now
-    // filter for events in our contract
+async fn get_chain_msgs(chain: &ChainConfig) -> Result<Vec<Message>, String> {
     let filter = FilterBuilder::default()
-        .address(vec![H160::from_str(ETH_OMNIC_ADDR).unwrap()])
+        .address(vec![H160::from_str(&chain.omnic_addr).unwrap()])
         .topics(
             Some(vec![H256::from_str(EVENT_ENQUEUE_MSG).unwrap()]),
             None,
             None,
             None,
         )
-        .from_block(BlockNumber::Number(7426080.into())) // omnic contract deploy block id
-        // .to_block(BlockNumber::Number(7426080.into()))
-        .to_block(BlockNumber::Latest)
+        .from_block(BlockNumber::Number(chain.current_block.into()))
+        .to_block(BlockNumber::Latest) // todo: min(chain.current_block + chain.batch_size, block_height)
         .build();
-    let w3 = match ICHttp::new(URL, None) {
+    let w3 = match ICHttp::new(&chain.rpc_url, None) {
         Ok(v) => { Web3::new(v) },
         Err(e) => { panic!() },
     };
     let logs = w3.eth().logs(filter).await.unwrap();
-    for log in logs {
-        ic_cdk::println!("{}", serde_json::to_string(&log).unwrap());
-        // parse into Message
-        // parse_event_enqueue_msg(&log);
-        let msg = Message::from_log(&log).unwrap();
-        ic_cdk::println!("msg: {}", msg);
-    }
+    Ok(logs.iter().map(|log| Message::from_log(&log).unwrap()).collect())
 }
 
 #[heartbeat]

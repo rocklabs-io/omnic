@@ -10,23 +10,14 @@ pub struct InitArgs {
     pub owner: Option<Principal> // if None, caller will be the owner
 }
 
-/*
-struct MessageFormat {
-        uint32 _srcChainId;
-        bytes32 _srcSenderAddress;
-        uint32 _nonce;
-        uint32 _dstChainId;
-        bytes32 _recipientAddress;
-        bytes payload;
-    }
-*/
-
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct ChainConfig {
     pub chain_id: u32,
     pub rpc_url: String,
-    // omnic contract address on that chain
-    pub omnic_addr: Vec<u8>,
+    pub omnic_addr: String, // omnic contract address on that chain
+    pub omnic_start_block: u64, // omnic contract deployment block
+    pub current_block: u64, // current block getLogs scanned, init value = omnic_start_block
+    pub batch_size: u64, // how many blocks each getLogs scan
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
