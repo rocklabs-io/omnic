@@ -116,7 +116,9 @@ async fn get_logs() {
     for log in logs {
         ic_cdk::println!("{}", serde_json::to_string(&log).unwrap());
         // parse into Message
-        parse_event_enqueue_msg(&log);
+        // parse_event_enqueue_msg(&log);
+        let msg = Message::from_log(&log).unwrap();
+        ic_cdk::println!("msg: {}", msg);
     }
 }
 
