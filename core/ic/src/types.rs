@@ -52,26 +52,25 @@ impl Message {
             topics: log.topics.clone(),
             data: log.data.clone().0
         }).map_err(|e| format!("ethabi parse_log failed: {}", e))?;
-        // TODO: handle unwrap error:
-        let msg_hash = res.params.iter().find(|p| p.name == "messageHash").unwrap();
-        let dst_nonce = res.params.iter().find(|p| p.name == "dstNonce").unwrap();
-        let src_chain = res.params.iter().find(|p| p.name == "srcChainId").unwrap();
-        let src_sender = res.params.iter().find(|p| p.name == "srcSenderAddress").unwrap();
-        let dst_chain = res.params.iter().find(|p| p.name == "dstChainId").unwrap();
-        let recipient = res.params.iter().find(|p| p.name == "recipient").unwrap();
-        let payload = res.params.iter().find(|p| p.name == "data").unwrap();
+        
+        let msg_hash = res.params.iter().find(|p| p.name == "messageHash").ok_or("missing messgaHash".to_string())?;
+        let dst_nonce = res.params.iter().find(|p| p.name == "dstNonce").ok_or("missing dstNonce".to_string())?;
+        let src_chain = res.params.iter().find(|p| p.name == "srcChainId").ok_or("missing srcChainId".to_string())?;
+        let src_sender = res.params.iter().find(|p| p.name == "srcSenderAddress").ok_or("missing srcSenderAddress".to_string())?;
+        let dst_chain = res.params.iter().find(|p| p.name == "dstChainId").ok_or("missing dstChainId".to_string())?;
+        let recipient = res.params.iter().find(|p| p.name == "recipient").ok_or("missing recipient".to_string())?;
+        let payload = res.params.iter().find(|p| p.name == "data").ok_or("missing data".to_string())?;
         // ic_cdk::println!("event: {:?}", res);
         // ic_cdk::println!("msg_hash: {:?}", msg_hash.value.clone());
 
-        // TODO: handle unwrap error:
         Ok(Message {
-            hash: msg_hash.value.clone().into_fixed_bytes().unwrap(),
-            src_chain: src_chain.value.clone().into_uint().unwrap().try_into().map_err(|e| format!("convert U256 to u32 failed"))?,
-            src_sender: src_sender.value.clone().into_fixed_bytes().unwrap(),
-            nonce: dst_nonce.value.clone().into_uint().unwrap().try_into().map_err(|e| format!("convert U256 to u32 failed"))?,
-            dst_chain: dst_chain.value.clone().into_uint().unwrap().try_into().map_err(|e| format!("convert U256 to u32 failed"))?,
-            recipient: recipient.value.clone().into_fixed_bytes().unwrap(),
-            payload: payload.value.clone().into_bytes().unwrap()
+            hash: msg_hash.value.clone().into_fixed_bytes().ok_or("can not convert hash to bytes")?,
+            src_chain: src_chain.value.clone().into_uint().ok_or("can not convert src_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
+            src_sender: src_sender.value.clone().into_fixed_bytes().ok_or("can not src_sender to bytes")?,
+            nonce: dst_nonce.value.clone().into_uint().ok_or("can not convert nonce to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
+            dst_chain: dst_chain.value.clone().into_uint().ok_or("can not convert dst_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
+            recipient: recipient.value.clone().into_fixed_bytes().ok_or("can not recipient to bytes")?,
+            payload: payload.value.clone().into_bytes().ok_or("can not payload to bytes")?
         })
     }
 }
