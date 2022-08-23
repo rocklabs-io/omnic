@@ -45,6 +45,12 @@ struct State {
 
 thread_local! {
     static CHAINS: RefCell<HashMap<u32, ChainConfig>> = RefCell::new(HashMap::new());
+    // / message queue to be processed
+    // static MSGS: RefCell<>;
+    // / processed messages
+    // static PROCESSED_MSGS: RefCell<>;
+    // / outgoing tx queue
+    // static TXS: RefCell<>;
 }
 
 #[init]
@@ -75,16 +81,25 @@ fn init() {
 
 #[update(name = "get_logs")]
 #[candid_method(update, rename = "get_logs")]
-async fn get() {
-    // TODO: fix error
+async fn get() -> Result<Vec<Message>, String> {
     let chains = CHAINS.with(|chains| {
-        chains.borrow()
+        chains.borrow().clone()
     });
-    for (id, chain) in &*chains {
+    ic_cdk::println!("chains: {:?}", chains);
+    ic_cdk::println!("getting messages from chains now...");
+    let mut res = Vec::new();
+    for (id, chain) in chains.into_iter() {
         let msgs = get_chain_msgs(&chain).await.unwrap();
-        ic_cdk::println!("msgs: {:?}", msgs);
+        ic_cdk::println!("msgs: {:?}", &msgs);
+        res.extend(msgs);
     }
+    Ok(res)
 }
+
+// process messages
+// async fn process_msgs() -> Result<Bool, String> {
+
+// }
 
 async fn get_chain_msgs(chain: &ChainConfig) -> Result<Vec<Message>, String> {
     let filter = FilterBuilder::default()
@@ -106,6 +121,14 @@ async fn get_chain_msgs(chain: &ChainConfig) -> Result<Vec<Message>, String> {
     Ok(logs.iter().map(|log| Message::from_log(&log).unwrap()).collect())
 }
 
+/*
+heartbeat tasks:
+    GetLogs: fetch logs from supported chains and enqueue messages
+    ProcessMsgs: process messages from msg queue, 
+        if destination is IC canister, call canister.handleMessage
+        if destination is EVM chain, construct & sign the tx and enqueue to tx queue
+    SendTxs: send pending txs to external EVM chains
+*/
 #[heartbeat]
 fn heartbeat() {
     for task in cron_ready_tasks() {

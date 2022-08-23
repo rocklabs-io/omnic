@@ -1,1 +1,11 @@
-service : () -> { get_logs : () -> () }
+type Message = record {
+  dst_chain : nat32;
+  hash : vec nat8;
+  src_sender : vec nat8;
+  recipient : vec nat8;
+  src_chain : nat32;
+  nonce : nat32;
+  payload : vec nat8;
+};
+type Result = variant { Ok : vec Message; Err : text };
+service : () -> { get_logs : () -> (Result) }
