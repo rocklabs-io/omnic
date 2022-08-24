@@ -177,12 +177,12 @@ async fn get_chain_msgs(chain: &ChainConfig) -> Result<Vec<Message>, String> {
 }
 
 /*
-heartbeat tasks:
+heartbeat tasks: (do it all in GetLogs for now)
     GetLogs: fetch logs from supported chains and enqueue messages
-    ProcessMsgs: process messages from msg queue, 
-        if destination is IC canister, call canister.handleMessage
-        if destination is EVM chain, construct & sign the tx and enqueue to tx queue
-    SendTxs: send pending txs to external EVM chains
+    // ProcessMsgs: process messages from msg queue, 
+    //     if destination is IC canister, call canister.handleMessage
+    //     if destination is EVM chain, construct & sign the tx and enqueue to tx queue
+    // SendTxs: send pending txs to external EVM chains
 */
 #[heartbeat]
 fn heartbeat() {
