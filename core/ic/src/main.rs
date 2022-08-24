@@ -32,7 +32,7 @@ const EVENT_ENQUEUE_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8
 
 const IC_CHAIN_ID: u32 = 0;
 const KEY_NAME: &str = "dfx_test_key";
-// const TOKEN_ABI: &[u8] = include_bytes!("../src/contract/res/token.json");
+const OMNIC_ABI: &[u8] = include_bytes!("./omnic.json");
 
 type Result<T, E> = std::result::Result<T, E>;
 
@@ -46,8 +46,8 @@ struct State {
 
 thread_local! {
     static CHAINS: RefCell<HashMap<u32, ChainConfig>> = RefCell::new(HashMap::new());
-    // / outgoing tx queue
-    static TXS: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
+    // / outgoing tx queue, chainid -> Vec<signed tx data>, batch send
+    // static TXS: RefCell<HashMap<u32, Vec<Vec<u8>>>> = RefCell::new(HashMap::new());
 }
 
 #[init]
@@ -83,49 +83,49 @@ async fn get() {
 }
 
 // process message
-async fn process_msg(chain: &ChainConfig, msg: &Message) {
+async fn process_msg(chain: &ChainConfig, msg: &Message) -> Result<bool, String> {
     if msg.dst_chain == IC_CHAIN_ID {
         // TODO: call reciver canister.handle_message
         ic_cdk::println!("msg to ic: {:?}", msg);
     } else {
-        // TODO: create a signed tx and insert to tx queue
+        // TODO: batch process txs
         ic_cdk::println!("msg to chain: {:?}, {:?}", msg.dst_chain, msg);
-        // let http = ICHttp::new(&chain.rpc_url, None).map_err(|e| format!("init ic http client failed: {:?}", e))?;
-        // let w3 = Web3::new(http);
-        // let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
-        // let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
-        // let contract_address = Address::from_str(&chain.omnic_addr).unwrap();
-        // let contract = Contract::from_json(
-        //     w3.eth(),
-        //     contract_address,
-        //     OMNIC_ABI
-        // ).map_err(|e| format!("init contract failed: {}", e))?;
+        let http = ICHttp::new(&chain.rpc_url, None).map_err(|e| format!("init ic http client failed: {:?}", e))?;
+        let w3 = Web3::new(http);
+        let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
+        let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
+        let contract_address = Address::from_str(&chain.omnic_addr).unwrap();
+        let contract = Contract::from_json(
+            w3.eth(),
+            contract_address,
+            OMNIC_ABI
+        ).map_err(|e| format!("init contract failed: {}", e))?;
 
-        // let canister_addr = get_eth_addr(None, None, KEY_NAME.to_string())
-        //     .await
-        //     .map_err(|e| format!("get canister eth addr failed: {}", e))?;
-        // // add nonce to options
-        // let tx_count = w3.eth()
-        //     .transaction_count(canister_addr, None)
-        //     .await
-        //     .map_err(|e| format!("get tx count error: {}", e))?;
-        // // get gas_price
-        // let gas_price = w3.eth()
-        //     .gas_price()
-        //     .await
-        //     .map_err(|e| format!("get gas_price error: {}", e))?;
-        // // legacy transaction type is still ok
-        // let options = Options::with(|op| { 
-        //     op.nonce = Some(tx_count);
-        //     op.gas_price = Some(gas_price);
-        //     op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
-        // });
-        // let to_addr = Address::from_str(&addr).unwrap();
-        // let signed_tx = contract
-        //     .sign("processMessage", (to_addr, value,), options, key_info, CHAIN_ID)
+        let canister_addr = get_eth_addr(None, None, KEY_NAME.to_string())
+            .await
+            .map_err(|e| format!("get canister eth addr failed: {}", e))?;
+        // add nonce to options
+        let tx_count = w3.eth()
+            .transaction_count(canister_addr, None)
+            .await
+            .map_err(|e| format!("get tx count error: {}", e))?;
+        // get gas_price
+        let gas_price = w3.eth()
+            .gas_price()
+            .await
+            .map_err(|e| format!("get gas_price error: {}", e))?;
+        // legacy transaction type is still ok
+        let options = Options::with(|op| { 
+            op.nonce = Some(tx_count);
+            op.gas_price = Some(gas_price);
+            op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
+        });
+        // let txhash = contract
+        //     .signed_call("processMessage", (to_addr, value,), options, key_info, CHAIN_ID)
         //     .await
         //     .map_err(|e| format!("tx sign failed: {}", e))?;
     }
+    Ok(true)
 }
 
 async fn traverse_chains() {
@@ -136,7 +136,7 @@ async fn traverse_chains() {
         let msgs = get_chain_msgs(&chain).await.unwrap_or_default();
         // process messages
         for msg in msgs {
-            process_msg(&chain, &msg).await
+            process_msg(&chain, &msg).await;
         }
     }
 }
