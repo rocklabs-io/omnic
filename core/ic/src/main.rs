@@ -30,6 +30,7 @@ const GOERLI_CHAIN_ID: u32 = 5;
 const GOERLI_OMNIC_ADDR: &str = "C3bfE8E4f99C13eb8f92C944a89C71E7be178A6F";
 const EVENT_ENQUEUE_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8ea626c9fb38a90bd8";
 
+const IC_CHAIN_ID: u32 = 0;
 const KEY_NAME: &str = "dfx_test_key";
 // const TOKEN_ABI: &[u8] = include_bytes!("../src/contract/res/token.json");
 
@@ -45,12 +46,8 @@ struct State {
 
 thread_local! {
     static CHAINS: RefCell<HashMap<u32, ChainConfig>> = RefCell::new(HashMap::new());
-    // / message queue to be processed
-    // static MSGS: RefCell<>;
-    // / processed messages
-    // static PROCESSED_MSGS: RefCell<>;
     // / outgoing tx queue
-    // static TXS: RefCell<>;
+    static TXS: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
 }
 
 #[init]
@@ -81,27 +78,84 @@ fn init() {
 
 #[update(name = "get_logs")]
 #[candid_method(update, rename = "get_logs")]
-async fn get() -> Result<Vec<Message>, String> {
+async fn get() {
+    traverse_chains().await;
+}
+
+// process message
+async fn process_msg(chain: &ChainConfig, msg: &Message) {
+    if msg.dst_chain == IC_CHAIN_ID {
+        // TODO: call reciver canister.handle_message
+        ic_cdk::println!("msg to ic: {:?}", msg);
+    } else {
+        // TODO: create a signed tx and insert to tx queue
+        ic_cdk::println!("msg to chain: {:?}, {:?}", msg.dst_chain, msg);
+        // let http = ICHttp::new(&chain.rpc_url, None).map_err(|e| format!("init ic http client failed: {:?}", e))?;
+        // let w3 = Web3::new(http);
+        // let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
+        // let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
+        // let contract_address = Address::from_str(&chain.omnic_addr).unwrap();
+        // let contract = Contract::from_json(
+        //     w3.eth(),
+        //     contract_address,
+        //     OMNIC_ABI
+        // ).map_err(|e| format!("init contract failed: {}", e))?;
+
+        // let canister_addr = get_eth_addr(None, None, KEY_NAME.to_string())
+        //     .await
+        //     .map_err(|e| format!("get canister eth addr failed: {}", e))?;
+        // // add nonce to options
+        // let tx_count = w3.eth()
+        //     .transaction_count(canister_addr, None)
+        //     .await
+        //     .map_err(|e| format!("get tx count error: {}", e))?;
+        // // get gas_price
+        // let gas_price = w3.eth()
+        //     .gas_price()
+        //     .await
+        //     .map_err(|e| format!("get gas_price error: {}", e))?;
+        // // legacy transaction type is still ok
+        // let options = Options::with(|op| { 
+        //     op.nonce = Some(tx_count);
+        //     op.gas_price = Some(gas_price);
+        //     op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
+        // });
+        // let to_addr = Address::from_str(&addr).unwrap();
+        // let signed_tx = contract
+        //     .sign("processMessage", (to_addr, value,), options, key_info, CHAIN_ID)
+        //     .await
+        //     .map_err(|e| format!("tx sign failed: {}", e))?;
+    }
+}
+
+async fn traverse_chains() {
     let chains = CHAINS.with(|chains| {
         chains.borrow().clone()
     });
-    ic_cdk::println!("chains: {:?}", chains);
-    ic_cdk::println!("getting messages from chains now...");
-    let mut res = Vec::new();
     for (id, chain) in chains.into_iter() {
-        let msgs = get_chain_msgs(&chain).await.unwrap();
-        ic_cdk::println!("msgs: {:?}", &msgs);
-        res.extend(msgs);
+        let msgs = get_chain_msgs(&chain).await.unwrap_or_default();
+        // process messages
+        for msg in msgs {
+            process_msg(&chain, &msg).await
+        }
     }
-    Ok(res)
 }
 
-// process messages
-// async fn process_msgs() -> Result<Bool, String> {
-
-// }
+// async fn send_txs()
 
 async fn get_chain_msgs(chain: &ChainConfig) -> Result<Vec<Message>, String> {
+    let http = ICHttp::new(&chain.rpc_url, None).map_err(|e| format!("init ic http client failed: {:?}", e))?;
+    let w3 = Web3::new(http);
+
+    let block_height: u64 = w3
+        .eth().block_number().await
+        .map(|h| h.as_u64())
+        .map_err(|e| format!("get block height err: {:?}", e))?;
+    let to_block = if chain.current_block + chain.batch_size < block_height {
+        chain.current_block + chain.batch_size
+    } else {
+        block_height
+    };
     let filter = FilterBuilder::default()
         .address(vec![H160::from_str(&chain.omnic_addr).unwrap()])
         .topics(
@@ -111,13 +165,14 @@ async fn get_chain_msgs(chain: &ChainConfig) -> Result<Vec<Message>, String> {
             None,
         )
         .from_block(BlockNumber::Number(chain.current_block.into()))
-        .to_block(BlockNumber::Latest) // todo: min(chain.current_block + chain.batch_size, block_height)
+        .to_block(BlockNumber::Number(U64::from(to_block)))
         .build();
-    let w3 = match ICHttp::new(&chain.rpc_url, None) {
-        Ok(v) => { Web3::new(v) },
-        Err(e) => { panic!() },
-    };
-    let logs = w3.eth().logs(filter).await.unwrap();
+    let logs = w3.eth().logs(filter).await.map_err(|e| format!("get logs failed for chain: {:?}, {:?}", chain, e))?;
+    // update chainconfig.current_block
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        chains.get_mut(&chain.chain_id).unwrap().current_block = to_block;
+    });
     Ok(logs.iter().map(|log| Message::from_log(&log).unwrap()).collect())
 }
 
