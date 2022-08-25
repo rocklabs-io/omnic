@@ -2,6 +2,7 @@ use std::str::FromStr;
 use std::cell::RefCell;
 use std::str;
 use std::collections::HashMap;
+use std::convert::TryInto;
 
 use omnic::types::{InitArgs, ChainConfig, Message, Task};
 
@@ -20,7 +21,7 @@ use ic_web3::{
     contract::{Contract, Options},
     ethabi::ethereum_types::{U64, U256, H256, H160},
     ethabi::{Event, EventParam, ParamType, Log as ABILog, RawLog},
-    types::{Address, TransactionParameters, BlockId, BlockNumber, FilterBuilder, Log},
+    types::{Bytes, Address, TransactionParameters, BlockId, BlockNumber, FilterBuilder, Log},
 };
 
 // goerli testnet rpc url
@@ -85,8 +86,8 @@ async fn get() -> Vec<Message> {
 // process message
 async fn process_msg(chain: &ChainConfig, msg: &Message) -> Result<bool, String> {
     if msg.dst_chain == IC_CHAIN_ID {
-        // TODO: call reciver canister.handle_message
         ic_cdk::println!("msg to ic: {:?}", msg);
+        ic_cdk::api::call::call_raw(Principal::from_slice(&msg.recipient), "handle_message", &msg.payload, 0).await;
     } else {
         // TODO: batch process txs
         ic_cdk::println!("msg to chain: {:?}, {:?}", msg.dst_chain, msg);
@@ -120,10 +121,15 @@ async fn process_msg(chain: &ChainConfig, msg: &Message) -> Result<bool, String>
             op.gas_price = Some(gas_price);
             op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
         });
-        // let txhash = contract
-        //     .signed_call("processMessage", (to_addr, value,), options, key_info, CHAIN_ID)
-        //     .await
-        //     .map_err(|e| format!("tx sign failed: {}", e))?;
+        let txhash = contract
+            .signed_call("processMessage", (
+                H256::from_slice(&msg.hash), msg.src_chain, H256::from_slice(&msg.src_sender), 
+                msg.nonce, msg.dst_chain, H256::from_slice(&msg.recipient), 
+                Bytes::from(msg.payload.clone()),), 
+                options, key_info, chain.chain_id as u64)
+            .await
+            .map_err(|e| format!("tx sign failed: {}", e))?;
+        ic_cdk::println!("txhash: {:?}", txhash);
     }
     Ok(true)
 }
