@@ -9,7 +9,17 @@
 				"cargo build --target wasm32-unknown-unknown --release",
 				"ic-cdk-optimizer target/wasm32-unknown-unknown/release/omnic.wasm -o target/wasm32-unknown-unknown/release/omnic_opt.wasm"
 			  ]
-        }
+        },
+        "demo": {
+            "candid": "src/demo.did",
+            "package": "demo",
+            "type": "rust",
+            "wasm": "target/wasm32-unknown-unknown/release/demo.wasm",
+            "build": [
+              "cargo build --target wasm32-unknown-unknown --release",
+              "ic-cdk-optimizer target/wasm32-unknown-unknown/release/demo.wasm -o target/wasm32-unknown-unknown/release/demo_opt.wasm"
+            ]
+      }
     },
     "defaults": {
         "build": {

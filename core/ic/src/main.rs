@@ -77,8 +77,8 @@ fn init() {
     });
 }
 
-#[update(name = "get_logs")]
-#[candid_method(update, rename = "get_logs")]
+#[update(name = "process_logs")]
+#[candid_method(update, rename = "process_logs")]
 async fn get() -> Vec<Message> {
     traverse_chains().await
 }
