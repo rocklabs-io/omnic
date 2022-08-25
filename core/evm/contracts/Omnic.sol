@@ -94,31 +94,37 @@ contract Omnic is Ownable, QueueManager {
     }
 
     // only omnic canister can call this func
-    function processMessage(Types.MessageFormat memory _message) public returns (bool success){
+    function processMessage(
+        bytes32 _messageHash,
+        uint32 _srcChainId,
+        bytes32 _srcSenderAddress,
+        uint32 _nonce,
+        uint32 _dstChainId,
+        bytes32 _recipientAddress,
+        bytes memory payload
+    ) public returns (bool success) {
         require(msg.sender == omnicCanisterAddr);
-
-        require(_message._dstChainId == chainId, "!destination");
-        bytes32 _messageHash = keccak256(abi.encode(_message));
+        require(_dstChainId == chainId, "!destination");
         // check re-entrancy guard
         require(entered == 1, "!reentrant");
         entered = 0;
 
         // call handle function
-        IMessageRecipient(Types.bytes32ToAddress(_message._recipientAddress)).handleMessage(
-            _message._srcChainId,
-            _message._srcSenderAddress,
-            _message._nonce,
-            _message.payload
+        IMessageRecipient(Types.bytes32ToAddress(_recipientAddress)).handleMessage(
+            _srcChainId,
+            _srcSenderAddress,
+            _nonce,
+            payload
         );
         // emit process results
         emit ProcessMessage(
             _messageHash, 
-            _message._nonce,
-            _message._srcChainId,
-            _message._srcSenderAddress,
-            _message._dstChainId,
-            _message._recipientAddress,
-            _message.payload,
+            _nonce,
+            _srcChainId,
+            _srcSenderAddress,
+            _dstChainId,
+            _recipientAddress,
+            payload,
             true, 
             ""
         );
@@ -126,6 +132,5 @@ contract Omnic is Ownable, QueueManager {
         entered = 1;
         // return true
         return true;
-        
     }
 }

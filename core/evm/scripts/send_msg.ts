@@ -1,18 +1,23 @@
 import { ethers } from "hardhat";
+import fs from "fs";
+const hre = require("hardhat");
 // need to solve Module not found error for this package
 // import { Principal } from "@dfinity/principal";
 
 async function main() {
-  const omnic_addr = "0xC3bfE8E4f99C13eb8f92C944a89C71E7be178A6F";
+  const chain = hre.network.name;
+  let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+
+  const omnic_contract_addr = config.omnic_evm_contracts[chain];
   // const omnic_canister = Principal.fromText("rdmx6-jaaaa-aaaaa-aaadq-cai");
 
-  const omnic = await ethers.getContractAt("Omnic", omnic_addr);
+  const omnic = await ethers.getContractAt("Omnic", omnic_contract_addr);
   console.log("omnic address:", omnic.address);
 
   console.log("calling omnic.enqueueMessage...");
   let dest_chain = 0; // send to IC
   // let recepient = ethers.utils.hexZeroPad(omnic_canister.toHex(), 32); // send to omnic canister
-  let recepient = ethers.utils.hexZeroPad(omnic_addr, 32);
+  let recepient = ethers.utils.hexZeroPad(omnic_contract_addr, 32);
   console.log("recepient:", recepient);
   let data = ethers.utils.hexlify(ethers.utils.toUtf8Bytes("hello omnic!"));
   let tx = await omnic.enqueueMessage(dest_chain, recepient, data);
