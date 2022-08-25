@@ -27,7 +27,7 @@ use ic_web3::{
 // const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd";
 const GOERLI_URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
 const GOERLI_CHAIN_ID: u32 = 5;
-const GOERLI_OMNIC_ADDR: &str = "C3bfE8E4f99C13eb8f92C944a89C71E7be178A6F";
+const GOERLI_OMNIC_ADDR: &str = "F7aB3584c3fAb7aCcA90d3d5A9633a542C5F8863";
 const EVENT_ENQUEUE_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8ea626c9fb38a90bd8";
 
 const IC_CHAIN_ID: u32 = 0;
@@ -69,8 +69,8 @@ fn init() {
             chain_id: GOERLI_CHAIN_ID,
             rpc_url: GOERLI_URL.clone().into(),
             omnic_addr:GOERLI_OMNIC_ADDR.clone().into(),
-            omnic_start_block: 7426080,
-            current_block: 7426080, 
+            omnic_start_block: 7468220,
+            current_block: 7468220, 
             batch_size: 1000,
         });
     });
@@ -78,8 +78,8 @@ fn init() {
 
 #[update(name = "get_logs")]
 #[candid_method(update, rename = "get_logs")]
-async fn get() {
-    traverse_chains().await;
+async fn get() -> Vec<Message> {
+    traverse_chains().await
 }
 
 // process message
@@ -128,17 +128,20 @@ async fn process_msg(chain: &ChainConfig, msg: &Message) -> Result<bool, String>
     Ok(true)
 }
 
-async fn traverse_chains() {
+async fn traverse_chains() -> Vec<Message> {
     let chains = CHAINS.with(|chains| {
         chains.borrow().clone()
     });
+    let mut res = Vec::new();
     for (id, chain) in chains.into_iter() {
         let msgs = get_chain_msgs(&chain).await.unwrap_or_default();
         // process messages
-        for msg in msgs {
+        for msg in &msgs {
             process_msg(&chain, &msg).await;
         }
+        res.extend(msgs);
     }
+    res
 }
 
 // async fn send_txs()
@@ -184,16 +187,16 @@ heartbeat tasks: (do it all in GetLogs for now)
     //     if destination is EVM chain, construct & sign the tx and enqueue to tx queue
     // SendTxs: send pending txs to external EVM chains
 */
-#[heartbeat]
-fn heartbeat() {
-    for task in cron_ready_tasks() {
-        let kind = task.get_payload::<Task>().expect("Serialization error");
-        match kind {
-            Task::GetLogs => todo!(),
-            SendTx => todo!()
-        }
-    }
-}
+// #[heartbeat]
+// fn heartbeat() {
+//     for task in cron_ready_tasks() {
+//         let kind = task.get_payload::<Task>().expect("Serialization error");
+//         match kind {
+//             Task::GetLogs => todo!(),
+//             SendTx => todo!()
+//         }
+//     }
+// }
 
 fn get_time() -> u64 {
     ic_cdk::api::time() / 1000000000

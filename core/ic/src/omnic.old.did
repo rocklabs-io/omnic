@@ -7,5 +7,4 @@ type Message = record {
   nonce : nat32;
   payload : vec nat8;
 };
-type Result = variant { Ok : vec Message; Err : text };
-service : () -> { get_logs : () -> (Result) }
+service : () -> { get_logs : () -> (vec Message) }
