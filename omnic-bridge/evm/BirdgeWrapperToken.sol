@@ -2,6 +2,7 @@
 pragma solidity ^0.8.9;
 
 // ============ Internal Imports ============
+import {BirdgeManager} from "./utils/BirdgeManager.sol";
 import {IBridgeWrapperToken} from "./interfaces/IBridgeWrapperToken.sol";
 import {WrapperERC20} from "./WrapperERC20.sol";
 
@@ -99,13 +100,12 @@ contract BridgeWrapperToken is IBridgeWrapperToken, OwnableUpgradeable, WrapperE
         // set, allowing anyone to supply correct name/symbols/decimals
         require(
             _isFirstDetails ||
-                keccak256(abi.encodePacked(
-                    bytes(_newName).length,
+                BirdgeManager.getDetailsHash(
                     _newName,
-                    bytes(_newSymbol).length,
                     _newSymbol,
                     _newDecimals
-                )) == detailsHash,
+                ) ==
+                detailsHash,
             "!committed details"
         );
         // careful with naming convention change here

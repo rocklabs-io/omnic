@@ -2,6 +2,7 @@
 pragma solidity ^0.8.9;
 
 // ============ Internal Imports ============
+import {BirdgeManager} from "./utils/BirdgeManager.sol";
 import {IBridgeWrapperToken} from "./interfaces/IBridgeWrapperToken.sol";
 import {IMessageRecipient} from "./interfaces/IMessageRecipient.sol";
 import {IOmnic} from "./interfaces/IOmnic.sol";
@@ -28,13 +29,6 @@ contract BridgeRouter is OwnableUpgradeable, IMessageRecipient {
 
     IXAppConnectionManager public xAppConnectionManager;
 
-    // ============ Enums ============
-    enum OperationTypes {
-        Invalid,
-        TokenId,
-        Message,
-        Transfer
-    }
 
     // ============ Upgrade Gap ============
 
@@ -111,9 +105,11 @@ contract BridgeRouter is OwnableUpgradeable, IMessageRecipient {
         ) = abi.decode(_payload, (uint32, bytes32, uint32, bytes32, uint256, bytes32));
         require(dstRecipientAddress != bytes32(0), "!dstRecipientAddress");
         // handle message
-        require(operationType == uint32(OperationTypes.Transfer), "!transfer");
+        require(BirdgeManager.isTransfer(operationType), "!transfer");
         address recipient = address(uint160(uint256(dstRecipientAddress)));
         bytes32 wrapperToken = supportTokens[srcChainId][srcTokenAddress];
+        // deploy corelated wrapperToken firstly, and transfer ownership to this router address
+        // in the future, here we will deploy corelated wrapperToken automatically
         require(wrapperToken != bytes32(0), "!supported token");
         // only evm supported
         address _token = address(uint160(uint256(wrapperToken)));
@@ -156,14 +152,10 @@ contract BridgeRouter is OwnableUpgradeable, IMessageRecipient {
                 _amount
             );
             // query token contract for details and calculate detailsHash
-            _detailsHash = keccak256(
-                abi.encodePacked(
-                    bytes(_t.name()).length,
-                    _t.name(),
-                    bytes(_t.symbol()).length,
-                    _t.symbol(),
-                    _t.decimals()
-                )
+            _detailsHash = BirdgeManager.getDetailsHash(
+                _t.name(),
+                _t.symbol(),
+                _t.decimals()
             );
         } else {
             // if the token originates on a remote chain,
@@ -175,7 +167,7 @@ contract BridgeRouter is OwnableUpgradeable, IMessageRecipient {
         bytes memory payload = abi.encode(
             _srcChainId,
             _tokenAddress,
-            OperationTypes.Transfer,
+            BirdgeManager.OperationTypes.Transfer,
             _recipientAddress,
             _amount,
             _detailsHash
