@@ -3,9 +3,9 @@
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Message {
-    pub log: Log,
-    pub processed_log: Log, // log emitted after this msg is processed
+    pub log: Log, // origin log for this message
 
+    // message body
     pub hash: Vec<u8>,
     pub src_chain: u32,
     pub src_sender: Vec<u8>,
@@ -13,8 +13,12 @@ pub struct Message {
     pub dst_chain: u32,
     pub recipient: Vec<u8>,
     pub payload: Vec<u8>,
-    // add more needed fields
+    pub need_verify: bool,
 
+    pub verified: bool, // optimistically verified
+    pub outgoing_tx: Option<ic_web3::SignedTransaction>, // if dst = ic, no need this
+    pub outgoging_tx_confirmed: bool,
+    pub processed_log: Option<Log>, // log emitted after this msg is processed on the destination chain
 }
 
 impl Message {

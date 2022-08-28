@@ -1,4 +1,8 @@
 
+/*
+    chain struct
+    maintain a incoming message queue & a outgoing message queue
+*/
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Chain {
@@ -9,5 +13,5 @@ pub struct Chain {
 }
 
 impl Chain {
-    
+
 }
