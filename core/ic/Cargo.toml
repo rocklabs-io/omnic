@@ -12,14 +12,18 @@ edition = "2018"
 
 [[bin]]
 name = "omnic"
-path = "src/main.rs"
+path = "refactor/main.rs"
 
-[[bin]]
-name = "demo"
-path = "src/demo.rs"
+#[[bin]]
+#name = "omnic"
+#path = "src/main.rs"
+
+#[[bin]]
+#name = "demo"
+#path = "src/demo.rs"
 
 [dependencies]
-ic-web3 = "0.1.0"
+ic-web3 = { git = "https://github.com/rocklabs-io/ic-web3" }
 ic-cron = "0.7.0"
 candid = "0.7.4"
 ic-cdk = "0.5.1"
