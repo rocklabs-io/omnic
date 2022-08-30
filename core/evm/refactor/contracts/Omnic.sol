@@ -12,10 +12,10 @@ import {IOmnicReciver} from "./interfaces/IOmnicReciver.sol";
 //external
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+
 // Omnic Crosschain message passing protocol core contract
 
 contract Omnic is QueueManager, Ownable {
-
     using QueueLib for QueueLib.Queue;
     using MerkleLib for MerkleLib.Tree;
     MerkleLib.Tree public tree;
@@ -25,7 +25,7 @@ contract Omnic is QueueManager, Ownable {
     bytes32 public committedRoot;
 
     // omnic state
-    enum States {  
+    enum States {
         UnInitialized,
         Active, // contract is good
         Stopped // fraud occurs in contract
@@ -36,7 +36,7 @@ contract Omnic is QueueManager, Ownable {
     // re-entrancy
     uint8 internal entered;
 
-    // ic canister which is responsible for message management, verification and update 
+    // ic canister which is responsible for message management, verification and update
     address public omnicProxyCanisterAddr;
 
     // Maximum bytes per message = 2 KiB
@@ -49,61 +49,59 @@ contract Omnic is QueueManager, Ownable {
     // gap for upgrade safety
     uint256[49] private __GAP;
 
-    modifier onlyProxyCanister {
+    // ============ modifiers  ============
+
+    modifier onlyProxyCanister() {
         require(msg.sender == omnicProxyCanisterAddr, "!proxyCanisterAddress");
         _;
     }
-    
+
     modifier notStopped() {
         require(state != States.Stopped, "contract stopped");
         _;
     }
 
+    // ============ Events  ============
     event SendMessage(
         bytes32 indexed messageHash,
         uint256 indexed leafIndex,
         uint64 indexed dstChainIdAndNonce,
-        bytes options,
+        bool needVerify,
         bytes payload
     );
 
     event ProcessMessage(
         bytes32 indexed messageHash,
-        uint32 dstNonce,
-        uint32 srcChainId,
-        bytes32 srcSenderAddress,
-        uint32 dstChainId,
-        bytes32 recipient,
-        bytes data,
-        bool indexed success,
-        bytes indexed returnData
+        bool indexed verified,
+        bytes indexed returnData,
+        bool success
     );
 
-    event UpdateProxyCanister(address oldProxyCanisterAddr, address newProxyCanisterAddr);
+    event UpdateProxyCanister(
+        address oldProxyCanisterAddr,
+        address newProxyCanisterAddr
+    );
 
+    // ============== Start ===============
     constructor() {
         chainId = uint32(block.chainid);
     }
 
-    function initialize(address _proxyCanisterAddr) public initializer {
-        // initialize queue, 
+    function initialize(address _proxyCanisterAddr)
+        public
+        initializer
+    {
+        // initialize queue,
         __QueueManager_initialize();
         omnicProxyCanisterAddr = _proxyCanisterAddr;
         entered = 1;
         state = States.Active;
-
-    }
-
-    function setOmnicCanisterAddr(address _newProxyCanisterAddr) public onlyOwner {
-        address _oldProxyCanisterAddr = omnicProxyCanisterAddr;
-        omnicProxyCanisterAddr = _newProxyCanisterAddr;
-        emit UpdateProxyCanister(_oldProxyCanisterAddr, _newProxyCanisterAddr);
     }
 
     function sendMessage(
         uint32 _dstChainId,
         bytes32 _recipientAddress,
-        bytes memory _options,
+        bool _needVerify, // customized
         bytes memory _payload
     ) public {
         require(_payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
@@ -119,7 +117,7 @@ contract Omnic is QueueManager, Ownable {
             _recipientAddress,
             _payload
         );
-        bytes32 _messageHash = keccak256(abi.encode(_message));
+        bytes32 _messageHash = keccak256(_message);
         tree.insert(_messageHash);
         // enqueue the new Merkle root after inserting the message
         queue.enqueue(tree.root());
@@ -127,53 +125,69 @@ contract Omnic is QueueManager, Ownable {
         emit SendMessage(
             _messageHash,
             tree.count - 1,
-            _dstChainIdAndNonce(chainId, _nonce), 
-            _options,
+            _dstChainIdAndNonce(chainId, _nonce),
+            _needVerify,
             _payload
         );
-
     }
 
     // only omnic canister can call this func
-    function processMessage(
-        bytes32 _messageHash,
-        uint32 _srcChainId,
-        bytes32 _srcSenderAddress,
-        uint32 _nonce,
-        uint32 _dstChainId,
-        bytes32 _recipientAddress,
-        bytes memory payload
-    ) public onlyProxyCanister returns (bool success) {
+    // trust proxy canister, so here we do not need to verify message's correctness
+    function processMessage(bytes memory _message, bool _verified)
+        public
+        onlyProxyCanister
+        returns (bool success)
+    {
+        // decode message
+        (
+            uint32 _srcChainId,
+            bytes32 _srcSenderAddress,
+            uint32 _nonce,
+            uint32 _dstChainId,
+            bytes32 _recipientAddress,
+            bytes memory _payload
+        ) = abi.decode(
+                _message,
+                (uint32, bytes32, uint32, uint32, bytes32, bytes)
+            );
+        bytes32 _messageHash = keccak256(_message);
         require(_dstChainId == chainId, "!destination");
         // check re-entrancy guard
         require(entered == 1, "!reentrant");
         entered = 0;
 
         // call handle function
-        IOmnicReciver(TypeCasts.bytes32ToAddress(_recipientAddress)).handleMessage(
-            _srcChainId,
-            _srcSenderAddress,
-            _nonce,
-            payload
-        );
+        IOmnicReciver(TypeCasts.bytes32ToAddress(_recipientAddress))
+            .handleMessage(_srcChainId, _srcSenderAddress, _nonce, _payload);
         // emit process results
-        emit ProcessMessage(
-            _messageHash, 
-            _nonce,
-            _srcChainId,
-            _srcSenderAddress,
-            _dstChainId,
-            _recipientAddress,
-            payload,
-            true, 
-            ""
-        );
+        emit ProcessMessage(_messageHash, _verified, "", true);
         // reset re-entrancy guard
         entered = 1;
         // return true
         return true;
     }
 
+    // ============ onlyOwner Set Functions  ============
+    function setOmnicCanisterAddr(address _newProxyCanisterAddr)
+        public
+        onlyOwner
+    {
+        address _oldProxyCanisterAddr = omnicProxyCanisterAddr;
+        omnicProxyCanisterAddr = _newProxyCanisterAddr;
+        emit UpdateProxyCanister(_oldProxyCanisterAddr, _newProxyCanisterAddr);
+    }
+
+    // ============ Public Functions  ============
+    function getLatestRoot() public view returns (bytes32) {
+        require(queue.length() != 0, "no item in queue");
+        return queue.lastItem();
+    }
+
+    function rootContains(bytes32 _root) public view returns (bool) {
+        return queue.contains(_root);
+    }
+
+    // ============ internal Functions  ============
     function _dstChainIdAndNonce(uint32 _dstChainId, uint32 _nonce)
         internal
         pure

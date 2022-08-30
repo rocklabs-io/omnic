@@ -5,11 +5,6 @@ pragma solidity ^0.8.9;
  * @title Types Library
  **/
 library Types {
-    // sacrificing app's self-customized
-    struct Options {
-        bool wait_verified;
-        bytes others;
-    }
 
     /**
      * @notice Returns formatted (packed) message with provided fields
@@ -30,7 +25,7 @@ library Types {
         bytes memory _payload
     ) internal pure returns (bytes memory) {
         return
-            abi.encodePacked(
+            abi.encode(
                 _srcChainId,
                 _srcSenderAddress,
                 _nonce,
