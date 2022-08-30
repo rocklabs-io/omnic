@@ -1,5 +1,6 @@
-
-
+use std::fmt;
+use ic_web3::ethabi::{Event, EventParam, ParamType, RawLog};
+use ic_web3::types::Log;
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Message {
@@ -17,7 +18,7 @@ pub struct Message {
 
     pub verified: bool, // optimistically verified
     pub outgoing_tx: Option<ic_web3::SignedTransaction>, // if dst = ic, no need this
-    pub outgoging_tx_confirmed: bool,
+    pub outgoing_tx_confirmed: bool,
     pub processed_log: Option<Log>, // log emitted after this msg is processed on the destination chain
 }
 
@@ -54,13 +55,21 @@ impl Message {
         // ic_cdk::println!("msg_hash: {:?}", msg_hash.value.clone());
 
         Ok(Message {
+            log: log.clone(),
             hash: msg_hash.value.clone().into_fixed_bytes().ok_or("can not convert hash to bytes")?,
             src_chain: src_chain.value.clone().into_uint().ok_or("can not convert src_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
             src_sender: src_sender.value.clone().into_fixed_bytes().ok_or("can not src_sender to bytes")?,
             nonce: dst_nonce.value.clone().into_uint().ok_or("can not convert nonce to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
             dst_chain: dst_chain.value.clone().into_uint().ok_or("can not convert dst_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
             recipient: recipient.value.clone().into_fixed_bytes().ok_or("can not recipient to bytes")?,
-            payload: payload.value.clone().into_bytes().ok_or("can not payload to bytes")?
+            payload: payload.value.clone().into_bytes().ok_or("can not payload to bytes")?,
+
+            // TODO new add field setting
+            need_verify: false,
+            verified: false,
+            outgoing_tx: None,
+            outgoing_tx_confirmed: false,
+            processed_log: None
         })
     }
 }

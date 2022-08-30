@@ -13,6 +13,12 @@ omnic proxy canister:
 
 // fetch_root can be done in heart_beat, others can be triggered by offchain worker
 
+use crate::message::Message;
+
+mod chain;
+mod message;
+mod chain_config;
+
 #[update(name = "fetch_and_process_logs")]
 #[candid_method(update, rename = "fetch_and_process_logs")]
 async fn fetch_and_process_logs() -> Vec<Message> {
@@ -20,3 +26,4 @@ async fn fetch_and_process_logs() -> Vec<Message> {
 }
 
 
+fn main() {}
