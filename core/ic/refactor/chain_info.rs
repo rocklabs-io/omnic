@@ -27,12 +27,22 @@ impl ChainInfo {
         self.config.set_batch_size(v);
     }
 
-    fn insert_incoming(&mut self, msg: Message) {
-        self.incoming_msgs.push_back(msg);
-        // insert msg hash to merkle tree
+    pub fn generate_proof(&self, msg: Message) -> Proof<32> {
+
     }
 
-    // TODO get messages from each queue, batch or one-by-one?
+    // pub async fn fetch_logs()
 
-    // fn put_root()
+    pub fn process_logs(&mut self, logs: Vec<Log>) {
+        for log in logs {
+            // TODO: check if the log is SendMessage or ProcessMessage,
+            // if SendMessage: insert into tree & incoming msg queue
+            // if ProcessMessage: remove the corresponding message from confirming queue
+            let msg = if let Ok(v) = Message::from_log(&log) { v } else {
+                // TODO: what if fails?
+                continue;
+            };
+            self.incoming.push_back(msg);
+        }
+    }
 }

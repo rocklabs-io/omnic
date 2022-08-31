@@ -67,7 +67,6 @@ contract Omnic is QueueManager, Ownable {
         uint256 indexed leafIndex,
         uint32 indexed dstChainId,
         uint32 nonce,
-        bool waitOptimisitc,
         bytes payload
     );
 

@@ -1,25 +1,36 @@
 use std::fmt;
+use ethabi::decode;
 use ic_web3::ethabi::{Event, EventParam, ParamType, RawLog};
-use ic_web3::types::Log;
+use ic_web3::types::{Log, U256};
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Message {
     pub log: Log, // origin log for this message
 
-    // message body
     pub hash: Vec<u8>,
+    pub leaf_index: U256,
+    // message body
     pub src_chain: u32,
     pub src_sender: Vec<u8>,
     pub nonce: u32,
     pub dst_chain: u32,
     pub recipient: Vec<u8>,
     pub payload: Vec<u8>,
-    pub need_verify: bool,
+    pub wait_optimistic: bool,
 
     pub verified: bool, // optimistically verified
     pub outgoing_tx: Option<SignedTransaction>, // if dst = ic, no need this
     pub outgoing_tx_confirmed: bool,
     pub processed_log: Option<Log>, // log emitted after this msg is processed on the destination chain
+}
+
+fn decode_body(data: &[u8]) -> Result<Vec<Token>, String> {
+    let types = vec![
+        ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Uint(32), 
+        ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Bool,
+        ParamType::Bytes
+    ];
+    decode(&types, data).map_err(|e| format!("payload decode error"))?
 }
 
 impl Message {
@@ -43,16 +54,14 @@ impl Message {
     pub fn from_log(log: &Log) -> Result<Message, String> {
         let params = vec![
             EventParam { name: "messageHash".to_string(), kind: ParamType::FixedBytes(32), indexed: true },
-            EventParam { name: "dstNonce".to_string(), kind: ParamType::Uint(32), indexed: true },
-            EventParam { name: "srcChainId".to_string(), kind: ParamType::Uint(32), indexed: false },
-            EventParam { name: "srcSenderAddress".to_string(), kind: ParamType::FixedBytes(32), indexed: false },
-            EventParam { name: "dstChainId".to_string(), kind: ParamType::Uint(32), indexed: false },
-            EventParam { name: "recipient".to_string(), kind: ParamType::FixedBytes(32), indexed: false },
-            EventParam { name: "data".to_string(), kind: ParamType::Bytes, indexed: false }
+            EventParam { name: "leafIndex".to_string(), kind: ParamType::Uint(256), indexed: true },
+            EventParam { name: "dstChainId".to_string(), kind: ParamType::Uint(32), indexed: true },
+            EventParam { name: "nonce".to_string(), kind: ParamType::FixedBytes(32), indexed: false },
+            EventParam { name: "payload".to_string(), kind: ParamType::Bytes, indexed: false },
         ];
 
         let event = Event {
-            name: "EnqueueMessage".to_string(),
+            name: "SendMessage".to_string(),
             inputs: params,
             anonymous: false
         };
@@ -62,27 +71,35 @@ impl Message {
         }).map_err(|e| format!("ethabi parse_log failed: {}", e))?;
         
         let msg_hash = res.params.iter().find(|p| p.name == "messageHash").ok_or("missing messgaHash".to_string())?;
-        let dst_nonce = res.params.iter().find(|p| p.name == "dstNonce").ok_or("missing dstNonce".to_string())?;
-        let src_chain = res.params.iter().find(|p| p.name == "srcChainId").ok_or("missing srcChainId".to_string())?;
-        let src_sender = res.params.iter().find(|p| p.name == "srcSenderAddress").ok_or("missing srcSenderAddress".to_string())?;
+        let leaf_index = res.params.iter().find(|p| p.name == "leafIndex").ok_or("missing leafIndex".to_string())?;
         let dst_chain = res.params.iter().find(|p| p.name == "dstChainId").ok_or("missing dstChainId".to_string())?;
-        let recipient = res.params.iter().find(|p| p.name == "recipient").ok_or("missing recipient".to_string())?;
-        let payload = res.params.iter().find(|p| p.name == "data").ok_or("missing data".to_string())?;
+        let dst_nonce = res.params.iter().find(|p| p.name == "nonce").ok_or("missing nonce".to_string())?;
+        let data = res.params.iter().find(|p| p.name == "payload").ok_or("missing payload".to_string())?;
         // ic_cdk::println!("event: {:?}", res);
         // ic_cdk::println!("msg_hash: {:?}", msg_hash.value.clone());
+
+        // decode data to get message body fields
+        let decoded = decode_body(&data.into_bytes())?;
+        let src_chain = decoded[0].into_uint().ok_or("can not convert src_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
+        let src_sender = decoded[1].into_fixed_bytes().ok_or("can not convert src_sender to bytes")?;
+        let recipient = decoded[4].into_fixed_bytes().ok_or("can not convert recipient to bytes")?;
+        let wait_optimistic = decoded[5].into_bool().ok_or("can not convert bool")?;
+        let payload = decoded[6].into_bytes().ok_or("cannot convert payload to bytes")?;
 
         Ok(Message {
             log: log.clone(),
             hash: msg_hash.value.clone().into_fixed_bytes().ok_or("can not convert hash to bytes")?,
-            src_chain: src_chain.value.clone().into_uint().ok_or("can not convert src_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
-            src_sender: src_sender.value.clone().into_fixed_bytes().ok_or("can not src_sender to bytes")?,
+            leaf_index: leaf_index.value.clone(),
+
+            src_chain: src_chain,
+            src_sender: src_sender.
             nonce: dst_nonce.value.clone().into_uint().ok_or("can not convert nonce to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
             dst_chain: dst_chain.value.clone().into_uint().ok_or("can not convert dst_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
-            recipient: recipient.value.clone().into_fixed_bytes().ok_or("can not recipient to bytes")?,
-            payload: payload.value.clone().into_bytes().ok_or("can not payload to bytes")?,
+            recipient: recipient,
+            wait_optimistic: wait_optimistic,
+            payload: payload,
 
             // TODO new add field setting
-            need_verify: false,
             verified: false,
             outgoing_tx: None,
             outgoing_tx_confirmed: false,
