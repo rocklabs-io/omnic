@@ -17,12 +17,29 @@ pub struct Message {
     pub need_verify: bool,
 
     pub verified: bool, // optimistically verified
-    pub outgoing_tx: Option<ic_web3::SignedTransaction>, // if dst = ic, no need this
+    pub outgoing_tx: Option<SignedTransaction>, // if dst = ic, no need this
     pub outgoing_tx_confirmed: bool,
     pub processed_log: Option<Log>, // log emitted after this msg is processed on the destination chain
 }
 
 impl Message {
+
+    pub fn set_verified(&mut self) {
+        self.verified = true;
+    }
+
+    pub fn set_outgoing_tx(&mut self, tx: SignedTransaction) {
+        self.outgoing_tx = Some(tx);
+    }
+
+    pub fn set_outgoing_tx_status(&mut self, confirmed: bool) {
+        self.outgoing_tx_confirmed = confirmed;
+    }
+
+    pub fn set_processed_log(&mut self, log: &Log) {
+        self.processed_log = log.clone();
+    }
+
     pub fn from_log(log: &Log) -> Result<Message, String> {
         let params = vec![
             EventParam { name: "messageHash".to_string(), kind: ParamType::FixedBytes(32), indexed: true },
