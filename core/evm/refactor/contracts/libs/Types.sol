@@ -22,6 +22,7 @@ library Types {
         uint32 _nonce,
         uint32 _dstChainId,
         bytes32 _recipientAddress,
+        bool _wait_optimistic,
         bytes memory _payload
     ) internal pure returns (bytes memory) {
         return
@@ -31,6 +32,7 @@ library Types {
                 _nonce,
                 _dstChainId,
                 _recipientAddress,
+                _wait_optimistic,
                 _payload
             );
     }

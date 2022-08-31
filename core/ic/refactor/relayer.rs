@@ -1,8 +1,7 @@
 /*
-omnic proxy canister:
-    fetch_root: fetch merkel roots from all supported chains and insert to chain state
+omnic relayer canister:
     fetch_and_process_logs: 
-        EnqueueMessage: insert to incoming msgs
+        EnqueueMessage: insert to incoming msgs, add to merkle tree
         ProcessMessage: remove confirmed outgoing msgs
     process_msgs: traverse incoming_msgs for each chain, 
         generate corresponding outgoing msg and insert into corresponding chain's outgoing_msg queue
@@ -15,13 +14,39 @@ omnic proxy canister:
 
 use crate::message::Message;
 
-mod chain;
+mod chain_info;
 mod message;
 mod chain_config;
+
+thread_local! {
+    static CHAINS: RefCell<HashMap<u32, ChainInfo>> = RefCell::new(HashMap::new());
+}
+
+#[init]
+#[candid_method(init)]
+fn init() {
+    // add goerli chain config
+    // CHAINS.with(|chains| {
+    //     let mut chains = chains.borrow_mut();
+    //     // ledger.init_metadata(ic_cdk::caller(), args.clone());
+    //     chains.insert(GOERLI_CHAIN_ID, ChainConfig {
+    //         chain_id: GOERLI_CHAIN_ID,
+    //         rpc_url: GOERLI_URL.clone().into(),
+    //         omnic_addr:GOERLI_OMNIC_ADDR.clone().into(),
+    //         omnic_start_block: 7468220,
+    //         current_block: 7468220, 
+    //         batch_size: 1000,
+    //     });
+    // });
+}
 
 #[update(name = "fetch_and_process_logs")]
 #[candid_method(update, rename = "fetch_and_process_logs")]
 async fn fetch_and_process_logs() -> Vec<Message> {
+
+}
+
+async fn fetch_and_process_logs() {
 
 }
 

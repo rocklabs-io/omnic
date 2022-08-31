@@ -6,7 +6,7 @@ import {QueueLib} from "./libs/Queue.sol";
 import {QueueManager} from "./utils/QueueManager.sol";
 import {MerkleLib} from "./libs/Merkle.sol";
 import {Types} from "./libs/Types.sol";
-import {TypeCasts} from "./utils/utils.sol";
+import {TypeCasts} from "./utils/Utils.sol";
 import {IOmnicReciver} from "./interfaces/IOmnicReciver.sol";
 
 //external
@@ -65,14 +65,14 @@ contract Omnic is QueueManager, Ownable {
     event SendMessage(
         bytes32 indexed messageHash,
         uint256 indexed leafIndex,
-        uint64 indexed dstChainIdAndNonce,
-        bool needVerify,
+        uint32 indexed dstChainId,
+        uint32 nonce,
+        bool waitOptimisitc,
         bytes payload
     );
 
     event ProcessMessage(
         bytes32 indexed messageHash,
-        bool indexed verified,
         bytes indexed returnData,
         bool success
     );
@@ -101,7 +101,7 @@ contract Omnic is QueueManager, Ownable {
     function sendMessage(
         uint32 _dstChainId,
         bytes32 _recipientAddress,
-        bool _needVerify, // customized
+        bool _waitOptimistic, // customized
         bytes memory _payload
     ) public {
         require(_payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
@@ -115,6 +115,7 @@ contract Omnic is QueueManager, Ownable {
             _nonce,
             _dstChainId,
             _recipientAddress,
+            _waitOptimistic,
             _payload
         );
         bytes32 _messageHash = keccak256(_message);
@@ -125,15 +126,14 @@ contract Omnic is QueueManager, Ownable {
         emit SendMessage(
             _messageHash,
             tree.count - 1,
-            _dstChainIdAndNonce(chainId, _nonce),
-            _needVerify,
+            chainId,
+            _nonce,
             _payload
         );
     }
 
     // only omnic canister can call this func
-    // trust proxy canister, so here we do not need to verify message's correctness
-    function processMessage(bytes memory _message, bool _verified)
+    function processMessage(bytes memory _message)
         public
         onlyProxyCanister
         returns (bool success)
@@ -145,10 +145,11 @@ contract Omnic is QueueManager, Ownable {
             uint32 _nonce,
             uint32 _dstChainId,
             bytes32 _recipientAddress,
+            bool _waitOptimistic,
             bytes memory _payload
         ) = abi.decode(
                 _message,
-                (uint32, bytes32, uint32, uint32, bytes32, bytes)
+                (uint32, bytes32, uint32, uint32, bytes32, bool, bytes)
             );
         bytes32 _messageHash = keccak256(_message);
         require(_dstChainId == chainId, "!destination");
@@ -160,7 +161,7 @@ contract Omnic is QueueManager, Ownable {
         IOmnicReciver(TypeCasts.bytes32ToAddress(_recipientAddress))
             .handleMessage(_srcChainId, _srcSenderAddress, _nonce, _payload);
         // emit process results
-        emit ProcessMessage(_messageHash, _verified, "", true);
+        emit ProcessMessage(_messageHash, "", true);
         // reset re-entrancy guard
         entered = 1;
         // return true
@@ -183,16 +184,7 @@ contract Omnic is QueueManager, Ownable {
         return queue.lastItem();
     }
 
-    function rootContains(bytes32 _root) public view returns (bool) {
+    function rootExists(bytes32 _root) public view returns (bool) {
         return queue.contains(_root);
-    }
-
-    // ============ internal Functions  ============
-    function _dstChainIdAndNonce(uint32 _dstChainId, uint32 _nonce)
-        internal
-        pure
-        returns (uint64)
-    {
-        return (uint64(_dstChainId) << 32) | _nonce;
     }
 }
