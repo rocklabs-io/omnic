@@ -91,7 +91,7 @@ async fn process_msg(chain: &ChainConfig, msg: &Message) -> Result<bool, String>
     } else {
         // TODO: batch process txs
         ic_cdk::println!("msg to chain: {:?}, {:?}", msg.dst_chain, msg);
-        let http = ICHttp::new(&chain.rpc_url, None).map_err(|e| format!("init ic http client failed: {:?}", e))?;
+        let http = ICHttp::new(&chain.rpc_url, None, None).map_err(|e| format!("init ic http client failed: {:?}", e))?;
         let w3 = Web3::new(http);
         let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
         let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
@@ -153,7 +153,7 @@ async fn traverse_chains() -> Vec<Message> {
 // async fn send_txs()
 
 async fn get_chain_msgs(chain: &ChainConfig) -> Result<Vec<Message>, String> {
-    let http = ICHttp::new(&chain.rpc_url, None).map_err(|e| format!("init ic http client failed: {:?}", e))?;
+    let http = ICHttp::new(&chain.rpc_url, None, None).map_err(|e| format!("init ic http client failed: {:?}", e))?;
     let w3 = Web3::new(http);
 
     let block_height: u64 = w3

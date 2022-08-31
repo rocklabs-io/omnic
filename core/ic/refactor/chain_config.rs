@@ -4,6 +4,8 @@
     chain config
 */
 
+use ic_cdk::export::candid::{CandidType, Deserialize};
+
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct ChainConfig {
     pub chain_id: u32,
@@ -27,7 +29,7 @@ impl ChainConfig {
             rpc_urls: rpc_urls,
             omnic_addr: omnic_addr,
             omnic_start_block: omnic_start_block,
-            current_block: current_block,
+            current_block: omnic_start_block,
             batch_size: if let Some(v) = batch_size { v } else { 1000 },
         }
     }

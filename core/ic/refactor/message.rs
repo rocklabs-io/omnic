@@ -1,9 +1,10 @@
 use std::fmt;
-use ethabi::decode;
-use ic_web3::ethabi::{Event, EventParam, ParamType, RawLog};
-use ic_web3::types::{Log, U256};
+use std::convert::TryInto;
+use ic_web3::ethabi::{decode, Event, EventParam, ParamType, RawLog, Token};
+use ic_web3::types::{Log, U256, SignedTransaction};
+use ic_cdk::export::candid::{CandidType, Deserialize};
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Message {
     pub log: Log, // origin log for this message
 
@@ -30,7 +31,7 @@ fn decode_body(data: &[u8]) -> Result<Vec<Token>, String> {
         ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Bool,
         ParamType::Bytes
     ];
-    decode(&types, data).map_err(|e| format!("payload decode error"))?
+    decode(&types, data).map_err(|e| format!("payload decode error"))
 }
 
 impl Message {
@@ -48,7 +49,7 @@ impl Message {
     }
 
     pub fn set_processed_log(&mut self, log: &Log) {
-        self.processed_log = log.clone();
+        self.processed_log = Some(log.clone());
     }
 
     pub fn from_log(log: &Log) -> Result<Message, String> {
@@ -79,20 +80,20 @@ impl Message {
         // ic_cdk::println!("msg_hash: {:?}", msg_hash.value.clone());
 
         // decode data to get message body fields
-        let decoded = decode_body(&data.into_bytes())?;
-        let src_chain = decoded[0].into_uint().ok_or("can not convert src_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
-        let src_sender = decoded[1].into_fixed_bytes().ok_or("can not convert src_sender to bytes")?;
-        let recipient = decoded[4].into_fixed_bytes().ok_or("can not convert recipient to bytes")?;
-        let wait_optimistic = decoded[5].into_bool().ok_or("can not convert bool")?;
-        let payload = decoded[6].into_bytes().ok_or("cannot convert payload to bytes")?;
+        let decoded = decode_body(&data.value.clone().into_bytes().ok_or("cannot convert data to bytes")?)?;
+        let src_chain = decoded[0].clone().into_uint().ok_or("can not convert src_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
+        let src_sender = decoded[1].clone().into_fixed_bytes().ok_or("can not convert src_sender to bytes")?;
+        let recipient = decoded[4].clone().into_fixed_bytes().ok_or("can not convert recipient to bytes")?;
+        let wait_optimistic = decoded[5].clone().into_bool().ok_or("can not convert bool")?;
+        let payload = decoded[6].clone().into_bytes().ok_or("cannot convert payload to bytes")?;
 
         Ok(Message {
             log: log.clone(),
             hash: msg_hash.value.clone().into_fixed_bytes().ok_or("can not convert hash to bytes")?,
-            leaf_index: leaf_index.value.clone(),
+            leaf_index: leaf_index.value.clone().into_uint().ok_or("cannot convert uint")?,
 
             src_chain: src_chain,
-            src_sender: src_sender.
+            src_sender: src_sender,
             nonce: dst_nonce.value.clone().into_uint().ok_or("can not convert nonce to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
             dst_chain: dst_chain.value.clone().into_uint().ok_or("can not convert dst_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
             recipient: recipient,

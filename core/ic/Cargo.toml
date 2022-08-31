@@ -11,8 +11,12 @@ readme = "README.md"
 edition = "2018"
 
 [[bin]]
-name = "omnic"
-path = "refactor/main.rs"
+name = "omnic-proxy"
+path = "refactor/proxy.rs"
+
+[[bin]]
+name = "omnic-relayer"
+path = "refactor/relayer.rs"
 
 #[[bin]]
 #name = "omnic"
@@ -23,6 +27,7 @@ path = "refactor/main.rs"
 #path = "src/demo.rs"
 
 [dependencies]
+accumulator = { path = "./accumulator" }
 ic-web3 = { git = "https://github.com/rocklabs-io/ic-web3" }
 ic-cron = "0.7.0"
 candid = "0.7.4"

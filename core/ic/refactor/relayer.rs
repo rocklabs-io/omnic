@@ -12,7 +12,16 @@ omnic relayer canister:
 
 // fetch_root can be done in heart_beat, others can be triggered by offchain worker
 
+use std::collections::HashMap;
+use std::cell::RefCell;
+use ic_cdk::api::{call::CallResult, canister_balance};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
+use ic_cdk::export::candid::{candid_method, CandidType, Deserialize, Int, Nat};
+use ic_cdk::export::Principal;
+
 use crate::message::Message;
+use crate::chain_config::ChainConfig;
+use crate::chain_info::ChainInfo;
 
 mod chain_info;
 mod message;
@@ -40,15 +49,39 @@ fn init() {
     // });
 }
 
-#[update(name = "fetch_and_process_logs")]
-#[candid_method(update, rename = "fetch_and_process_logs")]
-async fn fetch_and_process_logs() -> Vec<Message> {
-
+#[update(name = "add_chain_config")]
+#[candid_method(update, rename = "add_chain_config")]
+async fn add_chain_config(config: ChainConfig) -> Result<bool, String> {
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        if chains.contains_key(&config.chain_id) {
+             Err("chain exists".into())
+        } else {
+            chains.insert(config.chain_id, ChainInfo::new(config));
+            Ok(true)
+        }
+    })
 }
 
-async fn fetch_and_process_logs() {
+// // in heart_beat
+// async fn fetch_and_process_logs() {
+//     let chains = CHAINS.with(|chains| chains.borrow_mut());
+//     for chain in chains {
+//         res = chain.fetch_logs();
+//         chain.process_send_logs(res[0]);
+//         chain.process_proc_logs(res[1]);
+//     }
+// }
 
+// // in heart_beat
+// async fn process_msgs() {
+//     let chains = CHAINS.with(|chains| chains.borrow_mut());
+//     for chain in chains {
+//         chain.process_msgs();
+//     }
+// }
+
+fn main() {
+    candid::export_service!();
+    std::print!("{}", __export_service());
 }
-
-
-fn main() {}
