@@ -1,14 +1,14 @@
 use std::fmt;
 use std::convert::TryInto;
 use ic_web3::ethabi::{decode, Event, EventParam, ParamType, RawLog, Token};
-use ic_web3::types::{Log, U256, SignedTransaction};
+use ic_web3::types::{Log, H256, U256, SignedTransaction};
 use ic_cdk::export::candid::{CandidType, Deserialize};
 
 #[derive(Clone, Debug)]
 pub struct Message {
     pub log: Log, // origin log for this message
 
-    pub hash: Vec<u8>,
+    pub hash: H256,
     pub leaf_index: U256,
     // message body
     pub src_chain: u32,
@@ -89,7 +89,7 @@ impl Message {
 
         Ok(Message {
             log: log.clone(),
-            hash: msg_hash.value.clone().into_fixed_bytes().ok_or("can not convert hash to bytes")?,
+            hash: H256::from_slice(&msg_hash.value.clone().into_fixed_bytes().ok_or("cannot convert msg hash")?),
             leaf_index: leaf_index.value.clone().into_uint().ok_or("cannot convert uint")?,
 
             src_chain: src_chain,

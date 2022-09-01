@@ -5,7 +5,7 @@
     generate merkle proof and send message with proof to omnic proxy canister to process the message
 */
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, BTreeSet, VecDeque};
 use std::str::FromStr;
 use ic_web3::transports::ICHttp;
 use ic_web3::Web3;
@@ -31,7 +31,29 @@ pub struct ChainInfo {
     pub config: ChainConfig,
     pub tree: Tree<32>,
     pub incoming: VecDeque<Message>, // incoming messages
-    pub confirming: VecDeque<Message>, // processed messages, wait confirmation
+    pub confirming: HashMap<H256, Message>, // processed messages, wait confirmation
+    pub history: HashMap<H256, Message>, // TODO: move to a separate history storage canister
+}
+
+pub fn get_msg_hash(log: &Log) -> Result<H256, String> {
+    let params = vec![
+        EventParam { name: "messageHash".to_string(), kind: ParamType::FixedBytes(32), indexed: true },
+        EventParam { name: "returnData".to_string(), kind: ParamType::Bytes, indexed: true },
+        EventParam { name: "success".to_string(), kind: ParamType::Bool, indexed: false },
+    ];
+
+    let event = Event {
+        name: "ProcessMessage".to_string(),
+        inputs: params,
+        anonymous: false
+    };
+    let res = event.parse_log(RawLog {
+        topics: log.topics.clone(),
+        data: log.data.clone().0
+    }).map_err(|e| format!("ethabi parse_log failed: {}", e))?;
+    
+    let msg_hash = res.params.iter().find(|p| p.name == "messageHash").ok_or("missing messgaHash".to_string())?;
+    Ok(H256::from_slice(&msg_hash.value.clone().into_fixed_bytes().ok_or("msg hash convert failed")?))
 }
 
 impl ChainInfo {
@@ -40,7 +62,8 @@ impl ChainInfo {
             config: config,
             tree: Tree::<32>::default(),
             incoming: VecDeque::new(),
-            confirming: VecDeque::new()
+            confirming: HashMap::new(),
+            history: HashMap::new(),
         }
     }
 
@@ -108,19 +131,32 @@ impl ChainInfo {
                 continue;
             };
             self.incoming.push_back(msg.clone());
-            self.tree.ingest(H256::from_slice(&msg.hash)); // could fail too
+            self.tree.ingest(msg.hash); // could fail too
         }
     }
 
     // process ProcessMessage event logs
     pub fn process_proc_logs(&mut self, logs: Vec<Log>) {
-        // remove the corresponding message from confirming queue
+        // remove the corresponding message from confirming queue, insert into history
+        let event_proc = H256::from_str(EVENT_PROCESS_MSG).unwrap();
+        for log in logs {
+            if log.topics[0] != event_proc {
+                ic_cdk::println!("not ProcessMessage log: {:?}", log);
+                continue;
+            }
+            // get msg hash from log, TODO: error handling
+            let msg_hash = get_msg_hash(&log).unwrap();
+            let mut msg = self.confirming.remove(&msg_hash).unwrap();
+            msg.processed_log = Some(log.clone());
+            msg.outgoing_tx_confirmed = true;
+            self.history.insert(msg_hash, msg);
+        }
     }
 
     // check msgs in incoming queue, see if msgs are valid, 
     // if valid now, call proxyCanister.process_message with generated merkle proof and message body
     // otherwise, wait until valid
     pub fn process_msgs(&mut self, proxy_canister_root: H256, root_confirm_at: u64) {
-
+        
     }
 }
