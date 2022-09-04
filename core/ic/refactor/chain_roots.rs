@@ -30,4 +30,12 @@ impl ChainRoots {
             self.roots.insert(root, confirm_at);
         }
     }
+
+    pub fn is_root_exist(&self, root: H256) -> bool {
+        self.roots.contains_key(&root)
+    }
+
+    pub fn is_root_valid(&self, root: H256, ts: u64) -> bool {
+        self.roots.get(&root).map_or(false, |c| c.clone() <= ts)
+    }
 }

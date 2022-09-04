@@ -11,7 +11,7 @@ use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
 use ic_cdk::export::candid::{candid_method, CandidType, Deserialize, Int, Nat};
 use ic_cdk::export::Principal;
 
-use accumulator::Proof;
+use accumulator::{MerkleProof, Proof, TREE_DEPTH};
 use crate::message::Message;
 use crate::chain_roots::ChainRoots;
 
@@ -37,7 +37,7 @@ fn init() {
     //         rpc_url: GOERLI_URL.clone().into(),
     //         omnic_addr:GOERLI_OMNIC_ADDR.clone().into(),
     //         omnic_start_block: 7468220,
-    //         current_block: 7468220, 
+    //         current_block: 7468220,
     //         batch_size: 1000,
     //     });
     // });
@@ -46,21 +46,45 @@ fn init() {
 // relayer canister call this to check if a message is valid before process_message
 #[query(name = "is_valid")]
 #[candid_method(query, rename = "is_valid")]
-async fn is_valid(proof: Vec<u8>, message: Vec<u8>) -> Result<bool, String> {
+fn is_valid(proof: String, message: String) -> Result<bool, String> {
     // verify message proof: use proof, message to calculate the merkle root, 
     //     if message.need_verify is false, we only check if root exist in the hashmap
     //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
-    Ok(true)
+    // TODO maybe we should verify msg.hash == hash(msg)?
+    let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
+        format!("error in parse message json: {:?}", e)
+    })?;
+    let p: Proof<{ TREE_DEPTH }> = serde_json::from_str(proof.as_str()).map_err(|e| {
+        format!("error in parse proof json: {:?}", e)
+    })?;
+    assert_eq!(m.hash, p.leaf);
+    let root = p.root();
+    if m.wait_optimistic {
+        let now = get_time();
+        CHAINS.with(|c| {
+            let chains = c.borrow();
+            let chain = chains.get(&m.src_chain).ok_or("src chain id not exist".to_string())?;
+            Ok(chain.is_root_valid(root, now))
+        })
+    } else {
+        CHAINS.with(|c| {
+            let chains = c.borrow();
+            let chain = chains.get(&m.src_chain).ok_or("src chain id not exist".to_string())?;
+            Ok(chain.is_root_exist(root))
+        })
+    }
 }
 
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
-async fn process_message(proof: Vec<u8>, message: Vec<u8>) -> Result<bool, String> {
+async fn process_message(proof: String, path_len: usize, message: String) -> Result<bool, String> {
+    // TODO only relayers can call?
     // verify message proof: use proof, message to calculate the merkle root, 
     //     if message.need_verify is false, we only check if root exist in the hashmap
     //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
     // if valid, call dest canister.handleMessage or send tx to dest chain
     // if invalid, return error
+
     Ok(true)
 }
 
@@ -82,11 +106,11 @@ async fn fetch_roots() -> Result<bool, String> {
             ic_cdk::println!("fetch root failed for: {:?}", &chain.config);
             continue
         };
-        let confirm_at = ic_cdk::api::time() + OPTIMISTIC_DELAY;
+        let confirm_at = get_time() + OPTIMISTIC_DELAY;
         CHAINS.with(|chains| {
             let mut chains = chains.borrow_mut();
             match chains.get_mut(&id) {
-                Some(mut v) => v.insert_root(root, confirm_at),
+                Some(v) => v.insert_root(root, confirm_at),
                 None => unreachable!(),
             }
         });
@@ -94,5 +118,9 @@ async fn fetch_roots() -> Result<bool, String> {
     Ok(true)
 }
 
+/// get the unix timestamp in second
+fn get_time() -> u64 {
+    ic_cdk::api::time() / 1000000000
+}
 
 fn main() {}

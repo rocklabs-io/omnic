@@ -18,7 +18,7 @@ use ic_web3::{
 };
 use ic_cdk::export::candid::{CandidType, Deserialize};
 
-use accumulator::{tree::Tree, Proof, Merkle};
+use accumulator::{tree::Tree, Proof, Merkle, TREE_DEPTH};
 
 use crate::chain_config::ChainConfig;
 use crate::Message;
@@ -29,7 +29,7 @@ const EVENT_PROCESS_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8
 #[derive(Debug)]
 pub struct ChainInfo {
     pub config: ChainConfig,
-    pub tree: Tree<32>,
+    pub tree: Tree<TREE_DEPTH>,
     pub incoming: VecDeque<Message>, // incoming messages
     pub confirming: HashMap<H256, Message>, // processed messages, wait confirmation
     pub history: HashMap<H256, Message>, // TODO: move to a separate history storage canister
@@ -59,8 +59,8 @@ pub fn get_msg_hash(log: &Log) -> Result<H256, String> {
 impl ChainInfo {
     pub fn new(config: ChainConfig) -> ChainInfo {
         ChainInfo {
-            config: config,
-            tree: Tree::<32>::default(),
+            config,
+            tree: Tree::<TREE_DEPTH>::default(),
             incoming: VecDeque::new(),
             confirming: HashMap::new(),
             history: HashMap::new(),
@@ -118,7 +118,7 @@ impl ChainInfo {
     }
 
     // generate merkle proof for given message
-    pub fn generate_proof(&self, msg: Message) -> Proof<32> {
+    pub fn generate_proof(&self, msg: Message) -> Proof<TREE_DEPTH> {
         self.tree.prove(msg.leaf_index.as_u32() as usize).unwrap()
     }
 
