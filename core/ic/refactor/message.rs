@@ -4,7 +4,7 @@ use ic_web3::ethabi::{decode, Event, EventParam, ParamType, RawLog, Token};
 use ic_web3::types::{Log, H256, U256, SignedTransaction};
 use ic_cdk::export::candid::{CandidType, Deserialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Message {
     pub log: Log, // origin log for this message
 
@@ -19,9 +19,13 @@ pub struct Message {
     pub payload: Vec<u8>,
     pub wait_optimistic: bool,
 
+    #[serde(skip)]
     pub verified: bool, // optimistically verified
+    #[serde(skip)]
     pub outgoing_tx: Option<SignedTransaction>, // if dst = ic, no need this
+    #[serde(skip)]
     pub outgoing_tx_confirmed: bool,
+    #[serde(skip)]
     pub processed_log: Option<Log>, // log emitted after this msg is processed on the destination chain
 }
 
@@ -92,13 +96,13 @@ impl Message {
             hash: H256::from_slice(&msg_hash.value.clone().into_fixed_bytes().ok_or("cannot convert msg hash")?),
             leaf_index: leaf_index.value.clone().into_uint().ok_or("cannot convert uint")?,
 
-            src_chain: src_chain,
-            src_sender: src_sender,
+            src_chain,
+            src_sender,
             nonce: dst_nonce.value.clone().into_uint().ok_or("can not convert nonce to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
             dst_chain: dst_chain.value.clone().into_uint().ok_or("can not convert dst_chain to U256")?.try_into().map_err(|_| format!("convert U256 to u32 failed"))?,
-            recipient: recipient,
-            wait_optimistic: wait_optimistic,
-            payload: payload,
+            recipient,
+            wait_optimistic,
+            payload,
 
             // TODO new add field setting
             verified: false,
