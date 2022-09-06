@@ -29,7 +29,12 @@ const EVENT_PROCESS_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8
 #[derive(Debug)]
 pub struct ChainInfo {
     pub config: ChainConfig,
+    pub queue: Vec<Message>, // list of all crosschain messages
     pub tree: Tree<TREE_DEPTH>,
+
+    pub optimistic_index: u32, // current msg index need to wait optimistic verification
+    pub index: u32, // msg index, no need to wait optimistic period
+
     pub incoming: VecDeque<Message>, // incoming messages
     pub confirming: HashMap<H256, Message>, // processed messages, wait confirmation
     pub history: HashMap<H256, Message>, // TODO: move to a separate history storage canister
@@ -73,6 +78,14 @@ impl ChainInfo {
 
     pub fn set_batch_size(&mut self, v: u64) {
         self.config.set_batch_size(v);
+    }
+
+    pub fn latest_leaf_index(&self) -> u32 {
+        if let Some(v) = self.queue.last() {
+            v.leaf_index.as_u32()
+        } else {
+            0
+        }
     }
 
     pub async fn fetch_logs(&mut self) -> Result<(Vec<Log>, Vec<Log>), String> {
@@ -153,10 +166,42 @@ impl ChainInfo {
         }
     }
 
+    fn find_new_index(&self, proxy_canister_root: H256) -> (Tree<TREE_DEPTH>, u32) {
+        let mut temp_tree = self.tree.clone();
+        let mut idx = self.index;
+        while temp_tree.hash() != proxy_canister_root {
+            temp_tree.ingest(self.queue[idx].hash);
+        }
+        idx
+    }
+
+    fn find_new_op_index(&self, proxy_canister_root: H256) -> (Tree<TREE_DEPTH>, u32) {
+        let mut temp_tree = self.tree.clone();
+        let mut idx = self.optimistic_index;
+        while temp_tree.hash() != proxy_canister_root {
+            temp_tree.ingest(self.queue[idx].hash);
+        }
+        idx
+    }
+
     // check msgs in incoming queue, see if msgs are valid, 
     // if valid now, call proxyCanister.process_message with generated merkle proof and message body
     // otherwise, wait until valid
-    pub fn process_msgs(&mut self, proxy_canister_root: H256, root_confirm_at: u64) {
-        
+    pub fn process_normal_msgs(&mut self, proxy_canister_root: H256) {
+        let (tree, new_index) = self.find_new_index(proxy_canister_root);
+        // process msgs between (index, new_index]
+        while self.index < new_index {
+            let msg = self.queue[self.index];
+            if msg.wait_optimistic {
+                self.index += 1;
+                continue;
+            }
+            let proof = tree.prove(msg.leaf_index.as_u32() as usize).unwrap();
+            // TODO: call proxy.process_message;
+        }
+    }
+
+    pub fn process_op_msgs(&mut self, proxy_canister_root: H256) {
+
     }
 }
