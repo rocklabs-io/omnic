@@ -9,14 +9,24 @@ pub struct Home<T: HomeIndexer> {
     tree: Tree<TREE_DEPTH>,
     index: u32, // latest message index that has been inserted into the tree
     processed_index: u32,
+    start_block: u32,
     current_block: u32,
     batch_size: u32,
 }
 
 impl<T> Home<T> where T: HomeIndexer {
 
-    pub fn new() -> Self {
-        unimplemented!();
+    pub fn new(indexer: T, start_block: u32, batch_size: u32) -> Self {
+        Home {
+            indexer,
+            db: MessageDB::new(),
+            tree: Tree::<TREE_DEPTH>::default(),
+            index: 0,
+            processed_index: 0,
+            start_block,
+            current_block: start_block,
+            batch_size,
+        }
     }
 
     pub async fn sync_messages(&mut self) -> Result<(), OmnicError> {

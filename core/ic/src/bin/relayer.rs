@@ -62,23 +62,34 @@ fn init() {
 //     })
 // }
 
-// // in heart_beat
-// async fn fetch_and_process_logs() {
-//     let chains = CHAINS.with(|chains| chains.borrow_mut());
-//     for chain in chains {
-//         res = chain.fetch_logs();
-//         chain.process_send_logs(res[0]);
-//         chain.process_proc_logs(res[1]);
-//     }
-// }
+// in heart_beat
+async fn fetch_and_process_logs() {
+    let chains = CHAINS.with(|chains| chains.borrow_mut());
+    for chain in chains {
+        chain.sync_messages().await;
+        // fetch root from proxy canister
+        let proxy_root = "";
+        let new_idx = match chain.update_tree(proxy_root) {
+            Ok(v) => { v },
+            Err(e) => { panic!("tree root not match") },
+        };
+        while chain.processed_index < new_idx {
+            // increase processed_index
+            chain.increase_processed_index();
+            // process message
+            let proof = chain.generate_proof(chain.processed_index);
+            // call proxy.process_message(message, proof)
+        }
+    }
+}
 
-// // in heart_beat
-// async fn process_msgs() {
-//     let chains = CHAINS.with(|chains| chains.borrow_mut());
-//     for chain in chains {
-//         chain.process_msgs();
-//     }
-// }
+// in heart_beat
+async fn process_msgs() {
+    let chains = CHAINS.with(|chains| chains.borrow_mut());
+    for chain in chains {
+        chain.process_msgs();
+    }
+}
 
 fn main() {
     candid::export_service!();

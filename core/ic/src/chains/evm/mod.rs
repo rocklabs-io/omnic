@@ -15,7 +15,6 @@ pub struct EVMChainIndexer {
     pub chain_id: u32,
     pub rpc_url: String,
     pub omnic_addr: String,
-    pub start_block: u32,
     pub w3: Web3<ICHttp>,
 }
 
@@ -24,13 +23,11 @@ impl EVMChainIndexer {
         chain_id: u32,
         rpc_url: String,
         omnic_addr: String,
-        start_block: u32
     ) -> Result<Self, OmnicError> {
         Ok(EVMChainIndexer {
             chain_id,
             rpc_url: rpc_url.clone(),
             omnic_addr,
-            start_block,
             w3: { 
                 let http = ICHttp::new(&rpc_url, None, None)?; 
                 Web3::new(http)
