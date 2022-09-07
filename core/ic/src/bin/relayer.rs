@@ -65,7 +65,7 @@ fn init() {
 
 // in heart_beat
 async fn fetch_and_process_logs() {
-    let mut chains = CHAINS.with(|chains| chains.borrow_mut());
+    let mut chains = CHAINS.with(|chains| chains.borrow().clone());
     for (id, chain) in chains.iter_mut() {
         chain.sync_messages().await;
         // TODO: fetch root from proxy canister
@@ -82,10 +82,7 @@ async fn fetch_and_process_logs() {
             // call proxy.process_message(message, proof)
         }
     }
-    // CHAINS.with(|c| {
-    //     let mut c = c.borrow_mut();
-    //     c = chains;
-    // });
+    CHAINS.with(|c| c.replace(chains));
 }
 
 // // in heart_beat

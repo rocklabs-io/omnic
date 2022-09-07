@@ -11,6 +11,7 @@ use crate::error::OmnicError;
 
 const EVENT_SEND_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8ea626c9fb38a90bd8";
 
+#[derive(Clone)]
 pub struct EVMChainIndexer {
     pub chain_id: u32,
     pub rpc_url: String,

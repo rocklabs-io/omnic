@@ -3,7 +3,7 @@ use crate::{full::MerkleTree, IngestionError, LightMerkle, Merkle, Proof, Provin
 use ic_web3::types::{H256, U256};
 
 /// A simplified interface for a full sparse merkle tree
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Tree<const N: usize> {
     count: usize,
     tree: Box<MerkleTree>,
