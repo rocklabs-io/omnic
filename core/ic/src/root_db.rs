@@ -20,6 +20,10 @@ impl RootDB {
         }
     }
 
+    pub fn set_optimistic_delay(&mut self, delay: u64) {
+        self.optimistic_delay = delay;
+    }
+
     pub fn insert_root(&mut self, root: H256, confirm_at: u64) {
 
     }
