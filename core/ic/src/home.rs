@@ -7,11 +7,11 @@ pub struct Home<T: HomeIndexer> {
     indexer: T,
     db: MessageDB,
     tree: Tree<TREE_DEPTH>,
-    index: u32, // latest message index that has been inserted into the tree
-    processed_index: u32,
-    start_block: u32,
-    current_block: u32,
-    batch_size: u32,
+    pub index: u32, // latest message index that has been inserted into the tree
+    pub processed_index: u32,
+    pub start_block: u32,
+    pub current_block: u32,
+    pub batch_size: u32,
 }
 
 impl<T> Home<T> where T: HomeIndexer {
@@ -57,6 +57,10 @@ impl<T> Home<T> where T: HomeIndexer {
 
     pub fn generate_proof(&self, index: u32) -> Result<Proof<TREE_DEPTH>, OmnicError> {
         Ok(self.tree.prove(index as usize)?)
+    }
+
+    pub fn increase_processed_index(&mut self) {
+        self.processed_index += 1;
     }
 }
 

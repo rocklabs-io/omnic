@@ -20,6 +20,7 @@ use ic_cdk::api::{call::CallResult, canister_balance};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
 use ic_cdk::export::candid::{candid_method, CandidType, Deserialize, Int, Nat};
 use ic_cdk::export::Principal;
+use ic_web3::types::H256;
 
 use omnic::home::Home;
 use omnic::traits::HomeIndexer;
@@ -64,14 +65,14 @@ fn init() {
 
 // in heart_beat
 async fn fetch_and_process_logs() {
-    let chains = CHAINS.with(|chains| chains.borrow_mut());
-    for chain in chains {
+    let mut chains = CHAINS.with(|chains| chains.borrow_mut());
+    for (id, chain) in chains.iter_mut() {
         chain.sync_messages().await;
-        // fetch root from proxy canister
-        let proxy_root = "";
+        // TODO: fetch root from proxy canister
+        let proxy_root = H256::from_slice(&[0u8; 32]);
         let new_idx = match chain.update_tree(proxy_root) {
             Ok(v) => { v },
-            Err(e) => { panic!("tree root not match") },
+            Err(e) => { panic!("tree root match not found") },
         };
         while chain.processed_index < new_idx {
             // increase processed_index
@@ -81,15 +82,19 @@ async fn fetch_and_process_logs() {
             // call proxy.process_message(message, proof)
         }
     }
+    // CHAINS.with(|c| {
+    //     let mut c = c.borrow_mut();
+    //     c = chains;
+    // });
 }
 
-// in heart_beat
-async fn process_msgs() {
-    let chains = CHAINS.with(|chains| chains.borrow_mut());
-    for chain in chains {
-        chain.process_msgs();
-    }
-}
+// // in heart_beat
+// async fn process_msgs() {
+//     let chains = CHAINS.with(|chains| chains.borrow_mut());
+//     for chain in chains {
+//         chain.process_msgs();
+//     }
+// }
 
 fn main() {
     candid::export_service!();
