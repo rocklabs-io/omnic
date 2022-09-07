@@ -6,7 +6,7 @@ use ic_web3::types::H256;
 use crate::types::{Message, RawMessage};
 use crate::error::OmnicError;
 
-
+#[derive(Clone)]
 pub struct MessageDB {
     pub msgs: VecDeque<RawMessage>,
     pub latest_leaf_index: u32,
