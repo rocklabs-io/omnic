@@ -14,18 +14,26 @@ library Types {
      * @param _dstChainId  destination chain id
      * @param _recipientAddress Address of recipient on destination chain
      * @param _payload Raw bytes of message body
+     * @return Formatted message
      **/
-    struct MessageFormat {
-        uint32 _srcChainId;
-        bytes32 _srcSenderAddress;
-        uint32 _nonce;
-        uint32 _dstChainId;
-        bytes32 _recipientAddress;
-        bytes payload;
-    }
-
-    // alignment preserving cast
-    function bytes32ToAddress(bytes32 _buf) internal pure returns (address) {
-        return address(uint160(uint256(_buf)));
+    function formatMessage(
+        uint32 _srcChainId,
+        bytes32 _srcSenderAddress,
+        uint32 _nonce,
+        uint32 _dstChainId,
+        bytes32 _recipientAddress,
+        bool _wait_optimistic,
+        bytes memory _payload
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encode(
+                _srcChainId,
+                _srcSenderAddress,
+                _nonce,
+                _dstChainId,
+                _recipientAddress,
+                _wait_optimistic,
+                _payload
+            );
     }
 }

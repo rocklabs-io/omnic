@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity ^0.8.9;
 
-import {Types} from "./Types.sol";
-
 /**
  * @title QueueLib
  * @author Illusory Systems Inc.
@@ -10,8 +8,6 @@ import {Types} from "./Types.sol";
  * Home and Replica.
  **/
 library QueueLib {
-    using Types for Types.MessageFormat;
-    
     /**
      * @notice Queue struct
      * @dev Internally keeps track of the `first` and `last` elements through
@@ -20,7 +16,7 @@ library QueueLib {
     struct Queue {
         uint128 first;
         uint128 last;
-        mapping(uint256 => Types.MessageFormat) queue;
+        mapping(uint256 => bytes32) queue;
     }
 
     /**
@@ -39,13 +35,14 @@ library QueueLib {
      * @param _item New element to be enqueued
      * @return _last Index of newly enqueued element
      **/
-    function enqueue(Queue storage _q, Types.MessageFormat memory _item)
+    function enqueue(Queue storage _q, bytes32 _item)
         internal
         returns (uint128 _last)
     {
         _last = _q.last + 1;
         _q.last = _last;
-        if (_item.payload.length != 0){
+        if (_item != bytes32(0)) {
+            // saves gas if we're queueing 0
             _q.queue[_last] = _item;
         }
     }
@@ -55,16 +52,15 @@ library QueueLib {
      * @dev Removes dequeued element from storage
      * @return _item Dequeued element
      **/
-    function dequeue(Queue storage _q) internal returns (Types.MessageFormat memory _item) {
+    function dequeue(Queue storage _q) internal returns (bytes32 _item) {
         uint128 _last = _q.last;
         uint128 _first = _q.first;
         require(_length(_last, _first) != 0, "Empty");
         _item = _q.queue[_first];
-        if (_item.payload.length != 0) {
+        if (_item != bytes32(0)) {
             // saves gas if we're dequeuing 0
             delete _q.queue[_first];
         }
-
         _q.first = _first + 1;
     }
 
@@ -73,15 +69,15 @@ library QueueLib {
      * @param _items Array of elements to be enqueued
      * @return _last Index of last enqueued element
      **/
-    function enqueue(Queue storage _q, Types.MessageFormat[] memory _items)
+    function enqueue(Queue storage _q, bytes32[] memory _items)
         internal
         returns (uint128 _last)
     {
         _last = _q.last;
         for (uint256 i = 0; i < _items.length; i += 1) {
             _last += 1;
-            Types.MessageFormat memory _item = _items[i];
-            if (_item.payload.length != 0) {
+            bytes32 _item = _items[i];
+            if (_item != bytes32(0)) {
                 _q.queue[_last] = _item;
             }
         }
@@ -96,14 +92,14 @@ library QueueLib {
      **/
     function dequeue(Queue storage _q, uint256 _number)
         internal
-        returns (Types.MessageFormat[] memory)
+        returns (bytes32[] memory)
     {
         uint128 _last = _q.last;
         uint128 _first = _q.first;
         // Cannot underflow unless state is corrupted
         require(_length(_last, _first) >= _number, "Insufficient");
 
-        Types.MessageFormat[] memory _items = new Types.MessageFormat[](_number);
+        bytes32[] memory _items = new bytes32[](_number);
 
         for (uint256 i = 0; i < _number; i++) {
             _items[i] = _q.queue[_first];
@@ -120,13 +116,13 @@ library QueueLib {
      * @param _item Item being searched for in queue
      * @return True if `_item` currently exists in queue, false if otherwise
      **/
-    function contains(Queue storage _q, Types.MessageFormat memory _item)
+    function contains(Queue storage _q, bytes32 _item)
         internal
         view
         returns (bool)
     {
         for (uint256 i = _q.first; i <= _q.last; i++) {
-            if (keccak256(_q.queue[i].payload) == keccak256(_item.payload)) {
+            if (_q.queue[i] == _item) {
                 return true;
             }
         }
@@ -135,13 +131,13 @@ library QueueLib {
 
     /// @notice Returns last item in queue
     /// @dev Returns bytes32(0) if queue empty
-    function lastItem(Queue storage _q) internal view returns (Types.MessageFormat memory) {
+    function lastItem(Queue storage _q) internal view returns (bytes32) {
         return _q.queue[_q.last];
     }
 
     /// @notice Returns element at front of queue without removing element
     /// @dev Reverts if queue is empty
-    function peek(Queue storage _q) internal view returns (Types.MessageFormat memory _item) {
+    function peek(Queue storage _q) internal view returns (bytes32 _item) {
         require(!isEmpty(_q), "Empty");
         _item = _q.queue[_q.first];
     }
