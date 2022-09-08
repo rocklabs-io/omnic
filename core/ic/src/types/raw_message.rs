@@ -40,11 +40,14 @@ impl TryFrom<Log> for RawMessage {
     type Error = OmnicError;
 
     fn try_from(log: Log) -> Result<Self, Self::Error> {
+
+        ic_cdk::println!("log: {:?}", log.clone());
+
         let params = vec![
             EventParam { name: "messageHash".to_string(), kind: ParamType::FixedBytes(32), indexed: true },
             EventParam { name: "leafIndex".to_string(), kind: ParamType::Uint(256), indexed: true },
             EventParam { name: "dstChainId".to_string(), kind: ParamType::Uint(32), indexed: true },
-            EventParam { name: "nonce".to_string(), kind: ParamType::FixedBytes(32), indexed: false },
+            EventParam { name: "nonce".to_string(), kind: ParamType::Uint(32), indexed: false },
             EventParam { name: "payload".to_string(), kind: ParamType::Bytes, indexed: false },
         ];
 
@@ -57,12 +60,16 @@ impl TryFrom<Log> for RawMessage {
             topics: log.topics.clone(),
             data: log.data.clone().0
         })?;
+
+        ic_cdk::println!("res: {:?}", res.clone());
         
         let msg_hash = res.params.iter().find(|p| p.name == "messageHash").ok_or(LogDecodeError("missing messgaHash".into()))?;
         let leaf_index = res.params.iter().find(|p| p.name == "leafIndex").ok_or(LogDecodeError("missing leafIndex".into()))?;
         let dst_chain = res.params.iter().find(|p| p.name == "dstChainId").ok_or(LogDecodeError("missing dstChainId".into()))?;
         let dst_nonce = res.params.iter().find(|p| p.name == "nonce").ok_or(LogDecodeError("missing nonce".into()))?;
         let data = res.params.iter().find(|p| p.name == "payload").ok_or(LogDecodeError("missing payload".into()))?;
+
+        ic_cdk::println!("msg hash: {:?}", H256::from_slice(&msg_hash.value.clone().into_fixed_bytes().unwrap()));
 
         // decode data to get message fields
         let decoded = decode_body(&data.value.clone().into_bytes().ok_or(LogDecodeError("cannot convert data to bytes".into()))?)?;
@@ -86,6 +93,7 @@ impl TryFrom<Log> for RawMessage {
                 body: payload,
             }
         };
+        ic_cdk::println!("to_leaf: {:?}", m.to_leaf());
         if m.to_leaf() != m.hash {
             Err(LogDecodeError("hash mismatch".into()))
         } else {

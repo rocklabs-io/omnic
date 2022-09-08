@@ -2,6 +2,8 @@
 use ic_web3::types::H256;
 use crate::{utils::keccak256, Decode, Encode, OmnicError};
 
+const PREFIX_LEN: usize = 77;
+
 #[derive(Debug, Default, Clone)]
 pub struct Message {
     /// 4   SLIP-44 ID
@@ -44,7 +46,7 @@ impl Encode for Message {
         let v = if self.wait_optimistic { 1u8 } else { 0u8 };
         writer.write_all(&v.to_be_bytes())?;
         writer.write_all(&self.body)?;
-        Ok(self.body.len())
+        Ok(PREFIX_LEN + self.body.len())
     }
 }
 
@@ -70,7 +72,7 @@ impl Decode for Message {
 
         let mut v = [0u8; 1];
         reader.read_exact(&mut v);
-        let wait_optimistic = v[0] == 1;
+        let wait_optimistic = v[0] == 1; //u32::from_be_bytes(v) == 1;
 
         let mut body = vec![];
         reader.read_to_end(&mut body)?;
