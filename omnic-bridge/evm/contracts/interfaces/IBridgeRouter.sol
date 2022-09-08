@@ -3,8 +3,7 @@
 pragma solidity ^0.8.9;
 pragma abicoder v2;
 
-interface IBirdgeRouter {
-
+interface IBridgeRouter {
     function addLiquidity(
         uint256 _poolId,
         uint256 _amountLD,
@@ -17,15 +16,12 @@ interface IBirdgeRouter {
         uint256 _dstPoolId,
         uint256 _amountLD,
         uint256 _minAmountLD,
-        bytes calldata _to,
-        bytes calldata _payload
-    ) external payable;
-
+        bytes32 _to
+    ) external;
 
     function removeLiquidity(
         uint16 _srcPoolId,
         uint256 _amountLP,
         address _to
-    ) external returns (uint256);
-
+    ) external;
 }
