@@ -21,9 +21,9 @@ pub mod proof;
 /// A full incremental merkle tree. Suitable for proving.
 pub mod tree;
 
-#[cfg(target_arch = "wasm32")]
-/// Wasm bindings for common operations
-pub mod wasm;
+// #[cfg(target_arch = "wasm32")]
+// /// Wasm bindings for common operations
+// pub mod wasm;
 
 #[cfg(target_arch = "wasm32")]
 #[cfg_attr(target_arch = "wasm32", global_allocator)]
