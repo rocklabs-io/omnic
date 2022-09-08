@@ -14,13 +14,13 @@ async function main() {
   const omnic = await ethers.getContractAt("Omnic", omnic_contract_addr);
   console.log("omnic address:", omnic.address);
 
-  console.log("calling omnic.enqueueMessage...");
+  console.log("calling omnic.sendMessage...");
   let dest_chain = 0; // send to IC
   // let recepient = ethers.utils.hexZeroPad(omnic_canister.toHex(), 32); // send to omnic canister
   let recepient = ethers.utils.hexZeroPad(omnic_contract_addr, 32);
   console.log("recepient:", recepient);
   let data = ethers.utils.hexlify(ethers.utils.toUtf8Bytes("hello omnic!"));
-  let tx = await omnic.enqueueMessage(dest_chain, recepient, data);
+  let tx = await omnic.sendMessage(dest_chain, recepient, false, data);
   console.log("tx:", tx);
 }
 
