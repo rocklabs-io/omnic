@@ -1,13 +1,13 @@
 {
     "canisters": {
-        "omnic": {
-			  "candid": "src/omnic.did",
+        "relayer": {
+			  "candid": "src/agents/relayer.did",
 			  "package": "omnic",
 			  "type": "rust",
 			  "wasm": "target/wasm32-unknown-unknown/release/omnic.wasm",
 			  "build": [
 				"cargo build --target wasm32-unknown-unknown --release",
-				"ic-cdk-optimizer target/wasm32-unknown-unknown/release/omnic.wasm -o target/wasm32-unknown-unknown/release/omnic_opt.wasm"
+				"ic-cdk-optimizer target/wasm32-unknown-unknown/release/relayer.wasm -o target/wasm32-unknown-unknown/release/relayer_opt.wasm"
 			  ]
         },
         "demo": {

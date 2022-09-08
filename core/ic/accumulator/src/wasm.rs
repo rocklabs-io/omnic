@@ -58,7 +58,7 @@ macro_rules! export_tree {
                     ///
                     /// This will fail if the underlying tree is full.
                     pub fn ingest(&mut self, element: &str) -> Result<String, JsValue> {
-                        let h: ethers::prelude::H256 = element
+                        let h: ic_web3::types::H256 = element
                             .parse()
                             .map_err(|e| JsValue::from(format!("Unable to parse element as H256: {}", e)))?;
                         self.0

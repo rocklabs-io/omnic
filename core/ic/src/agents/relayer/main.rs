@@ -28,6 +28,10 @@ use omnic::traits::HomeIndexer;
 use omnic::chains::{EVMChainIndexer, IndexerConfig};
 
 const PROXY: &str = "";
+const GOERLI_URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
+const GOERLI_CHAIN_ID: u32 = 5;
+const GOERLI_OMNIC_ADDR: &str = "7E58Df2620ADDa3BA6FF6Aca989343D11807450E";
+const EVENT_ENQUEUE_MSG: &str = "84ec73a8411e8551ef1faab6c2277072efce9d5e4cc2ae5a218520dcdd7a377c";
 
 thread_local! {
     static CHAINS: RefCell<HashMap<u32, Home>> = RefCell::new(HashMap::new());
@@ -37,18 +41,17 @@ thread_local! {
 #[candid_method(init)]
 fn init() {
     // add goerli chain config
-    // CHAINS.with(|chains| {
-    //     let mut chains = chains.borrow_mut();
-    //     // ledger.init_metadata(ic_cdk::caller(), args.clone());
-    //     chains.insert(GOERLI_CHAIN_ID, ChainConfig {
-    //         chain_id: GOERLI_CHAIN_ID,
-    //         rpc_url: GOERLI_URL.clone().into(),
-    //         omnic_addr:GOERLI_OMNIC_ADDR.clone().into(),
-    //         omnic_start_block: 7468220,
-    //         current_block: 7468220, 
-    //         batch_size: 1000,
-    //     });
-    // });
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        let indexer_config = IndexerConfig {
+            chain_id: GOERLI_CHAIN_ID,
+            rpc_url: GOERLI_URL.to_string(),
+            omnic_addr: GOERLI_OMNIC_ADDR.to_string(),
+        };
+        let start_block = 7552168;
+        let batch_size = 1000;
+        chains.insert(GOERLI_CHAIN_ID, Home::new(indexer_config, start_block, batch_size));
+    });
 }
 
 // #[update(name = "add_chain_config")]
@@ -64,6 +67,20 @@ fn init() {
 //         }
 //     })
 // }
+
+#[update(name = "sync")]
+#[candid_method(update, rename = "sync")]
+async fn sync() -> Result<bool, String> {
+    process().await;
+    CHAINS.with(|chains| {
+        let chains = chains.borrow();
+        for (id, chain) in chains.iter() {
+            ic_cdk::println!("chain: {}", id);
+            ic_cdk::println!("db: {:?}", chain.db);
+        }
+    });
+    Ok(true)
+}
 
 fn insert_messages(chain_id: u32, new_block: u32, msgs: Vec<RawMessage>) -> Result<(), OmnicError> {
     CHAINS.with(|chains| {
@@ -159,10 +176,10 @@ async fn process() {
             Err(_) => { continue },
         }
         // fetch root from proxy canister, update tree to catch up, and generate proofs for messages in between
-        match update_tree_and_proof(*id).await {
-            Ok(_) => {},
-            Err(_) => { continue },
-        }
+        // match update_tree_and_proof(*id).await {
+        //     Ok(_) => {},
+        //     Err(_) => { continue },
+        // }
         // send proven messages to proxy
         // match dispatch_messages(id).await {
         //

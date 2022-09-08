@@ -8,7 +8,7 @@ use accumulator::{Proof, TREE_DEPTH};
 use crate::types::{Message, RawMessage};
 use crate::error::OmnicError;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MessageDB {
     pub msgs: VecDeque<RawMessage>,
     pub proofs: HashMap<u32, Proof<TREE_DEPTH>>,

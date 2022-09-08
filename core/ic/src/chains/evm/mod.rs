@@ -11,7 +11,7 @@ use crate::error::OmnicError;
 
 use crate::chains::config::IndexerConfig;
 
-const EVENT_SEND_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8ea626c9fb38a90bd8";
+const EVENT_SEND_MSG: &str = "84ec73a8411e8551ef1faab6c2277072efce9d5e4cc2ae5a218520dcdd7a377c";
 
 #[derive(Clone)]
 pub struct EVMChainIndexer {

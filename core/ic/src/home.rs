@@ -3,7 +3,7 @@ use ic_web3::types::H256;
 
 use crate::{RawMessage, MessageDB, HomeIndexer, error::OmnicError, chains::config::IndexerConfig};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Home {
     pub indexer_config: IndexerConfig,
     pub db: MessageDB,
