@@ -12,11 +12,11 @@ edition = "2018"
 
 #[[bin]]
 #name = "proxy"
-#path = "src/bin/proxy.rs"
+#path = "src/agents/proxy/main.rs"
 
 [[bin]]
 name = "relayer"
-path = "src/bin/relayer.rs"
+path = "src/agents/relayer/main.rs"
 
 [dependencies]
 accumulator = { path = "./accumulator" }

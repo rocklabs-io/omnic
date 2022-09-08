@@ -9,28 +9,24 @@ use crate::traits::HomeIndexer;
 use crate::types::RawMessage;
 use crate::error::OmnicError;
 
+use crate::chains::config::IndexerConfig;
+
 const EVENT_SEND_MSG: &str = "b9bede5465bf01e11c8b770ae40cbae2a14ace602a176c8ea626c9fb38a90bd8";
 
 #[derive(Clone)]
 pub struct EVMChainIndexer {
-    pub chain_id: u32,
-    pub rpc_url: String,
-    pub omnic_addr: String,
+    pub config: IndexerConfig,
     pub w3: Web3<ICHttp>,
 }
 
 impl EVMChainIndexer {
     pub fn new(
-        chain_id: u32,
-        rpc_url: String,
-        omnic_addr: String,
+        config: IndexerConfig
     ) -> Result<Self, OmnicError> {
         Ok(EVMChainIndexer {
-            chain_id,
-            rpc_url: rpc_url.clone(),
-            omnic_addr,
+            config: config.clone(),
             w3: { 
-                let http = ICHttp::new(&rpc_url, None, None)?; 
+                let http = ICHttp::new(&config.rpc_url, None, None)?; 
                 Web3::new(http)
             },
         })
@@ -50,7 +46,7 @@ impl HomeIndexer for EVMChainIndexer {
         let event_send = H256::from_str(EVENT_SEND_MSG).unwrap();
         
         let filter = FilterBuilder::default()
-            .address(vec![H160::from_str(&self.omnic_addr).unwrap()])
+            .address(vec![H160::from_str(&self.config.omnic_addr).unwrap()])
             .topics(
                 Some(vec![event_send]),
                 None,

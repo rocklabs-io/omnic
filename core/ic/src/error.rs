@@ -26,4 +26,7 @@ pub enum OmnicError {
 
     #[error(transparent)]
     ProveError(#[from] accumulator::error::ProvingError),
+
+    #[error("other: `{0}`")]
+    Other(String),
 }

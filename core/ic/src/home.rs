@@ -1,12 +1,12 @@
 use accumulator::{tree::Tree, Proof, Merkle, TREE_DEPTH};
 use ic_web3::types::H256;
 
-use crate::{MessageDB, HomeIndexer, error::OmnicError};
+use crate::{RawMessage, MessageDB, HomeIndexer, error::OmnicError, chains::config::IndexerConfig};
 
 #[derive(Clone)]
-pub struct Home<T: HomeIndexer> {
-    indexer: T,
-    db: MessageDB,
+pub struct Home {
+    pub indexer_config: IndexerConfig,
+    pub db: MessageDB,
     tree: Tree<TREE_DEPTH>,
     pub index: u32, // latest message index that has been inserted into the tree
     pub processed_index: u32,
@@ -15,11 +15,11 @@ pub struct Home<T: HomeIndexer> {
     pub batch_size: u32,
 }
 
-impl<T> Home<T> where T: HomeIndexer {
+impl Home {
 
-    pub fn new(indexer: T, start_block: u32, batch_size: u32) -> Self {
+    pub fn new(indexer_config: IndexerConfig, start_block: u32, batch_size: u32) -> Self {
         Home {
-            indexer,
+            indexer_config,
             db: MessageDB::new(),
             tree: Tree::<TREE_DEPTH>::default(),
             index: 0,
@@ -28,18 +28,6 @@ impl<T> Home<T> where T: HomeIndexer {
             current_block: start_block,
             batch_size,
         }
-    }
-
-    pub async fn sync_messages(&mut self) -> Result<(), OmnicError> {
-        let block_number = self.indexer.get_block_number().await?;
-        let to = if block_number < self.current_block + self.batch_size {
-            block_number
-        } else {
-            self.current_block + self.batch_size
-        };
-        let msgs = self.indexer.fetch_sorted_messages(self.current_block, to).await?;
-        self.db.store_messages(&msgs)?;
-        Ok(())
     }
 
     /// new_root: fetched from proxy canister, update local tree to catch up
@@ -60,8 +48,31 @@ impl<T> Home<T> where T: HomeIndexer {
         Ok(self.tree.prove(index as usize)?)
     }
 
+    pub fn generate_and_store_proof(&mut self, index: u32) -> Result<(), OmnicError> {
+        let proof = self.tree.prove(index as usize)?;
+        self.db.store_proof(index, &proof);
+        Ok(())
+    }
+
+    // fetch proven messages, messages between (self.processed_index, self.index]
+    pub fn fresh_proven_messages_with_proof(&self) -> Result<Vec<(RawMessage, Proof<TREE_DEPTH>)>, OmnicError> {
+        let mut res: Vec<(RawMessage, Proof<TREE_DEPTH>)> = Vec::new();
+        for i in (self.processed_index + 1)..=self.index {
+            let item = self.db.message_and_proof_by_leaf_index(i)?;
+            res.push(item);
+        }
+        Ok(res)
+    }
+
     pub fn increase_processed_index(&mut self) {
         self.processed_index += 1;
+        self.db.delete_proof(self.processed_index);
+    }
+
+    pub fn set_processed_index(&mut self, v: u32) {
+        while self.processed_index < v {
+            self.increase_processed_index();
+        }
     }
 }
 
