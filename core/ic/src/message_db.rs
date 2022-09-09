@@ -12,7 +12,7 @@ use crate::error::OmnicError;
 pub struct MessageDB {
     pub msgs: VecDeque<RawMessage>,
     pub proofs: HashMap<u32, Proof<TREE_DEPTH>>,
-    pub latest_leaf_index: u32,
+    pub next_leaf_index: u32,
 }
 
 impl MessageDB {
@@ -20,12 +20,12 @@ impl MessageDB {
         MessageDB {
             msgs: VecDeque::new(),
             proofs: HashMap::new(),
-            latest_leaf_index: 0,
+            next_leaf_index: 0,
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.latest_leaf_index == 0
+        self.next_leaf_index == 0
     }
 
     pub fn store_messages(&mut self, messages: &[RawMessage]) -> Result<(), OmnicError> {
@@ -36,13 +36,13 @@ impl MessageDB {
     }
 
     pub fn store_latest_message(&mut self, message: &RawMessage) -> Result<(), OmnicError> {
-        if self.latest_leaf_index == message.leaf_index - 1 {
-            self.latest_leaf_index += 1;
+        if self.next_leaf_index == message.leaf_index {
+            self.next_leaf_index += 1;
             self.msgs.push_back(message.clone());
             Ok(())
         } else {
             Err(OmnicError::DBError(
-                format!("message.leaf_index {} != latest_leaf_index {} + 1", message.leaf_index, self.latest_leaf_index)
+                format!("message.leaf_index {} != next_leaf_index {}", message.leaf_index, self.next_leaf_index)
             ))
         }
     }

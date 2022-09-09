@@ -30,8 +30,8 @@ use omnic::chains::{EVMChainIndexer, IndexerConfig};
 const PROXY: &str = "";
 const GOERLI_URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
 const GOERLI_CHAIN_ID: u32 = 5;
-const GOERLI_OMNIC_ADDR: &str = "df551F32b5Cf14f3548B3a1b5600947C2Da7190C";
-const GOERLI_START_BLOCK: u32 = 7557576;
+const GOERLI_OMNIC_ADDR: &str = "0312504E22B40A6f03FcCFEA0C8c0e9Ad3E36918";
+const GOERLI_START_BLOCK: u32 = 7558863;
 const EVENT_ENQUEUE_MSG: &str = "84ec73a8411e8551ef1faab6c2277072efce9d5e4cc2ae5a218520dcdd7a377c";
 
 thread_local! {
@@ -76,8 +76,7 @@ async fn sync() -> Result<bool, String> {
     CHAINS.with(|chains| {
         let chains = chains.borrow();
         for (id, chain) in chains.iter() {
-            ic_cdk::println!("chain: {}", id);
-            ic_cdk::println!("db: {:?}", chain.db);
+            ic_cdk::println!("chain: {:?}", chain);
         }
     });
     Ok(true)
@@ -100,7 +99,7 @@ fn insert_messages(chain_id: u32, new_block: u32, msgs: Vec<RawMessage>) -> Resu
     })
 }
 
-async fn sync_home_messages(chain_id: u32, home: &Home) -> Result<(), OmnicError> {
+async fn sync_home_messages(chain_id: u32, home: &Home) -> Result<usize, OmnicError> {
     // fetch messages
     let indexer = EVMChainIndexer::new(home.indexer_config.clone())?;
     let block_number = indexer.get_block_number().await?;
@@ -111,8 +110,8 @@ async fn sync_home_messages(chain_id: u32, home: &Home) -> Result<(), OmnicError
     };
     let msgs = indexer.fetch_sorted_messages(home.current_block, to).await?;
     // insert messages to home db
-    insert_messages(chain_id, to, msgs)?;
-    Ok(())
+    insert_messages(chain_id, to, msgs.clone())?;
+    Ok(msgs.len())
 }
 
 async fn update_tree_and_proof(chain_id: u32) -> Result<(), OmnicError> {
@@ -173,14 +172,19 @@ async fn process() {
     for (id, chain) in chains.iter() {
         // fetch messages
         match sync_home_messages(*id, chain).await {
+            Ok(v) => {
+                ic_cdk::println!("got new messages from {}: {}", id, v);
+            },
+            Err(e) => { 
+                ic_cdk::println!("sync_home_messages err: {:?}", e);
+                continue 
+            },
+        }
+        // fetch root from proxy canister, update tree to catch up, and generate proofs for messages in between
+        match update_tree_and_proof(*id).await {
             Ok(_) => {},
             Err(_) => { continue },
         }
-        // fetch root from proxy canister, update tree to catch up, and generate proofs for messages in between
-        // match update_tree_and_proof(*id).await {
-        //     Ok(_) => {},
-        //     Err(_) => { continue },
-        // }
         // send proven messages to proxy
         // match dispatch_messages(id).await {
         //
