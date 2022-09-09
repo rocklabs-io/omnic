@@ -67,7 +67,7 @@ contract Omnic is QueueManager, Ownable {
         uint256 indexed leafIndex,
         uint32 indexed dstChainId,
         uint32 nonce,
-        bytes payload
+        bytes message
     );
 
     event ProcessMessage(
@@ -127,7 +127,7 @@ contract Omnic is QueueManager, Ownable {
             tree.count - 1,
             chainId,
             _nonce,
-            _payload
+            _message
         );
     }
 

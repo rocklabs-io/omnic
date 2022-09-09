@@ -30,7 +30,8 @@ use omnic::chains::{EVMChainIndexer, IndexerConfig};
 const PROXY: &str = "";
 const GOERLI_URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
 const GOERLI_CHAIN_ID: u32 = 5;
-const GOERLI_OMNIC_ADDR: &str = "7E58Df2620ADDa3BA6FF6Aca989343D11807450E";
+const GOERLI_OMNIC_ADDR: &str = "df551F32b5Cf14f3548B3a1b5600947C2Da7190C";
+const GOERLI_START_BLOCK: u32 = 7557576;
 const EVENT_ENQUEUE_MSG: &str = "84ec73a8411e8551ef1faab6c2277072efce9d5e4cc2ae5a218520dcdd7a377c";
 
 thread_local! {
@@ -48,7 +49,7 @@ fn init() {
             rpc_url: GOERLI_URL.to_string(),
             omnic_addr: GOERLI_OMNIC_ADDR.to_string(),
         };
-        let start_block = 7552168;
+        let start_block = GOERLI_START_BLOCK;
         let batch_size = 1000;
         chains.insert(GOERLI_CHAIN_ID, Home::new(indexer_config, start_block, batch_size));
     });
