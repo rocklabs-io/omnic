@@ -31,8 +31,14 @@ contract FactoryPool is Ownable {
         router = _router;
     }
 
-    function setDefaultFeeLibrary(address _defaultFeeLibrary) external onlyOwner {
-        require(_defaultFeeLibrary != address(0x0), "Stargate: fee library cant be 0x0");
+    function setDefaultFeeLibrary(address _defaultFeeLibrary)
+        external
+        onlyOwner
+    {
+        require(
+            _defaultFeeLibrary != address(0x0),
+            "Stargate: fee library cant be 0x0"
+        );
         defaultFeeLibrary = _defaultFeeLibrary;
     }
 
@@ -48,9 +54,21 @@ contract FactoryPool is Ownable {
         string memory _name,
         string memory _symbol
     ) public onlyRouter returns (address poolAddress) {
-        require(address(getPool[_poolId]) == address(0x0), "Stargate: Pool already created");
+        require(
+            address(getPool[_poolId]) == address(0x0),
+            "Stargate: Pool already created"
+        );
 
-        Pool pool = new Pool(_poolId, router, _token, _sharedDecimals, _localDecimals, defaultFeeLibrary, _name, _symbol);
+        Pool pool = new Pool(
+            _poolId,
+            router,
+            _token,
+            _sharedDecimals,
+            _localDecimals,
+            defaultFeeLibrary,
+            _name,
+            _symbol
+        );
         getPool[_poolId] = pool;
         poolAddress = address(pool);
         allPools.push(poolAddress);
