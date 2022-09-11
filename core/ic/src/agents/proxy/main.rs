@@ -3,26 +3,59 @@ omnic proxy canister:
     fetch_root: fetch merkel roots from all supported chains and insert to chain state
 */
 
+use std::cell::{RefCell};
 use std::collections::HashMap;
-use std::cell::RefCell;
+
 use ic_web3::types::{H256, U256};
-use ic_cdk::api::{call::CallResult, canister_balance};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
 use ic_cdk::export::candid::{candid_method, CandidType, Deserialize, Int, Nat};
-use ic_cdk::export::Principal;
+
+use ic_cron::task_scheduler::TaskScheduler;
+use ic_cron::types::Iterations;
 
 use accumulator::{MerkleProof, Proof, TREE_DEPTH};
-use crate::message::Message;
-use crate::chain_roots::ChainRoots;
+use omnic::{Message, chains::{ChainRoots}};
 
-mod chain_roots;
-mod message;
-mod chain_config;
+ic_cron::implement_cron!();
 
 const OPTIMISTIC_DELAY: u64 = 1800; // 30 mins
+const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 60 * 5; // 5 min in nano second
+const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 60; // 1 min in nano second
+
+#[derive(CandidType, Deserialize, Clone)]
+enum Task {
+    FetchRoots,
+    FetchRoot
+}
+
+#[derive(Deserialize, Clone)]
+enum State {
+    Init,
+    Fetching(u32),
+    End,
+    Fail,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::Init
+    }
+}
+
+#[derive(Default, Clone)]
+struct StateMachine {
+    chain_id: u32,
+    chain_len: usize,
+    rpc_urls: Vec<String>,
+    block_height: u64,
+    root: H256,
+    state: State,
+    sub_state: State
+}
 
 thread_local! {
-    static CHAINS: RefCell<HashMap<u32, ChainRoots>> = RefCell::new(HashMap::new());
+    static CHAINS: RefCell<HashMap<u32, ChainRoots>>  = RefCell::new(HashMap::new());
+    static STATE_MACHINE: RefCell<StateMachine> = RefCell::new(StateMachine::default())
 }
 
 #[init]
@@ -41,6 +74,27 @@ fn init() {
     //         batch_size: 1000,
     //     });
     // });
+
+    // TODO init state machine
+
+    // set up cron job
+    cron_enqueue(
+        Task::FetchRoots, 
+        ic_cron::types::SchedulingOptions {
+            delay_nano: FETCH_ROOTS_PERIOID,
+            interval_nano: FETCH_ROOTS_PERIOID,
+            iterations: Iterations::Infinite,
+        },
+    ).unwrap();
+
+    cron_enqueue(
+        Task::FetchRoot, 
+        ic_cron::types::SchedulingOptions {
+            delay_nano: FETCH_ROOT_PERIOID,
+            interval_nano: FETCH_ROOT_PERIOID,
+            iterations: Iterations::Infinite,
+        },
+    ).unwrap();
 }
 
 // relayer canister call this to check if a message is valid before process_message
@@ -50,26 +104,26 @@ fn is_valid(proof: String, message: String) -> Result<bool, String> {
     // verify message proof: use proof, message to calculate the merkle root, 
     //     if message.need_verify is false, we only check if root exist in the hashmap
     //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
-    // TODO maybe we should verify msg.hash == hash(msg)?
     let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
         format!("error in parse message json: {:?}", e)
     })?;
+    let h = m.to_leaf();
     let p: Proof<{ TREE_DEPTH }> = serde_json::from_str(proof.as_str()).map_err(|e| {
         format!("error in parse proof json: {:?}", e)
     })?;
-    assert_eq!(m.hash, p.leaf);
+    assert_eq!(h, p.leaf);
     let root = p.root();
     if m.wait_optimistic {
         let now = get_time();
         CHAINS.with(|c| {
             let chains = c.borrow();
-            let chain = chains.get(&m.src_chain).ok_or("src chain id not exist".to_string())?;
+            let chain = chains.get(&m.origin).ok_or("src chain id not exist".to_string())?;
             Ok(chain.is_root_valid(root, now))
         })
     } else {
         CHAINS.with(|c| {
             let chains = c.borrow();
-            let chain = chains.get(&m.src_chain).ok_or("src chain id not exist".to_string())?;
+            let chain = chains.get(&m.origin).ok_or("src chain id not exist".to_string())?;
             Ok(chain.is_root_exist(root))
         })
     }
@@ -77,46 +131,106 @@ fn is_valid(proof: String, message: String) -> Result<bool, String> {
 
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
-async fn process_message(proof: String, path_len: usize, message: String) -> Result<bool, String> {
+async fn process_message(proof: String, message: String) -> Result<bool, String> {
     // TODO only relayers can call?
     // verify message proof: use proof, message to calculate the merkle root, 
     //     if message.need_verify is false, we only check if root exist in the hashmap
     //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
     // if valid, call dest canister.handleMessage or send tx to dest chain
     // if invalid, return error
-
-    Ok(true)
-}
-
-async fn fetch_root(chain: &ChainRoots) -> Result<H256, String> {
-    // query omnic contract.getLatestRoot, 
-    // fetch from multiple rpc providers and aggregrate results, should be exact match
-    Err("test".into())
-}
-
-// this is done in heart_beat
-async fn fetch_roots() -> Result<bool, String> {
-    let chains = CHAINS.with(|chains| {
-        chains.borrow().clone()
-    });
-    for (id, chain) in chains.into_iter() {
-        let root = if let Ok(v) = fetch_root(&chain).await {
-            v
-        } else {
-            ic_cdk::println!("fetch root failed for: {:?}", &chain.config);
-            continue
-        };
-        let confirm_at = get_time() + OPTIMISTIC_DELAY;
-        CHAINS.with(|chains| {
-            let mut chains = chains.borrow_mut();
-            match chains.get_mut(&id) {
-                Some(v) => v.insert_root(root, confirm_at),
-                None => unreachable!(),
-            }
-        });
+    is_valid(proof, message.clone())?;
+    let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
+        format!("error in parse message json: {:?}", e)
+    })?;
+    if m.destination == 0 {
+        // todo! call ic canister
+    } else {
+        // todo! send tx to chain
     }
     Ok(true)
 }
+
+// TODO re think the state transition
+
+async fn fetch_root() {
+    // query omnic contract.getLatestRoot, 
+    // fetch from multiple rpc providers and aggregrate results, should be exact match
+    let state = STATE_MACHINE.with(|s| {
+        s.borrow().clone()
+    });
+    
+    let next_state = match state.sub_state {
+        State::Init => State::Fetching(0),
+        State::Fetching(idx) => {
+            // TODO query root in block height
+            // compare and set the result with root
+            // if result != state.root, convert to fail
+            if idx + 1 == state.rpc_urls.len() as u32 {
+                State::End
+            } else {
+                State::Fetching(idx + 1)
+            }
+        },
+        State::End => State::End,
+        State::Fail => State::Fail,
+    };
+
+    // update sub state
+    STATE_MACHINE.with(|s| {
+        s.borrow_mut().sub_state = next_state;
+    });
+}
+
+// this is done in heart_beat
+async fn fetch_roots() {
+    let state = STATE_MACHINE.with(|s| {
+        s.borrow().clone()
+    });
+    
+    match state.sub_state {
+        State::Init | State::Fetching(_) => return, // init/fetching sub state, still processing fetching
+        State::End => {
+            // update root
+            CHAINS.with(|c| {
+                let mut chain = c.borrow_mut();
+                let chain_root = chain.get_mut(&state.chain_id).expect("chain id not exist");
+                chain_root.insert_root(state.root, get_time());
+            })
+        },
+        State::Fail => {
+            // fail, don't update root
+        },
+    };
+
+    let next_state = match state.state {
+        State::Init => {
+            State::Fetching(0)
+        },
+        State::Fetching(idx) => {
+
+            if idx + 1 == state.chain_len as u32 {
+                State::End
+            } else {
+                State::Fetching(idx + 1)
+            }
+        },
+        State::End => {
+            State::Fetching(0)
+        },
+        State::Fail => panic!("can't reach here"),
+    };
+
+    // update state
+    STATE_MACHINE.with(|s| {
+        let mut state = s.borrow_mut();
+        state.sub_state = State::Init;
+    });
+}
+
+// #[heartbeat]
+// fn heart_beat() {
+
+// }
 
 /// get the unix timestamp in second
 fn get_time() -> u64 {
