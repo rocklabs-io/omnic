@@ -4,7 +4,7 @@ pragma solidity ^0.8.9;
 pragma abicoder v2;
 
 //imports external
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 // imports internal
@@ -31,17 +31,6 @@ contract FactoryPool is Ownable {
         router = _router;
     }
 
-    function setDefaultFeeLibrary(address _defaultFeeLibrary)
-        external
-        onlyOwner
-    {
-        require(
-            _defaultFeeLibrary != address(0x0),
-            "Stargate: fee library cant be 0x0"
-        );
-        defaultFeeLibrary = _defaultFeeLibrary;
-    }
-
     function allPoolsLength() external view returns (uint256) {
         return allPools.length;
     }
@@ -55,7 +44,7 @@ contract FactoryPool is Ownable {
         string memory _symbol
     ) public onlyRouter returns (address poolAddress) {
         require(
-            address(getPool[_poolId]) == address(0x0),
+            address(pools[_poolId]) == address(0x0),
             "Stargate: Pool already created"
         );
 
@@ -65,11 +54,10 @@ contract FactoryPool is Ownable {
             _token,
             _sharedDecimals,
             _localDecimals,
-            defaultFeeLibrary,
             _name,
             _symbol
         );
-        getPool[_poolId] = pool;
+        pools[_poolId] = pool;
         poolAddress = address(pool);
         allPools.push(poolAddress);
     }

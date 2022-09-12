@@ -5,11 +5,11 @@ pragma abicoder v2;
 
 // imports external
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 // imports internal
-import "./LPTokenERC20.sol";
+import "./utils/LPTokenERC20.sol";
 
 // one pool manages one token
 contract Pool is LPTokenERC20, ReentrancyGuard {
@@ -82,16 +82,15 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         address _token,
         uint256 _sharedDecimals,
         uint256 _localDecimals,
-        address _feeLibrary,
         string memory _name,
         string memory _symbol
     ) LPTokenERC20(_name, _symbol) {
         require(
-            _unifiedDecimals <= _tokenOriginDecimals,
+            _sharedDecimals <= _localDecimals,
             "common decimals must be little more than token origin decimals"
         );
-        require(_token != address(0x0), "Stargate: _token cannot be 0x0");
-        require(_router != address(0x0), "Stargate: _router cannot be 0x0");
+        require(_token != address(0x0), "_token cannot be 0x0");
+        require(_router != address(0x0), "_router cannot be 0x0");
         poolId = _poolId;
         router = _router;
         token = _token;
@@ -115,9 +114,9 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         address _from,
         uint256 _amountLP,
         address _to
-    ) external nonReentrant onlyRouter returns (uint256 amountLD) {
+    ) external nonReentrant onlyRouter returns (uint256 amountSD) {
         require(_from != address(0x0), "_from cannot be 0x0");
-        amountSD = _burnLocal(_from, _amountLP);
+        amountSD = _burnLP(_from, _amountLP);
         uint256 amountLD = amountSDtoLD(amountSD);
         _safeTransfer(token, _to, amountLD);
         emit RemoveLiquidity(_from, _amountLP, amountLD, _to);
@@ -198,7 +197,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         emit Mint(_to, amountLPTokens, amountSD, fee);
     }
 
-    function _burn(address _from, uint256 _amountLP)
+    function _burnLP(address _from, uint256 _amountLP)
         internal
         returns (uint256 amountSD)
     {
@@ -207,7 +206,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         require(amountOfLPTokens >= _amountLP, "not enough LP tokens to burn");
 
         amountSD = _amountLP.mul(totalLiquidity).div(totalSupply);
-        totalLiquidity = totalLiquidity.sub(amount);
+        totalLiquidity = totalLiquidity.sub(amountSD);
 
         _burn(_from, _amountLP);
         emit Burn(_from, _amountLP, amountSD);

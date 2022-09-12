@@ -5,22 +5,22 @@ pragma abicoder v2;
 
 // imports
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import "./FactoryPool.sol";
 import "./Pool.sol";
 import "./Bridge.sol";
 import "./interfaces/IBridgeRouter.sol";
-import {addressToBytes32, bytes32ToAddress} from "./utils/TypeCasts.sol";
+import {TypeCasts} from "./utils/TypeCasts.sol";
 
 contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
     //------------------------------- variables --------------------------------------------
-    uint256 public chainId;
-    Factory public factory; // used for creating pools
+    uint16 public chainId;
+    FactoryPool public factory; // used for creating pools
     Bridge public localBridge;
 
     //----------------------------- events ----------------------------------------------
@@ -49,29 +49,25 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(address _localBridge) {
-        require(_relayerBridgeOnIC != address(0x0), "address cannot be 0x0");
+    constructor(uint16 _chainId, address _localBridge) {
         require(_localBridge != address(0x0), "address cannot be 0x0");
-        uint256 _chainId;
-        assembly {
-            _chainId := chainid()
-        }
-        chainId = _chianId;
-        localBridge = _localBridge;
+        chainId = _chainId;
+        localBridge = Bridge(_localBridge);
     }
 
-    function setBridgeAndFactory(Bridge _bridge, Factory _factory)
+    function setBridgeAndFactory(Bridge _bridge, FactoryPool _factory)
         external
         onlyOwner
     {
         require(
-            address(bridge) == address(0x0) && address(factory) == address(0x0),
+            address(localBridge) == address(0x0) &&
+                address(factory) == address(0x0),
             "bridge and factory already initialized"
         ); // 1 time only
         require(address(_bridge) != address(0x0), "bridge cant be 0x0");
         require(address(_factory) != address(0x0), "factory cant be 0x0");
 
-        bridge = _bridge;
+        localBridge = _bridge;
         factory = _factory;
     }
 
@@ -83,14 +79,9 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     ) external override nonReentrant {
         Pool pool = _getPool(_poolId);
         _safeTransferFrom(pool.token(), msg.sender, address(pool), _amountLD);
-        pool.mint(_to, _amountLD);
+        pool.addLiquidity(_to, _amountLD);
         // send message to bridge on ic
-        bridge.addLiquidity(
-            chainId,
-            _poolId,
-            true,
-            _amountLD
-        );
+        localBridge.addLiquidity(chainId, _poolId, true, _amountLD);
     }
 
     function removeLiquidity(
@@ -100,15 +91,10 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     ) external override nonReentrant {
         require(_amountLP > 0, "insufficient lp");
         Pool pool = _getPool(_srcPoolId);
-        amountLD = pool.removeLiquidity(msg.sender, _amountLP, _to);
+        uint256 amountLD = pool.removeLiquidity(msg.sender, _amountLP, _to);
 
         // send message to bridge on ic
-        bridge.removeLiquidity(
-            chainId,
-            _srcPoolId,
-            true,
-            amountLD
-        );
+        localBridge.removeLiquidity(chainId, _srcPoolId, true, amountLD);
     }
 
     function swap(
@@ -127,16 +113,9 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         }
         _safeTransferFrom(pool.token(), msg.sender, address(pool), _amountLD);
         //event
-        pool.swap(
-            _dstChainId,
-            _dstPoolId,
-            msg.sender,
-            _amountLD,
-            _minAmountLD,
-            true
-        );
+        pool.swap(_dstChainId, _dstPoolId, msg.sender, _amountLD, _minAmountLD);
 
-        bridge.swap(
+        localBridge.swap(
             chainId,
             _srcPoolId,
             _dstChainId,
@@ -153,15 +132,23 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         uint256 _dstPoolId,
         uint256 _amountLD,
         bytes32 _to
-    ) external override nonReentrant onlyLocalBridge{
-        require(_dstChainId == chainId, "destination chain id is not this chain.");
+    ) external override nonReentrant onlyLocalBridge {
+        require(
+            _dstChainId == chainId,
+            "destination chain id is not this chain."
+        );
         require(_amountLD > 0, "cannot swap 0");
         Pool pool = _getPool(_dstPoolId);
         {
             uint256 convertRate = pool.convertRate();
             _amountLD = _amountLD.div(convertRate).mul(convertRate);
         }
-        _safeTransferFrom(pool.token(), address(pool), bytes32ToAddress(_to), _amountLD);
+        _safeTransferFrom(
+            pool.token(),
+            address(pool),
+            TypeCasts.bytes32ToAddress(_to),
+            _amountLD
+        );
         //event
         emit HandleSwap(_nonce, _dstChainId, _dstPoolId, _amountLD, _to);
     }
@@ -172,14 +159,22 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         uint256 _amountLD,
         bytes32 _to
     ) external override nonReentrant onlyLocalBridge {
-        require(_srcChainId == chainId, "destination chain id is not this chain.");
+        require(
+            _srcChainId == chainId,
+            "destination chain id is not this chain."
+        );
         require(_amountLD > 0, "cannot swap 0");
         Pool pool = _getPool(_srcPoolId);
         {
             uint256 convertRate = pool.convertRate();
             _amountLD = _amountLD.div(convertRate).mul(convertRate);
         }
-        _safeTransferFrom(pool.token(), address(pool), bytes32ToAddress(_to), _amountLD);
+        _safeTransferFrom(
+            pool.token(),
+            address(pool),
+            TypeCasts.bytes32ToAddress(_to),
+            _amountLD
+        );
         //event
         emit Revert(_srcChainId, _srcPoolId, _amountLD, _to);
     }
@@ -209,7 +204,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     //----------------------------- internal  functions ------------------------------
 
     function _getPool(uint256 _poolId) internal view returns (Pool pool) {
-        pool = factory.getPool(_poolId);
+        pool = factory.pools(_poolId);
         require(address(pool) != address(0x0), "Pool does not exist");
     }
 

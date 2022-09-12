@@ -5,15 +5,15 @@ pragma abicoder v2;
 
 // imports external
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 // imports internal
 import "./Pool.sol";
-import "./Router.sol";
+import "./BridgeRouter.sol";
 
 import "./interfaces/IBridge.sol";
 import "./interfaces/IOmnic.sol";
-import {addressToBytes32, bytes32ToAddress} from "./utils/TypeCasts.sol";
+import {TypeCasts} from "./utils/TypeCasts.sol";
 
 contract Bridge is IBridge, Ownable {
     using SafeMath for uint256;
@@ -35,8 +35,8 @@ contract Bridge is IBridge, Ownable {
 
     //---------------------------- events -----------------------------------------------
 
-    event SendMsg(uint8 msgType, uint64 nonce);
-    event UdpateBridgeOnIC(address oldAddrss, address newAddrss);
+    event SendMsg(OperationTypes msgType, uint256 nonce);
+    event UdpateBridgeOnIC(address oldAddress, address newAddress);
 
 
     //------------------------------- modifiers & constructor------------------------------------------
@@ -73,7 +73,6 @@ contract Bridge is IBridge, Ownable {
 
     function handle(bytes memory _payload)
         external
-        view
         onlyBridgeOnIC
         returns (bool)
     {
@@ -89,7 +88,7 @@ contract Bridge is IBridge, Ownable {
                 uint256 _dstPoolId,
                 uint256 _amountLD,
                 bytes32 _to
-            ) = abi.decode(_payload, uint8, uint16, uint256, uint256, bytes32);
+            ) = abi.decode(_payload, (uint8, uint16, uint256, uint256, bytes32));
             router.handleSwap(++nonce, _dstChainId, _dstPoolId, _amountLD, _to);
         }
         return true;
@@ -100,8 +99,8 @@ contract Bridge is IBridge, Ownable {
         uint256 _srcPoolId,
         uint256 _amountLD,
         bytes32 _to
-    ) external view onlyBridgeOnIC returns (bool) {
-        router.revertFailedSwap();
+    ) external onlyBridgeOnIC returns (bool) {
+        router.revertFailedSwap(_srcChainId, _srcPoolId, _amountLD, _to);
         return true;
     }
 
@@ -163,7 +162,7 @@ contract Bridge is IBridge, Ownable {
         require(_newAddress != address(0x0), "address cannot be 0x0");
         address oldAddress = bridgeOnIC;
         bridgeOnIC = _newAddress;
-        emit UdpateBridgeOnIC(oldAddrss, _newAddrss);
+        emit UdpateBridgeOnIC(oldAddress, _newAddress);
     }
 
     //----------------------------- internal  functions ------------------------------
@@ -175,7 +174,7 @@ contract Bridge is IBridge, Ownable {
         uint256 _nonce = nonce++;
         omnic.sendMessage(
             chainIdIC,
-            addressToBytes32(bridgeOnIC),
+            TypeCasts.addressToBytes32(bridgeOnIC),
             _waitOptimistic,
             _payload
         );
