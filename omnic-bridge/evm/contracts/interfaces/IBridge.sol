@@ -4,17 +4,18 @@ pragma solidity ^0.8.9;
 
 interface IBridge {
     function swap(
+        uint16 _srcChainId,
+        uint256 _srcPoolId,
         uint16 _dstChainId,
-        bytes32 _dstRecipientAddress,
-        bool _waitOptimistic,
-        bytes memory _payload
+        uint256 _dstPoolId,
+        uint256 _amountLD,
+        bytes32 _to,
+        bool _waitOptimistic
     ) external;
 
     function addLiquidity(
         uint16 _srcChainId,
         uint256 _srcPoolId,
-        uint16 _dstChainId,
-        bytes32 _dstRecipientAddress,
         bool _waitOptimistic,
         uint256 _amount
     ) external;
@@ -22,8 +23,6 @@ interface IBridge {
     function removeLiquidity(
         uint16 _srcChainId,
         uint256 _srcPoolId,
-        uint16 _dstChainId,
-        bytes32 _dstRecipientAddress,
         bool _waitOptimistic,
         uint256 _amount
     ) external;
