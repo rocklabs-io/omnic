@@ -14,13 +14,14 @@ use ic_cron::task_scheduler::TaskScheduler;
 use ic_cron::types::Iterations;
 
 use accumulator::{MerkleProof, Proof, TREE_DEPTH};
+use omnic::chain;
 use omnic::{Message, chains::{ChainRoots}};
 
 ic_cron::implement_cron!();
 
 const OPTIMISTIC_DELAY: u64 = 1800; // 30 mins
 const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 60 * 5; // 5 min in nano second
-const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 60; // 1 min in nano second
+const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 10; // 1 min in nano second
 
 #[derive(CandidType, Deserialize, Clone)]
 enum Task {
@@ -28,10 +29,10 @@ enum Task {
     FetchRoot
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, PartialEq, Eq)]
 enum State {
     Init,
-    Fetching(u32),
+    Fetching(usize),
     End,
     Fail,
 }
@@ -42,10 +43,36 @@ impl Default for State {
     }
 }
 
+/// state transition
+/// chain ids: record all chain ids
+/// rpc urls: record rpc urls for this round
+/// block height: specific block height to query root
+/// root: root
+/// main state: loop forever to fetch root from each chain
+/// sub state: each time issue an sub task to handle fetch root from specific rpc url
+/// 
+/// Init: inital state
+/// Fetching(idx): fetching roots
+/// End: Round Finish
+/// Fail: Fail to fetch or root mismatch
+/// 
+/// Main State transition:
+/// Init => Move to Fetching(0)
+/// Fetching(idx) => 
+///     Sub state: Init => init rpc urls into state machine for this round, issue a sub task for fetch root of current chain id
+///     Sub state: Fetching => fetching, do nothing
+///     Sub state: Fail => Move sub state to Init, move state to fetching((idx + 1) % chains_num)
+///     Sub state: End => Update the root, move sub state to Init, move state to fetching((idx + 1) % chains_num)
+/// End, Fail => can't reach this 2 state in main state
+/// 
+/// Sub state transition:
+///     Init => get block height, move state to fail or fetching, issue a sub task
+///     Fetching => fetch root, compare and set the root, move state accordingly, issue a sub task
+///     Fail => _
+///     End => _
 #[derive(Default, Clone)]
 struct StateMachine {
-    chain_id: u32,
-    chain_len: usize,
+    chain_ids: Vec<u32>,
     rpc_urls: Vec<String>,
     block_height: u64,
     root: H256,
@@ -83,15 +110,6 @@ fn init() {
         ic_cron::types::SchedulingOptions {
             delay_nano: FETCH_ROOTS_PERIOID,
             interval_nano: FETCH_ROOTS_PERIOID,
-            iterations: Iterations::Infinite,
-        },
-    ).unwrap();
-
-    cron_enqueue(
-        Task::FetchRoot, 
-        ic_cron::types::SchedulingOptions {
-            delay_nano: FETCH_ROOT_PERIOID,
-            interval_nano: FETCH_ROOT_PERIOID,
             iterations: Iterations::Infinite,
         },
     ).unwrap();
@@ -150,8 +168,6 @@ async fn process_message(proof: String, message: String) -> Result<bool, String>
     Ok(true)
 }
 
-// TODO re think the state transition
-
 async fn fetch_root() {
     // query omnic contract.getLatestRoot, 
     // fetch from multiple rpc providers and aggregrate results, should be exact match
@@ -160,12 +176,15 @@ async fn fetch_root() {
     });
     
     let next_state = match state.sub_state {
-        State::Init => State::Fetching(0),
+        State::Init => {
+            // TODO fetch height
+            State::Fetching(0)
+        },
         State::Fetching(idx) => {
             // TODO query root in block height
             // compare and set the result with root
             // if result != state.root, convert to fail
-            if idx + 1 == state.rpc_urls.len() as u32 {
+            if idx + 1 == state.rpc_urls.len() {
                 State::End
             } else {
                 State::Fetching(idx + 1)
@@ -179,6 +198,15 @@ async fn fetch_root() {
     STATE_MACHINE.with(|s| {
         s.borrow_mut().sub_state = next_state;
     });
+
+    cron_enqueue(
+        Task::FetchRoot, 
+        ic_cron::types::SchedulingOptions {
+            delay_nano: FETCH_ROOT_PERIOID,
+            interval_nano: FETCH_ROOT_PERIOID,
+            iterations: Iterations::Infinite,
+        },
+    ).unwrap();
 }
 
 // this is done in heart_beat
@@ -186,45 +214,63 @@ async fn fetch_roots() {
     let state = STATE_MACHINE.with(|s| {
         s.borrow().clone()
     });
-    
-    match state.sub_state {
-        State::Init | State::Fetching(_) => return, // init/fetching sub state, still processing fetching
-        State::End => {
-            // update root
-            CHAINS.with(|c| {
-                let mut chain = c.borrow_mut();
-                let chain_root = chain.get_mut(&state.chain_id).expect("chain id not exist");
-                chain_root.insert_root(state.root, get_time());
-            })
-        },
-        State::Fail => {
-            // fail, don't update root
-        },
-    };
 
-    let next_state = match state.state {
+    match state.state {
         State::Init => {
-            State::Fetching(0)
-        },
+            STATE_MACHINE.with(|s| {
+                let mut state = s.borrow_mut();
+                state.state = State::Fetching(0);
+            });
+        }
         State::Fetching(idx) => {
+            match state.sub_state {
+                State::Init => {
+                    // update rpc urls
+                    let chain_id = state.chain_ids[idx as usize];
+                    let rpc_urls = CHAINS.with(|c| {
+                        c.borrow().get(&chain_id).unwrap().config.rpc_urls.clone()
+                    });
+                    STATE_MACHINE.with(|s| {
+                        let mut state = s.borrow_mut();
+                        state.rpc_urls = rpc_urls;
+                    });
 
-            if idx + 1 == state.chain_len as u32 {
-                State::End
-            } else {
-                State::Fetching(idx + 1)
+                    cron_enqueue(
+                        Task::FetchRoot, 
+                        ic_cron::types::SchedulingOptions {
+                            delay_nano: FETCH_ROOT_PERIOID,
+                            interval_nano: FETCH_ROOT_PERIOID,
+                            iterations: Iterations::Exact(1),
+                        },
+                    ).unwrap();
+                }
+                State::Fetching(_) => {},
+                State::End => {
+                    // update root
+                    CHAINS.with(|c| {
+                        let mut chain = c.borrow_mut();
+                        let chain_root = chain.get_mut(&state.chain_ids[idx as usize]).expect("chain id not exist");
+                        chain_root.insert_root(state.root, get_time());
+                    });
+                    // update state
+                    STATE_MACHINE.with(|s| {
+                        let mut state = s.borrow_mut();
+                        state.sub_state = State::Init;
+                        state.state = State::Fetching((idx + 1) % state.chain_ids.len())
+                    });
+                },
+                State::Fail => {
+                    // update state
+                    STATE_MACHINE.with(|s| {
+                        let mut state = s.borrow_mut();
+                        state.sub_state = State::Init;
+                        state.state = State::Fetching((idx + 1) % state.chain_ids.len())
+                    });
+                },
             }
         },
-        State::End => {
-            State::Fetching(0)
-        },
-        State::Fail => panic!("can't reach here"),
-    };
-
-    // update state
-    STATE_MACHINE.with(|s| {
-        let mut state = s.borrow_mut();
-        state.sub_state = State::Init;
-    });
+        _ => { panic!("can't reach here")},
+    }
 }
 
 // #[heartbeat]
