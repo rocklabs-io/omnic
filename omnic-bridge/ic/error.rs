@@ -4,36 +4,28 @@ use derive_more::{Display, From};
 
 pub type Result<T = ()> = std::result::Result<T, Error>;
 
-
-
 /// Errors which can occur when attempting to generate resource uri.
 #[derive(Debug, Display, From)]
 pub enum Error {
-    /// server is unreachable
-    #[display(fmt = "Server is unreachable")]
-    Unreachable,
     /// decoder error
-    #[display(fmt = "Decoder error: {}", _0)]
+    #[display(fmt = "Decode message error: {}", _0)]
     Decoder(String),
-    /// invalid response
-    #[display(fmt = "Got invalid response: {}", _0)]
+    /// invalid cmd
+    #[display(fmt = "Got invalid command: {}", _0)]
     #[from(ignore)]
-    InvalidResponse(String),
-    /// transport error
-    #[display(fmt = "Transport error: {}" _0)]
+    InvalidOpetion(String),
+    /// bridge error
+    #[display(fmt = "Bridge error: {}" _0)]
     #[from(ignore)]
-    Transport(TransportError),
-    /// rpc error
-    #[display(fmt = "RPC error: {:?}", _0)]
-    Rpc(RPCError),
-    /// io error
-    #[display(fmt = "IO error: {}", _0)]
-    Io(IoError),
-    /// recovery error
-    #[display(fmt = "Recovery error: {}", _0)]
-    Recovery(crate::signing::RecoveryError),
-    /// web3 internal error
-    #[display(fmt = "Internal Web3 error")]
+    Bridge(BridgeError),
+    /// token error
+    #[display(fmt = "Token error: {:?}", _0)]
+    Token(TokenError),
+    /// pool error
+    #[display(fmt = "Pool error: {}", _0)]
+    Pool(PoolError),
+    /// internal error
+    #[display(fmt = "Internal error")]
     Internal,
 }
 
@@ -41,10 +33,10 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use self::Error::*;
         match *self {
-            Unreachable | Decoder(_) | InvalidResponse(_) | Transport { .. } | Internal => None,
-            Rpc(ref e) => Some(e),
-            Io(ref e) => Some(e),
-            Recovery(ref e) => Some(e),
+            Decoder(_) | InvalidOpetion(_) | Internal => None,
+            Bridge(ref e) => Some(e),
+            Token(ref e) => Some(e),
+            Pool(ref e) => Some(e),
         }
     }
 }
@@ -59,30 +51,12 @@ impl Clone for Error {
     fn clone(&self) -> Self {
         use self::Error::*;
         match self {
-            Unreachable => Unreachable,
             Decoder(s) => Decoder(s.clone()),
-            InvalidResponse(s) => InvalidResponse(s.clone()),
-            Transport(s) => Transport(s.clone()),
-            Rpc(e) => Rpc(e.clone()),
-            Io(e) => Io(IoError::from(e.kind())),
-            Recovery(e) => Recovery(e.clone()),
+            InvalidOpetion(s) => InvalidOpetion(s.clone()),
+            Bridge(s) => Bridge(s.clone()),
+            Token(e) => Token(e.clone()),
+            Pool(e) => Pool(e.clone()),
             Internal => Internal,
-        }
-    }
-}
-
-#[cfg(test)]
-impl PartialEq for Error {
-    fn eq(&self, other: &Self) -> bool {
-        use self::Error::*;
-        match (self, other) {
-            (Unreachable, Unreachable) | (Internal, Internal) => true,
-            (Decoder(a), Decoder(b)) | (InvalidResponse(a), InvalidResponse(b)) => a == b,
-            (Transport(a), Transport(b)) => a == b,
-            (Rpc(a), Rpc(b)) => a == b,
-            (Io(a), Io(b)) => a.kind() == b.kind(),
-            (Recovery(a), Recovery(b)) => a == b,
-            _ => false,
         }
     }
 }

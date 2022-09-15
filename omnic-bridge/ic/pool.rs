@@ -21,15 +21,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Pool<T: Operation> {
     poolId: Nat,
-    tokenInfo: HashSet<Token<T>>,
+    tokenInfo: HashMap<Nat, Token<T>>,
+    sharedDecimals: u8,
     totalLiquidity: Nat,
 }
 
 impl<T: Operation> Pool<T> {
-    pub fn new(poolId: Nat) -> Self {
+    pub fn new(poolId: Nat, sharedDecimals: u8) -> Self {
         Pool {
             poolId,
-            tokenInfo: Default::default(),
+            tokenInfo: HashMap::default(),
+            sharedDecimals,
             totalLiquidity: 0,
         }
     }
@@ -37,12 +39,25 @@ impl<T: Operation> Pool<T> {
     pub fn addToken(&mut self, token: Token<T>) {
         self.tokenInfo.insert(token)
     }
-    pub fn removeToken(&mut self, token: Token<T>) -> bool {
+    pub fn removeToken(&mut self, token: Token<T>) -> Token<T> {
         //
-        true
+        self.tokenInfo.remove(&token).unwrap()
     }
-    pub fn getTokenByName(&self, name: &str) -> Option<Token<T>> {
+    pub fn getTokenBySrcChainId(&self, srcChainId: Nat) -> Option<Token<T>> {
         //
-        None
+        self.tokenInfo.get(&srcChainId)
+    }
+
+    pub fn getSubTokenSupplyBySrcChainId(&self, srcChainId: Nat) -> Nat {
+        //
+        self.tokenInfo.get(&srcChainId).unwrap_or(Nat::from(0))
+    }
+
+    pub fn totalLiquidity(&self) -> Nat {
+        let totalLiquidity: Nat = 0.to();
+        for token in self.tokenInfo.values() {
+            totalLiquidity += self.token.total_supply;
+        }
+        totalLiquidity
     }
 }
