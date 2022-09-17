@@ -1,6 +1,9 @@
 // bridge error
 
 use derive_more::{Display, From};
+use serde_json::Error as SerdeError;
+use crate::pool::Error as PoolError;
+use crate::token::Error as TokenError;
 
 pub type Result<T = ()> = std::result::Result<T, Error>;
 
@@ -14,15 +17,13 @@ pub enum Error {
     #[display(fmt = "Got invalid command: {}", _0)]
     #[from(ignore)]
     InvalidOpetion(String),
-    /// bridge error
-    #[display(fmt = "Bridge error: {}" _0)]
-    #[from(ignore)]
-    Bridge(BridgeError),
     /// token error
-    #[display(fmt = "Token error: {:?}", _0)]
+    #[display(fmt = "Token error: {}", _0)]
+    #[from(ignore)]
     Token(TokenError),
     /// pool error
     #[display(fmt = "Pool error: {}", _0)]
+    #[from(ignore)]
     Pool(PoolError),
     /// internal error
     #[display(fmt = "Internal error")]
@@ -33,10 +34,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use self::Error::*;
         match *self {
-            Decoder(_) | InvalidOpetion(_) | Internal => None,
-            Bridge(ref e) => Some(e),
-            Token(ref e) => Some(e),
-            Pool(ref e) => Some(e),
+            Decoder(_) | InvalidOpetion(_) | Token { .. }| Pool { .. } | Internal => None,
         }
     }
 }
@@ -53,7 +51,6 @@ impl Clone for Error {
         match self {
             Decoder(s) => Decoder(s.clone()),
             InvalidOpetion(s) => InvalidOpetion(s.clone()),
-            Bridge(s) => Bridge(s.clone()),
             Token(e) => Token(e.clone()),
             Pool(e) => Pool(e.clone()),
             Internal => Internal,
