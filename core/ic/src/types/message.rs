@@ -1,10 +1,11 @@
 
+use candid::Deserialize;
 use ic_web3::types::H256;
 use crate::{utils::keccak256, Decode, Encode, OmnicError};
 
 const PREFIX_LEN: usize = 77;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize)]
 pub struct Message {
     /// 4   SLIP-44 ID
     pub origin: u32,

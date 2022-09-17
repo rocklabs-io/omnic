@@ -2,13 +2,21 @@
     "canisters": {
         "relayer": {
 			  "candid": "src/agents/relayer.did",
-			  "package": "omnic",
 			  "type": "custom",
 			  "wasm": "target/wasm32-unknown-unknown/release/relayer_opt.wasm",
 			  "build": [
 				"cargo build --target wasm32-unknown-unknown --bin relayer --release",
 				"ic-cdk-optimizer target/wasm32-unknown-unknown/release/relayer.wasm -o target/wasm32-unknown-unknown/release/relayer_opt.wasm"
 			  ]
+        },
+        "proxy": {
+            "candid": "src/agents/proxy.did",
+            "type": "custom",
+            "wasm": "target/wasm32-unknown-unknown/release/proxy_opt.wasm",
+            "build": [
+              "cargo build --target wasm32-unknown-unknown --bin proxy --release",
+              "ic-cdk-optimizer target/wasm32-unknown-unknown/release/proxy.wasm -o target/wasm32-unknown-unknown/release/proxy_opt.wasm"
+            ]
         },
         "demo": {
             "candid": "src/demo.did",
