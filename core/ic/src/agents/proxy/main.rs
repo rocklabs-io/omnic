@@ -5,16 +5,18 @@ omnic proxy canister:
 
 use std::cell::{RefCell};
 use std::collections::HashMap;
+use std::str::FromStr;
 
-use ic_web3::types::{H256, U256};
+use ic_web3::Web3;
+use ic_web3::contract::{Contract, Options};
+use ic_web3::types::{H256, Address, BlockNumber, BlockId};
+use ic_web3::transports::ICHttp;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
-use ic_cdk::export::candid::{candid_method, CandidType, Deserialize, Int, Nat};
+use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
 
-use ic_cron::task_scheduler::TaskScheduler;
 use ic_cron::types::Iterations;
 
 use accumulator::{MerkleProof, Proof, TREE_DEPTH};
-use omnic::chain;
 use omnic::{Message, chains::{ChainRoots}};
 
 ic_cron::implement_cron!();
@@ -75,10 +77,13 @@ struct StateMachine {
     chain_ids: Vec<u32>,
     rpc_urls: Vec<String>,
     block_height: u64,
+    omnic_addr: String,
     root: H256,
     state: State,
     sub_state: State
 }
+
+const OMNIC_ABI: &[u8] = include_bytes!("./omnic.abi");
 
 thread_local! {
     static CHAINS: RefCell<HashMap<u32, ChainRoots>>  = RefCell::new(HashMap::new());
@@ -102,7 +107,11 @@ fn init() {
     //     });
     // });
 
-    // TODO init state machine
+    // init state machine
+    STATE_MACHINE.with(|s| {
+        let mut state_machine = s.borrow_mut();
+        // append s.chain_ids;
+    });
 
     // set up cron job
     cron_enqueue(
@@ -177,36 +186,109 @@ async fn fetch_root() {
     
     let next_state = match state.sub_state {
         State::Init => {
-            // TODO fetch height
-            State::Fetching(0)
-        },
-        State::Fetching(idx) => {
-            // TODO query root in block height
-            // compare and set the result with root
-            // if result != state.root, convert to fail
-            if idx + 1 == state.rpc_urls.len() {
-                State::End
-            } else {
-                State::Fetching(idx + 1)
+            match ICHttp::new(&state.rpc_urls[0], None, None) {
+                Ok(v) => { 
+                    let w3 = Web3::new(v);
+                    match w3.eth().block_number().await {
+                        Ok(h) => {
+                            STATE_MACHINE.with(|s| {
+                                s.borrow_mut().block_height = h.as_u64();
+                            });
+                            State::Fetching(0)
+                        },
+                        Err(e) => {
+                            ic_cdk::println!("init contract failed: {}", e);
+                            State::Fail
+                        },
+                    }
+                },
+                Err(e) => { 
+                    State::Fail
+                },
             }
         },
-        State::End => State::End,
-        State::Fail => State::Fail,
+        State::Fetching(idx) => {
+            // query root in block height
+            match ICHttp::new(&state.rpc_urls[idx], None, None) {
+                Ok(v) => {
+                    let w3 = Web3::new(v);
+                    let contract_address = Address::from_str(&state.omnic_addr).unwrap();
+                    let contract = Contract::from_json(
+                        w3.eth(),
+                        contract_address,
+                        OMNIC_ABI
+                    );
+                    match contract {
+                        Ok(c) => {
+                            let root: Result<H256, ic_web3::contract::Error> = c
+                                .query("getLatestRoot", (), None, Options::default(), BlockId::Number(BlockNumber::Number(state.block_height.into())))
+                                .await;
+                            match root {
+                                Ok(r) => {
+                                    if idx == 0 {
+                                        STATE_MACHINE.with(|s| {
+                                            s.borrow_mut().root = r;
+                                        });
+                                        if idx + 1 == state.rpc_urls.len() {
+                                            State::End
+                                        } else {
+                                            State::Fetching(idx + 1)
+                                        }
+                                    } else {
+                                        // compare and set the result with root
+                                        // if result != state.root, convert to fail
+                                        STATE_MACHINE.with(|s| {
+                                            let s = s.borrow();
+                                            if s.root != r {
+                                                State::Fail
+                                            } else {
+                                                if idx + 1 == state.rpc_urls.len() {
+                                                    State::End
+                                                } else {
+                                                    State::Fetching(idx + 1)
+                                                }
+                                            }
+                                        })
+                                    }
+                                },
+                                Err(e) => {
+                                    ic_cdk::println!("query root failed: {}", e);
+                                    State::Fail
+                                },
+                            }
+                        },
+                        Err(e) => {
+                            ic_cdk::println!("init contract failed: {}", e);
+                            State::Fail
+                        },
+                    }
+                },
+                Err(e) => {
+                    ic_cdk::println!("init ic http failed: {}", e);
+                    State::Fail
+                },
+            }
+        },
+        State::End | State::Fail => {
+            return
+        },
     };
 
     // update sub state
     STATE_MACHINE.with(|s| {
-        s.borrow_mut().sub_state = next_state;
+        s.borrow_mut().sub_state = next_state.clone();
     });
 
-    cron_enqueue(
-        Task::FetchRoot, 
-        ic_cron::types::SchedulingOptions {
-            delay_nano: FETCH_ROOT_PERIOID,
-            interval_nano: FETCH_ROOT_PERIOID,
-            iterations: Iterations::Infinite,
-        },
-    ).unwrap();
+    if next_state != State::End && next_state != State::Fail {
+        cron_enqueue(
+            Task::FetchRoot, 
+            ic_cron::types::SchedulingOptions {
+                delay_nano: FETCH_ROOT_PERIOID,
+                interval_nano: FETCH_ROOT_PERIOID,
+                iterations: Iterations::Exact(1),
+            },
+        ).unwrap();
+    }
 }
 
 // this is done in heart_beat
@@ -227,12 +309,15 @@ async fn fetch_roots() {
                 State::Init => {
                     // update rpc urls
                     let chain_id = state.chain_ids[idx as usize];
-                    let rpc_urls = CHAINS.with(|c| {
-                        c.borrow().get(&chain_id).unwrap().config.rpc_urls.clone()
+                    let (rpc_urls, omnic_addr) = CHAINS.with(|c| {
+                        let cs = c.borrow();
+                        let chain = cs.get(&chain_id).unwrap();
+                        (chain.config.rpc_urls.clone(), chain.config.omnic_addr.clone())
                     });
                     STATE_MACHINE.with(|s| {
                         let mut state = s.borrow_mut();
                         state.rpc_urls = rpc_urls;
+                        state.omnic_addr = omnic_addr;
                     });
 
                     cron_enqueue(
@@ -273,14 +358,27 @@ async fn fetch_roots() {
     }
 }
 
-// #[heartbeat]
-// fn heart_beat() {
-
-// }
+#[heartbeat]
+fn heart_beat() {
+    for task in cron_ready_tasks() {
+        let kind = task.get_payload::<Task>().expect("Serialization error");
+        match kind {
+            Task::FetchRoots => {
+                ic_cdk::spawn(fetch_roots());
+            },
+            Task::FetchRoot => {
+                ic_cdk::spawn(fetch_root());
+            },
+        }
+    }
+}
 
 /// get the unix timestamp in second
 fn get_time() -> u64 {
     ic_cdk::api::time() / 1000000000
 }
 
-fn main() {}
+fn main() {
+    candid::export_service!();
+    std::print!("{}", __export_service());
+}
