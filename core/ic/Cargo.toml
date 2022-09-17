@@ -10,9 +10,9 @@ authors = ["Rocklabs <hello@rocklabs.io>"]
 readme = "README.md"
 edition = "2018"
 
-#[[bin]]
-#name = "proxy"
-#path = "src/agents/proxy/main.rs"
+[[bin]]
+name = "proxy"
+path = "src/agents/proxy/main.rs"
 
 [[bin]]
 name = "relayer"
