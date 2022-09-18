@@ -33,13 +33,19 @@ module.exports = {
     },
     kovan: {
       url: `https://kovan.infura.io/v3/${infuraKey}`,
+      accounts: [testPrivKey]
     },
     rinkeby: {
       url: `https://rinkeby.infura.io/v3/${infuraKey}`,
+      accounts: [testPrivKey]
     },
     goerli: {
       url: `https://goerli.infura.io/v3/${infuraKey}`,
       // url: `https://eth-goerli.g.alchemy.com/v2/${alchemyKey}`,
+      accounts: [testPrivKey]
+    },
+	mumbai: { // polygon mumbai testnet
+      url: `https://polygon-mumbai.g.alchemy.com/v2/${alchemyKey}`,
       accounts: [testPrivKey]
     },
     mainnet: {
