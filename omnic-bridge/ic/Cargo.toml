@@ -1,7 +1,7 @@
 [package]
-name = "omnic"
+name = "omnic-bridge"
 version = "0.1.0"
-description = "Omnic Core"
+description = "Omnic bridge"
 homepage = "https://github.com/rocklabs-io/omnic"
 repository = "https://github.com/rocklabs-io/omnic"
 license = "MIT"
@@ -10,16 +10,15 @@ authors = ["Rocklabs <hello@rocklabs.io>"]
 readme = "README.md"
 edition = "2018"
 
-#[[bin]]
-#name = "proxy"
-#path = "src/agents/proxy/main.rs"
+[lib]
+path = "src/lib.rs"
 
 [[bin]]
 name = "bridge"
-path = "bridge.rs"
+path = "src/canister/bridge.rs"
 
 [dependencies]
-accumulator = { path = "./accumulator" }
+derive_more = "0.99.1"
 ic-web3 = { git = "https://github.com/rocklabs-io/ic-web3" }
 ic-cron = "0.7.0"
 candid = "0.7.4"
