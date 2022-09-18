@@ -19,9 +19,6 @@ pub trait Operation: std::fmt::Debug + Clone {
     fn mint(&mut self, to: Vec<u8>, value: Nat) -> bool;
     fn balanceOf(&self, from: &[u8]) -> Nat; 
     fn swap(&mut self, from: Vec<u8>, to: Vec<u8>, value: Nat) -> bool;
-
-    fn totalSupply(&self) -> Nat;
-
 }
 
 
@@ -93,10 +90,5 @@ impl Operation for Token {
         //todo
         false
     }
-
-    fn totalSupply(&self) -> Nat {
-        self.total_supply.clone()
-    }
-
 
 }

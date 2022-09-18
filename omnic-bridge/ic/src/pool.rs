@@ -20,14 +20,14 @@ pub enum Error {
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
-pub struct Pool<T: Operation> {
+pub struct Pool {
     pool_id: Nat,
-    token_info: HashMap<Nat, T>,
+    token_info: HashMap<Nat, Token>,
     shared_decimals: u8,
     total_liquidity: Nat,
 }
 
-impl<T: Operation> Pool<T> {
+impl Pool {
     pub fn new(pool_id: Nat, shared_decimals: u8) -> Self {
         Pool {
             pool_id,
@@ -37,17 +37,17 @@ impl<T: Operation> Pool<T> {
         }
     }
 
-    pub fn addToken(&mut self, pool_id:Nat, token: T) -> bool {
+    pub fn addToken(&mut self, pool_id:Nat, token: Token) -> bool {
         self.token_info.entry(pool_id).or_insert(token);
         true
     }
 
-    pub fn removeToken(&mut self, pool_id: Nat) -> T {
+    pub fn removeToken(&mut self, pool_id: Nat) -> Token {
         //
         self.token_info.remove(&pool_id).unwrap()
     }
 
-    pub fn getTokenBySrcChainId(&self, srcChainId: Nat) -> Option<T> {
+    pub fn getTokenBySrcChainId(&self, srcChainId: Nat) -> Option<Token> {
         //
         self.token_info.get(&srcChainId).cloned()
     }

@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
 use crate::pool::{Error as PoolError, Pool};
-use crate::token::{Error as TokenError, Token};
+use crate::token::{Error as TokenError, Operation, Token};
 use ic_cdk::export::candid::{CandidType, Deserialize, Int, Nat};
 use ic_cdk::export::Principal;
 use num_traits::cast::ToPrimitive;
@@ -25,15 +25,36 @@ impl Options {
 }
 
 pub trait RouterInterfaces {
-    fn add_liquidity(&mut self, src_chain: Nat, src_pool_id: Nat, to: Vec<u8>, amount: Nat) -> Result<bool>;
-    fn remove_liquidity(&mut self, src_chain: Nat, src_pool_id: Nat, from: Vec<u8>, amount: Nat) -> Result<bool>;
-    fn swap(&mut self, src_chain: Nat, src_pool_id: Nat, dst_chain: Nat, dst_pool_id: Nat, from: Vec<u8>, to: Vec<u8>, amount: Nat) -> Result<bool>;
+    fn add_liquidity(
+        &mut self,
+        src_chain: Nat,
+        src_pool_id: Nat,
+        to: Vec<u8>,
+        amount: Nat,
+    ) -> Result<bool>;
+    fn remove_liquidity(
+        &mut self,
+        src_chain: Nat,
+        src_pool_id: Nat,
+        from: Vec<u8>,
+        amount: Nat,
+    ) -> Result<bool>;
+    fn swap(
+        &mut self,
+        src_chain: Nat,
+        src_pool_id: Nat,
+        dst_chain: Nat,
+        dst_pool_id: Nat,
+        from: Vec<u8>,
+        to: Vec<u8>,
+        amount: Nat,
+    ) -> Result<bool>;
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Router {
     pool_ids: BTreeMap<Nat, BTreeMap<Nat, Nat>>, // src_chain -> src_pool_id -> pool_id
-    pools: BTreeMap<Nat, Pool>,                  // pool_id -> Pool
+    pools: BTreeMap<Nat, Pool>,               // pool_id -> Pool
 }
 
 impl Router {
@@ -44,14 +65,14 @@ impl Router {
         }
     }
 
-    fn getPoolId(&self, src_chain: &Nat, src_pool_id: &Nat) -> Result<Nat> {
+    fn getPoolId(&self, src_chain: Nat, src_pool_id: Nat) -> Result<Nat> {
         //
-        match self.pool_ids.get(src_chain) {
-            Some(pools) => match pools.get(src_pool_id) {
-                Some(pid) => Ok(pid.cloned()),
+        match self.pool_ids.get(&src_chain) {
+            Some(pools) => match pools.get(&src_pool_id).cloned() {
+                Some(pid) => Ok(pid),
                 None => Err(Error::Pool(PoolError::InvalidQuery(format!(
                     "source chain id is not found: {}",
-                    src_chain_id
+                    src_chain
                 )))),
             },
             None => Err(Error::Pool(PoolError::InvalidQuery(format!(
@@ -61,10 +82,10 @@ impl Router {
         }
     }
 
-    fn getPool(&self, pool_id: &Nat) -> Result<Pool> {
+    fn getPool(&self, pool_id: Nat) -> Result<Pool> {
         //
-        match self.pools.get(src_chain) {
-            Some(pool) => Ok(pool.cloned()),
+        match self.pools.get(&pool_id).cloned() {
+            Some(pool) => Ok(pool),
             None => Err(Error::Pool(PoolError::InvalidQuery(format!(
                 "pool is not found: {}",
                 pool_id
@@ -74,32 +95,58 @@ impl Router {
 }
 
 impl RouterInterfaces for Router {
-    pub fn add_liquidity(&mut self, src_chain: Nat, src_pool_id: Nat, to: Vec<u8>, amount: Nat) -> Result<bool> {
-        let pool_id: Nat = self.getPoolId(&src_chain, &src_pool_id)?;
-        let pool: Pool = self.getPool(&pool_id)?;
-        let mut token = pool.getTokenBySrcChainId(src_chain).map_err(|err| {
-            Error::Token(TokenError::Invalid(format!(
-                "Errors getting pool token: {:?}",
-                err
-            )))
-        });
+    fn add_liquidity(
+        &mut self,
+        src_chain: Nat,
+        src_pool_id: Nat,
+        to: Vec<u8>,
+        amount: Nat,
+    ) -> Result<bool> {
+        let pool_id: Nat = self.getPoolId(src_chain.clone(), src_pool_id.clone())?;
+        let pool: Pool = self.getPool(pool_id)?;
+        let mut token = match pool.getTokenBySrcChainId(src_chain) {
+            Some(token) => token,
+            None => {
+                return Err(Error::Token(TokenError::Invalid(format!(
+                    "Errors getting pool token: {}",
+                    src_pool_id
+                ))))
+            }
+        };
         Ok(token.mint(to, amount))
-
     }
 
-    pub fn remove_liquidity(&mut self, &mut self, src_chain: Nat, src_pool_id: Nat, from: Vec<u8>, amount: Nat) -> Result<bool> {
+    fn remove_liquidity(
+        &mut self,
+        src_chain: Nat,
+        src_pool_id: Nat,
+        from: Vec<u8>,
+        amount: Nat,
+    ) -> Result<bool> {
         //
-        let pool_id: Nat = self.getPoolId(&src_chain, &src_pool_id)?;
-        let pool: Pool = self.getPool(&pool_id)?;
-        let mut token = pool.getTokenBySrcChainId(src_chain).map_err(|err| {
-            Error::Token(TokenError::Invalid(format!(
-                "Errors getting pool token: {:?}",
-                err
-            )))
-        });
+        let pool_id: Nat = self.getPoolId(src_chain.clone(), src_pool_id.clone())?;
+        let pool: Pool = self.getPool(pool_id)?;
+        let mut token = match pool.getTokenBySrcChainId(src_chain) {
+            Some(token) => token,
+            None => {
+                return Err(Error::Token(TokenError::Invalid(format!(
+                    "Errors getting pool token: {}",
+                    src_pool_id
+                ))))
+            }
+        };
         Ok(token.burn(from, amount))
     }
-    pub fn swap(&mut self, src_chain: Nat, src_pool_id: Nat, dst_chain: Nat, dst_pool_id: Nat, from: Vec<u8>, to: Vec<u8>, amount: Nat) -> Result<bool> {
+    fn swap(
+        &mut self,
+        src_chain: Nat,
+        src_pool_id: Nat,
+        dst_chain: Nat,
+        dst_pool_id: Nat,
+        from: Vec<u8>,
+        to: Vec<u8>,
+        amount: Nat,
+    ) -> Result<bool> {
         // TODO
         Ok(false)
     }
