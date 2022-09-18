@@ -11,7 +11,7 @@ pub type Result<T = ()> = std::result::Result<T, Error>;
 #[derive(Debug, Display, From)]
 pub enum Error {
     /// decoder error
-    #[display(fmt = "Decode message error: {}", _0)]
+    #[display(fmt = "Decode payload error: {}", _0)]
     Decoder(String),
     /// invalid cmd
     #[display(fmt = "Got invalid command: {}", _0)]
