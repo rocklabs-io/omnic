@@ -65,7 +65,7 @@ impl Router {
         }
     }
 
-    fn getPoolId(&self, src_chain: Nat, src_pool_id: Nat) -> Result<Nat> {
+    fn get_pool_id(&self, src_chain: Nat, src_pool_id: Nat) -> Result<Nat> {
         //
         match self.pool_ids.get(&src_chain) {
             Some(pools) => match pools.get(&src_pool_id).cloned() {
@@ -82,7 +82,7 @@ impl Router {
         }
     }
 
-    fn getPool(&self, pool_id: Nat) -> Result<Pool> {
+    fn get_pool(&self, pool_id: Nat) -> Result<Pool> {
         //
         match self.pools.get(&pool_id).cloned() {
             Some(pool) => Ok(pool),
@@ -102,9 +102,9 @@ impl RouterInterfaces for Router {
         to: Vec<u8>,
         amount: Nat,
     ) -> Result<bool> {
-        let pool_id: Nat = self.getPoolId(src_chain.clone(), src_pool_id.clone())?;
-        let pool: Pool = self.getPool(pool_id)?;
-        let mut token = match pool.getTokenBySrcChainId(src_chain) {
+        let pool_id: Nat = self.get_pool_id(src_chain.clone(), src_pool_id.clone())?;
+        let pool: Pool = self.get_pool(pool_id)?;
+        let mut token = match pool.get_token_by_src_chain_id(src_chain) {
             Some(token) => token,
             None => {
                 return Err(Error::Token(TokenError::Invalid(format!(
@@ -124,9 +124,9 @@ impl RouterInterfaces for Router {
         amount: Nat,
     ) -> Result<bool> {
         //
-        let pool_id: Nat = self.getPoolId(src_chain.clone(), src_pool_id.clone())?;
-        let pool: Pool = self.getPool(pool_id)?;
-        let mut token = match pool.getTokenBySrcChainId(src_chain) {
+        let pool_id: Nat = self.get_pool_id(src_chain.clone(), src_pool_id.clone())?;
+        let pool: Pool = self.get_pool(pool_id)?;
+        let mut token = match pool.get_token_by_src_chain_id(src_chain) {
             Some(token) => token,
             None => {
                 return Err(Error::Token(TokenError::Invalid(format!(

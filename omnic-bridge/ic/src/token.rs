@@ -17,7 +17,7 @@ pub enum Error {
 pub trait Operation: std::fmt::Debug + Clone {
     fn burn(&mut self, from: Vec<u8>, value: Nat) -> bool;
     fn mint(&mut self, to: Vec<u8>, value: Nat) -> bool;
-    fn balanceOf(&self, from: &[u8]) -> Nat; 
+    fn balance_of(&self, from: &[u8]) -> Nat; 
     fn swap(&mut self, from: Vec<u8>, to: Vec<u8>, value: Nat) -> bool;
 }
 
@@ -46,11 +46,11 @@ impl Token {
         }
     }
 
-    pub fn srcChainId(&self) -> Nat {
+    pub fn src_chain_id(&self) -> Nat {
         self.src_chain.clone()
     }
 
-    pub fn tokenName(&self) -> String {
+    pub fn token_name(&self) -> String {
         String::from(&self.name)
     }
 
@@ -58,7 +58,7 @@ impl Token {
         self.decimals.clone()
     }
 
-    pub fn totalSupply(&self) -> Nat {
+    pub fn total_supply(&self) -> Nat {
         self.total_supply.clone()
     }
 }
@@ -66,23 +66,23 @@ impl Token {
 impl Operation for Token {
 
     fn mint(&mut self, to: Vec<u8>, value: Nat) -> bool {
-        let amount: Nat = self.balanceOf(&to) + value.clone();
+        let amount: Nat = self.balance_of(&to) + value.clone();
         self.balances.insert(to, amount);
         self.total_supply += value;
         true
     }
 
     fn burn(&mut self, from: Vec<u8>, value: Nat) -> bool {
-        if self.balanceOf(&from) < value.clone() {
+        if self.balance_of(&from) < value.clone() {
             return false;
         }
-        let amount: Nat = self.balanceOf(&from) - value.clone();
+        let amount: Nat = self.balance_of(&from) - value.clone();
         self.balances.insert(from, amount);
         self.total_supply -= value;
         true
     }
 
-    fn balanceOf(&self, from: &[u8]) -> Nat {
+    fn balance_of(&self, from: &[u8]) -> Nat {
         self.balances.get(from).cloned().unwrap_or(Nat::from(0))
     }
 

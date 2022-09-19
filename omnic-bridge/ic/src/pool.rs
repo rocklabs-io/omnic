@@ -37,32 +37,32 @@ impl Pool {
         }
     }
 
-    pub fn addToken(&mut self, pool_id:Nat, token: Token) -> bool {
+    pub fn add_token(&mut self, pool_id:Nat, token: Token) -> bool {
         self.token_info.entry(pool_id).or_insert(token);
         true
     }
 
-    pub fn removeToken(&mut self, pool_id: Nat) -> Token {
+    pub fn remove_token(&mut self, pool_id: Nat) -> Token {
         //
         self.token_info.remove(&pool_id).unwrap()
     }
 
-    pub fn getTokenBySrcChainId(&self, srcChainId: Nat) -> Option<Token> {
+    pub fn get_token_by_src_chain_id(&self, src_chain_id: Nat) -> Option<Token> {
         //
-        self.token_info.get(&srcChainId).cloned()
+        self.token_info.get(&src_chain_id).cloned()
     }
 
-    pub fn getSubTokenSupplyBySrcChainId(&self, srcChainId: Nat) -> Nat {
+    pub fn get_sub_token_supply_by_src_chain_id(&self, src_chain_id: Nat) -> Nat {
         //
-        let token = self.getTokenBySrcChainId(srcChainId).unwrap();
-        token.totalSupply()
+        let token = self.get_token_by_src_chain_id(src_chain_id).unwrap();
+        token.total_supply()
     }
 
-    pub fn totalLiquidity(&self) -> Nat {
-        let mut totalLiquidity: Nat = Nat::from(0);
+    pub fn total_liquidity(&self) -> Nat {
+        let mut total_liquidity: Nat = Nat::from(0);
         for token in self.token_info.values() {
-            totalLiquidity += token.totalSupply();
+            total_liquidity += token.total_supply();
         }
-        totalLiquidity
+        total_liquidity
     }
 }
