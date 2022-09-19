@@ -58,11 +58,12 @@ fn process_message(
 
         ROUTER.with(|router| {
             let mut r = router.borrow_mut();
-            let mut buffer1 = [0u8 ..512];
-            let mut buffer2 = [];
+            let mut buffer1 = [0u8;32];
+            let mut buffer2 = [0u8;32];
             r.add_liquidity(
                 Nat::from(src_chain),
-                Nat::from(BigUint::from_bytes_le(src_pool_id.to_little_endian(&mut buffer1.as_mut_slice()))),
+                // Nat::from(BigUint::from_slice(src_pool_id.as_ref())),
+                Nat::from(BigUint::from_bytes_le(src_pool_id.to_little_endian(&mut buffer1))),
                 sender,
                 Nat::from(BigUint::from_bytes_le(amount.to_little_endian(&mut buffer2))),
             )
@@ -86,8 +87,8 @@ fn process_message(
 
         ROUTER.with(|router| {
             let mut r = router.borrow_mut();
-            let mut buffer1 = [];
-            let mut buffer2 = [];
+            let mut buffer1 = [0u8;32];
+            let mut buffer2 = [0u8;32];
             r.remove_liquidity(
                 Nat::from(src_chain),
                 Nat::from(BigUint::from_bytes_le(src_pool_id.to_little_endian(&mut buffer1))),
