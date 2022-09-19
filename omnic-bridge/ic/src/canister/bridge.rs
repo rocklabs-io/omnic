@@ -15,9 +15,9 @@ use omnic_bridge::router::RouterInterfaces;
 
 ic_cron::implement_cron!();
 
-const OPERATION_ADD_LIQUIDITY: usize = 1;
-const OPERATION_REMOVE_LIQUIDITY: usize = 2;
-const OPERATION_SWAP: usize = 3;
+const OPERATION_ADD_LIQUIDITY: u8 = 1u8;
+const OPERATION_REMOVE_LIQUIDITY: u8 = 2u8;
+const OPERATION_SWAP: u8 = 3;
 
 thread_local! {
     static ROUTER: RefCell<Router> = RefCell::new(Router::new());
@@ -33,7 +33,7 @@ fn process_message(
 ) -> Result<bool, String> {
     let t = vec![ParamType::Uint(8)];
     let d = decode(&t, &payload).map_err(|e| format!("payload decode error"))?;
-    let operation_type = d[0]
+    let operation_type: u8 = d[0]
         .clone()
         .into_uint()
         .ok_or("can not convert src_chain to U256")?
@@ -60,14 +60,17 @@ fn process_message(
             let mut r = router.borrow_mut();
             let mut buffer1 = [0u8;32];
             let mut buffer2 = [0u8;32];
+            src_pool_id.to_little_endian(&mut buffer1);
+            amount.to_little_endian(&mut buffer2);
             r.add_liquidity(
                 Nat::from(src_chain),
                 // Nat::from(BigUint::from_slice(src_pool_id.as_ref())),
-                Nat::from(BigUint::from_bytes_le(src_pool_id.to_little_endian(&mut buffer1))),
+                Nat::from(BigUint::from_bytes_le(&buffer1)),
                 sender,
-                Nat::from(BigUint::from_bytes_le(amount.to_little_endian(&mut buffer2))),
-            )
+                Nat::from(BigUint::from_bytes_le(&buffer2)),
+            ).map_err(|_| format!("add liquidity failed"));
         });
+        return Ok(true);
     } else if operation_type == OPERATION_REMOVE_LIQUIDITY {
         let types = vec![
             ParamType::Uint(8),
@@ -89,17 +92,21 @@ fn process_message(
             let mut r = router.borrow_mut();
             let mut buffer1 = [0u8;32];
             let mut buffer2 = [0u8;32];
+            src_pool_id.to_little_endian(&mut buffer1);
+            amount.to_little_endian(&mut buffer2);
             r.remove_liquidity(
                 Nat::from(src_chain),
-                Nat::from(BigUint::from_bytes_le(src_pool_id.to_little_endian(&mut buffer1))),
+                Nat::from(BigUint::from_bytes_le(&buffer1)),
                 sender,
-                Nat::from(BigUint::from_bytes_le(amount.to_little_endian(&mut buffer2))),
-            )
+                Nat::from(BigUint::from_bytes_le(&buffer2)),
+            ).map_err(|_| format!("remove liquidity failed"));
         });
+        return Ok(true);
     } else if operation_type == OPERATION_SWAP {
         //TODO
+        return Err("unsupported!".to_string());
     }
-    Ok(true)
+    Err("unsupported!".to_string())
 }
 
 #[update(name = "send_message")]
