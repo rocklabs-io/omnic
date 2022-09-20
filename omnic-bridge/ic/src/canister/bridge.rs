@@ -68,9 +68,9 @@ fn process_message(
                 Nat::from(BigUint::from_bytes_le(&buffer1)),
                 sender,
                 Nat::from(BigUint::from_bytes_le(&buffer2)),
-            ).map_err(|_| format!("add liquidity failed"));
-        });
-        return Ok(true);
+            ).map_err(|_| format!("add liquidity failed"))
+        })
+
     } else if operation_type == OPERATION_REMOVE_LIQUIDITY {
         let types = vec![
             ParamType::Uint(8),
@@ -99,14 +99,15 @@ fn process_message(
                 Nat::from(BigUint::from_bytes_le(&buffer1)),
                 sender,
                 Nat::from(BigUint::from_bytes_le(&buffer2)),
-            ).map_err(|_| format!("remove liquidity failed"));
-        });
-        return Ok(true);
+            ).map_err(|_| format!("remove liquidity failed"))
+        })
+
     } else if operation_type == OPERATION_SWAP {
         //TODO
-        return Err("unsupported!".to_string());
+        Err("unsupported!".to_string())
+    } else {
+        Err("unsupported!".to_string())
     }
-    Err("unsupported!".to_string())
 }
 
 #[update(name = "send_message")]
