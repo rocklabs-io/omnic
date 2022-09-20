@@ -53,8 +53,8 @@ pub trait RouterInterfaces {
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Router {
-    pool_ids: BTreeMap<Nat, BTreeMap<Nat, Nat>>, // src_chain -> src_pool_id -> pool_id
-    pools: BTreeMap<Nat, Pool>,               // pool_id -> Pool
+    pub pool_ids: BTreeMap<Nat, BTreeMap<Nat, Nat>>, // src_chain -> src_pool_id -> pool_id
+    pub pools: BTreeMap<Nat, Pool>,               // pool_id -> Pool
 }
 
 impl Router {
@@ -65,7 +65,12 @@ impl Router {
         }
     }
 
-    fn get_pool_id(&self, src_chain: Nat, src_pool_id: Nat) -> Result<Nat> {
+
+    pub fn get_pools_length(&self) -> Nat {
+        Nat::from(self.pools.len())
+    }
+
+    pub fn get_pool_id(&self, src_chain: Nat, src_pool_id: Nat) -> Result<Nat> {
         //
         match self.pool_ids.get(&src_chain) {
             Some(pools) => match pools.get(&src_pool_id).cloned() {
@@ -82,7 +87,7 @@ impl Router {
         }
     }
 
-    fn get_pool(&self, pool_id: Nat) -> Result<Pool> {
+    pub fn get_pool(&self, pool_id: Nat) -> Result<Pool> {
         //
         match self.pools.get(&pool_id).cloned() {
             Some(pool) => Ok(pool),

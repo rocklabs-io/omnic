@@ -34,7 +34,7 @@ pub struct Token {
 }
 
 impl Token {
-    fn new(src_chain: Nat, src_pool_id: Nat, name: String, symbol: String, decimals: u8) -> Self {
+    pub fn new(src_chain: Nat, src_pool_id: Nat, name: String, symbol: String, decimals: u8) -> Self {
         Token {
             src_chain,
             src_pool_id,

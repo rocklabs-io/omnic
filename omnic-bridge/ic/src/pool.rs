@@ -7,7 +7,7 @@
 */
 use candid::{candid_method, types::number::Nat, CandidType, Deserialize};
 use ic_cdk_macros::*;
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::string::String;
 use crate::token::{Operation, Token};
@@ -21,20 +21,27 @@ pub enum Error {
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Pool {
-    pool_id: Nat,
-    token_info: HashMap<Nat, Token>,
-    shared_decimals: u8,
-    total_liquidity: Nat,
+    pub pool_id: Nat,
+    pub token_info: BTreeMap<Nat, Token>,
+    pub shared_decimals: u8,
+    pub total_liquidity: Nat,
 }
 
 impl Pool {
     pub fn new(pool_id: Nat, shared_decimals: u8) -> Self {
         Pool {
             pool_id,
-            token_info: HashMap::default(),
+            token_info: BTreeMap::default(),
             shared_decimals,
             total_liquidity: Nat::from(0),
         }
+    }
+    pub fn get_pool_id(&self) -> Nat {
+        self.pool_id.clone()
+    }
+
+    pub fn get_token_count(&self) -> Nat {
+        Nat::from(self.token_info.len())
     }
 
     pub fn add_token(&mut self, pool_id:Nat, token: Token) -> bool {
