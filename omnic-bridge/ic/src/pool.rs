@@ -23,9 +23,9 @@ where
     T: std::fmt::Debug + Clone,
     T: CandidType + std::cmp::Ord,
 {
-    pub pool_id: Nat,
-    pub tokens: BTreeMap<u32, Token<T>>, // chain_id -> token
-    pub total_liquidity: Nat,            // sum of tokens supply
+    pool_id: Nat,
+    tokens: BTreeMap<u32, Token<T>>, // chain_id -> token
+    total_liquidity: Nat,            // sum of tokens supply
 }
 
 impl<T> Pool<T>

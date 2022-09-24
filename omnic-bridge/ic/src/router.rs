@@ -57,8 +57,8 @@ where
     bridge_addr: BTreeMap<u32, BTreeMap<Nat, T>>,
     pool_ids: BTreeMap<u32, BTreeMap<Nat, Nat>>, // src_chain_id -> src_pool_id -> pool_id
     pools: BTreeMap<Nat, Pool<T>>,               // pool_id -> Pool
-    // TODO
-    // weights: BTreeMap<Nat, f32>, // allocate weights for different chain 
+                                                 // TODO
+                                                 // weights: BTreeMap<Nat, f32>, // allocate weights for different chain
 }
 
 impl<T> Router<T>
@@ -80,16 +80,22 @@ where
 
     pub fn get_bridge_addr(&self, chain_id: u32, pool_id: Nat) -> Result<T> {
         //
-        self.bridge_addr.get(&chain_id)
-            .map_or(Err(Error::Pool(PoolError::Invalid(format!(
+        self.bridge_addr
+            .get(&chain_id)
+            .map_or(
+                Err(Error::Pool(PoolError::Invalid(format!(
                     "chain id is not found: {}",
                     chain_id
                 )))),
-                |b| b.get(&pool_id).ok_or(Error::Pool(PoolError::Invalid(format!(
-                        "pool id is not found: {}",
-                        pool_id
-                    ))))
-            ).cloned()
+                |b| {
+                    b.get(&pool_id)
+                        .ok_or(Error::Pool(PoolError::Invalid(format!(
+                            "pool id is not found: {}",
+                            pool_id
+                        ))))
+                },
+            )
+            .cloned()
     }
 
     pub fn get_pool_id(&self, src_chain_id: u32, src_pool_id: Nat) -> Result<Nat> {
@@ -143,15 +149,21 @@ where
     pub fn remove_pool(&mut self, pool_id: &Nat) -> Result<Pool<T>> {
         self.pools
             .remove(pool_id)
-            .ok_or(Error::Pool(PoolError::Invalid(format!("remove pool failed!"))))
+            .ok_or(Error::Pool(PoolError::Invalid(format!(
+                "remove pool failed!"
+            ))))
     }
 
     pub fn remove_pool_id(&mut self, src_chain: &u32, src_pool_id: &Nat) -> Result<Nat> {
-        self.pool_ids
-            .remove(src_chain)
-            .map_or(Err(Error::Pool(PoolError::Invalid(format!("remove pool failed!")))), |mut p| {
-                p.remove(src_pool_id).ok_or(Error::Pool(PoolError::Invalid(format!("no pool!"))))
-            })
+        self.pool_ids.remove(src_chain).map_or(
+            Err(Error::Pool(PoolError::Invalid(format!(
+                "remove pool failed!"
+            )))),
+            |mut p| {
+                p.remove(src_pool_id)
+                    .ok_or(Error::Pool(PoolError::Invalid(format!("no pool!"))))
+            },
+        )
     }
 }
 
@@ -211,7 +223,7 @@ where
         dst_pool_id: Nat,
         amount: Nat,
     ) -> Result<bool> {
-        // 
+        //
         let pool_id1: Nat = self.get_pool_id(src_chain_id.clone(), src_pool_id.clone())?;
         let pool1 = self.get_pool(pool_id1.clone())?;
 
@@ -226,21 +238,31 @@ where
 
         //1. check if dst_chain has enough token to transfer
         if amount >= token2.get_total_supply() {
-            return Err(Error::Token(TokenError::Invalid(format!("dst chain does not have enough tokens to transfer"))));
+            return Err(Error::Token(TokenError::Invalid(format!(
+                "dst chain does not have enough tokens to transfer"
+            ))));
         }
         // 2. check if src & dst chain bridge address exists
 
-        let src_bridge_addr = self.get_bridge_addr(src_chain_id, src_pool_id.clone()).unwrap();
-        let dst_bridge_addr = self.get_bridge_addr(dst_chain_id, dst_pool_id.clone()).unwrap();
+        let src_bridge_addr = self
+            .get_bridge_addr(src_chain_id, src_pool_id.clone())
+            .unwrap();
+        let dst_bridge_addr = self
+            .get_bridge_addr(dst_chain_id, dst_pool_id.clone())
+            .unwrap();
 
         //3. src_chain_id pool mint token to src bridge address
         if !token1.mint(src_bridge_addr, amount.clone()) {
-            return Err(Error::Pool(PoolError::Invalid(format!("mint src token failed!"))));
+            return Err(Error::Pool(PoolError::Invalid(format!(
+                "mint src token failed!"
+            ))));
         }
 
         //4. dst_chain_id pool burn token
         if !token2.burn(dst_bridge_addr, amount.clone()) {
-            return Err(Error::Pool(PoolError::Invalid(format!("burn dst token failed!"))));
+            return Err(Error::Pool(PoolError::Invalid(format!(
+                "burn dst token failed!"
+            ))));
         }
 
         Ok(true)
