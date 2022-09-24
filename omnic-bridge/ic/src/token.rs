@@ -20,12 +20,6 @@ pub trait Operation: std::fmt::Debug + Clone {
 
     fn burn(&mut self, from: Self::AccountItem, value: Self::ValueItem) -> bool;
     fn mint(&mut self, to: Self::AccountItem, value: Self::ValueItem) -> bool;
-    fn swap(
-        &mut self,
-        from: Self::AccountItem,
-        to: Self::AccountItem,
-        value: Self::ValueItem,
-    ) -> bool;
 
     fn balance_of(&self, from: &Self::AccountItem) -> Self::OutputItem;
     fn get_total_supply(&self) -> Self::OutputItem;
@@ -114,17 +108,7 @@ where
     }
 
     fn balance_of(&self, from: &Self::AccountItem) -> Self::OutputItem {
-        self.balances.get(from).cloned().unwrap_or(Self::OutputItem::from(0u32))
-    }
-    
-    fn swap(
-        &mut self,
-        from: Self::AccountItem,
-        to: Self::AccountItem,
-        value: Self::ValueItem,
-    ) -> bool {
-        //todo
-        false
+        self.balances.get(from).cloned().unwrap_or(Self::OutputItem::from(0))
     }
 
     fn get_total_supply(&self) -> Self::OutputItem {

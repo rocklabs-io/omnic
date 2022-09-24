@@ -5,10 +5,8 @@
 * Maintainer : Rocklabs <hello@rocklabs.io>
 * Stability  : Experimental
 */
-use candid::{candid_method, types::number::Nat, CandidType, Deserialize};
-use ic_cdk_macros::*;
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::iter::FromIterator;
+use candid::{types::number::Nat, CandidType, Deserialize};
+use std::collections::BTreeMap;
 use std::string::String;
 use crate::token::{Operation, Token};
 
@@ -22,7 +20,7 @@ pub enum Error {
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Pool {
     pub pool_id: Nat,
-    pub token_info: BTreeMap<Nat, Token>,
+    pub token_info: BTreeMap<Nat, Token<Vec<u8>>>,
     pub shared_decimals: u8,
     pub total_liquidity: Nat,
 }
@@ -44,17 +42,17 @@ impl Pool {
         Nat::from(self.token_info.len())
     }
 
-    pub fn add_token(&mut self, pool_id:Nat, token: Token) -> bool {
+    pub fn add_token(&mut self, pool_id:Nat, token: Token<Vec<u8>>) -> bool {
         self.token_info.entry(pool_id).or_insert(token);
         true
     }
 
-    pub fn remove_token(&mut self, pool_id: Nat) -> Token {
+    pub fn remove_token(&mut self, pool_id: Nat) -> Token<Vec<u8>> {
         //
         self.token_info.remove(&pool_id).unwrap()
     }
 
-    pub fn get_token_by_src_chain_id(&self, src_chain_id: Nat) -> Option<Token> {
+    pub fn get_token_by_src_chain_id(&self, src_chain_id: Nat) -> Option<Token<Vec<u8>>> {
         //
         self.token_info.get(&src_chain_id).cloned()
     }
@@ -62,13 +60,13 @@ impl Pool {
     pub fn get_sub_token_supply_by_src_chain_id(&self, src_chain_id: Nat) -> Nat {
         //
         let token = self.get_token_by_src_chain_id(src_chain_id).unwrap();
-        token.total_supply()
+        token.get_total_supply()
     }
 
     pub fn total_liquidity(&self) -> Nat {
         let mut total_liquidity: Nat = Nat::from(0);
         for token in self.token_info.values() {
-            total_liquidity += token.total_supply();
+            total_liquidity += Nat::from(token.get_total_supply());
         }
         total_liquidity
     }
