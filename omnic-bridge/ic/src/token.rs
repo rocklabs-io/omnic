@@ -31,9 +31,10 @@ pub struct Token<T: CandidType + std::cmp::Ord> {
     src_pool_id: Nat,
     name: String,
     symbol: String,
-    decimals: u8,
+    local_decimals: u8,
+    shared_decimals: u8,
     total_supply: Nat,
-    balances: BTreeMap<T, Nat>,
+    balances: BTreeMap<T, Nat>, // shared_decimals token
 }
 
 // external common interface
@@ -46,7 +47,8 @@ where
         src_pool_id: Nat,
         name: String,
         symbol: String,
-        decimals: u8,
+        local_decimals: u8,
+        shared_decimals: u8,
         balances: BTreeMap<T, Nat>,
     ) -> Self {
         Token {
@@ -54,7 +56,8 @@ where
             src_pool_id,
             name,
             symbol,
-            decimals,
+            local_decimals,
+            shared_decimals,
             total_supply: Nat::from(0),
             balances,
         }
@@ -76,8 +79,12 @@ where
         self.symbol.to_string()
     }
 
-    pub fn decimals(&self) -> u8 {
-        self.decimals.clone()
+    pub fn token_local_decimals(&self) -> u8 {
+        self.local_decimals.clone()
+    }
+    
+    pub fn token_shared_decimals(&self) -> u8 {
+        self.shared_decimals.clone()
     }
 }
 
