@@ -1,8 +1,15 @@
 use candid::Principal;
-use ic_cdk::export::candid::{candid_method, CandidType, Deserialize, Nat};
+use ic_cdk::export::candid::{candid_method, Nat};
 use ic_cdk_macros::{query, update};
 use ic_web3::ethabi::{decode, ParamType};
-use ic_web3::types::U256;
+use ic_web3::transports::ICHttp;
+use ic_web3::Web3;
+use ic_web3::ic::{get_eth_addr, KeyInfo};
+use ic_web3::{
+    contract::{Contract, Options},
+    ethabi::ethereum_types::{U64, U256},
+    types::{Address,},
+};
 use num_bigint::BigUint;
 use omnic_bridge::pool::Pool;
 use omnic_bridge::router::{Router, RouterInterfaces};
@@ -19,6 +26,10 @@ const OPERATION_SWAP: u8 = 3;
 
 const OWNER: &'static str = "aaaaa-aa";
 
+const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd";
+const KEY_NAME: &str = "dfx_test_key";
+const TOKEN_ABI: &[u8] = include_bytes!("./bridge.json");
+
 type Result<T> = std::result::Result<T, String>;
 
 
@@ -28,7 +39,7 @@ thread_local! {
 
 #[update(name = "process_message")]
 #[candid_method(update, rename = "processMessage")]
-fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: Vec<u8>) -> Result<bool> {
+async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: Vec<u8>) -> Result<bool> {
     let t = vec![ParamType::Uint(8)];
     let d = decode(&t, &payload).map_err(|e| format!("payload decode error: {}", e))?;
     let operation_type: u8 = d[0]
@@ -62,7 +73,6 @@ fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: Vec<u8>
             amount.to_little_endian(&mut buffer2);
             r.add_liquidity(
                 src_chain,
-                // Nat::from(BigUint::from_slice(src_pool_id.as_ref())),
                 Nat::from(BigUint::from_bytes_le(&buffer1)),
                 sender,
                 Nat::from(BigUint::from_bytes_le(&buffer2)),
@@ -101,8 +111,68 @@ fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: Vec<u8>
             .map_err(|_| format!("remove liquidity failed"))
         })
     } else if operation_type == OPERATION_SWAP {
-        //TODO
-        Err("unsupported!".to_string())
+        let types = vec![
+            ParamType::Uint(8),
+            ParamType::Uint(16),
+            ParamType::Uint(256),
+            ParamType::Uint(16),
+            ParamType::Uint(256),
+            ParamType::Uint(256),
+            ParamType::FixedBytes(32), 
+        ];
+        let d = decode(&types, &payload).map_err(|e| format!("payload decode error: {}", e))?;
+        let src_chain_id: u32 = d[1]
+            .clone()
+            .into_uint()
+            .ok_or("can not convert src_chain to U256".to_string())?
+            .try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
+        let src_pool_id: U256 = d[2]
+            .clone()
+            .into_uint()
+            .ok_or("can not convert src_pool_id to U256".to_string())?;
+        let dst_chain_id: u32 = d[3]
+            .clone()
+            .into_uint()
+            .ok_or("can not convert dst_chain to U256".to_string())?
+            .try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
+        let dst_pool_id: U256 = d[4]
+            .clone()
+            .into_uint()
+            .ok_or("can not convert dst_pool_id to U256".to_string())?;
+        let amount: U256 = d[5]
+            .clone()
+            .into_uint()
+            .ok_or("can not convert amount to U256".to_string())?;
+        let recipient: Vec<u8> = d[6]
+            .clone()
+            .into_fixed_bytes()
+            .ok_or("can not convert recipient to bytes")?;
+
+        ROUTER.with(|router| {
+            let mut r = router.borrow_mut();
+            let mut buffer1 = [0u8; 32];
+            let mut buffer2 = [0u8; 32];
+            let mut buffer3 = [0u8; 32];
+            src_pool_id.to_little_endian(&mut buffer1);
+            dst_pool_id.to_little_endian(&mut buffer2);
+            amount.to_little_endian(&mut buffer3);
+            // udpate token ledger
+            r.swap(
+                src_chain_id,
+                Nat::from(BigUint::from_bytes_le(&buffer1)),
+                dst_chain_id,
+                Nat::from(BigUint::from_bytes_le(&buffer2)),
+                Nat::from(BigUint::from_bytes_le(&buffer3)),
+            )
+        }).map_err(|_| format!("remove liquidity failed"))?;
+
+        // call send_token method to transfer token to recipient
+        let dst_bridge_addr: Vec<u8> = get_bridge_addr(dst_chain_id).unwrap();
+
+        //send_token
+        let mut buffer = [0u8; 32];
+        amount.to_little_endian(&mut buffer);
+        send_token(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
     } else {
         Err("unsupported!".to_string())
     }
@@ -113,6 +183,56 @@ fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: Vec<u8>
 fn send_message() -> Result<bool> {
     //TODO
     Ok(false)
+}
+
+// call a contract, transfer some token to addr
+#[update(name = "send_token")]
+#[candid_method(update, rename = "send_token")]
+async fn send_token(chain_id: u32, token_addr: Vec<u8>, addr: Vec<u8>, value: Vec<u8>) -> Result<bool> {
+    // ecdsa key info
+    let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
+    let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
+
+    let w3 = match ICHttp::new(URL, None, None) {
+        Ok(v) => { Web3::new(v) },
+        Err(e) => { return Err(e.to_string()) },
+    };
+    let contract_address = Address::from_slice(&token_addr);
+    let contract = Contract::from_json(
+        w3.eth(),
+        contract_address,
+        TOKEN_ABI
+    ).map_err(|e| format!("init contract failed: {}", e))?;
+
+    let canister_addr = get_eth_addr(None, None, KEY_NAME.to_string())
+        .await
+        .map_err(|e| format!("get canister eth addr failed: {}", e))?;
+    // add nonce to options
+    let tx_count = w3.eth()
+        .transaction_count(canister_addr, None)
+        .await
+        .map_err(|e| format!("get tx count error: {}", e))?;
+    // get gas_price
+    let gas_price = w3.eth()
+        .gas_price()
+        .await
+        .map_err(|e| format!("get gas_price error: {}", e))?;
+    // legacy transaction type is still ok
+    let options = Options::with(|op| { 
+        op.nonce = Some(tx_count);
+        op.gas_price = Some(gas_price);
+        op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
+    });
+    let to_addr = Address::from_slice(&addr);
+    let value = U256::from_little_endian(&value);
+    let txhash = contract
+        .signed_call("transfer", (to_addr, value,), options, key_info, chain_id as u64)
+        .await
+        .map_err(|e| format!("token transfer failed: {}", e))?;
+
+    ic_cdk::println!("txhash: {}", hex::encode(txhash));
+
+    Ok(true)
 }
 
 #[update(name = "create_pool")]
@@ -199,11 +319,11 @@ fn remove_bridge_addr(src_chain: u32) -> Result<Vec<u8>> {
 
 #[query(name = "get_bridge_addr")]
 #[candid_method(query, rename = "getBridgeAddr")]
-fn get_bridge_addr(src_chain: u32) -> Result<Vec<u8>> {
+fn get_bridge_addr(chain_id: u32) -> Result<Vec<u8>> {
     ROUTER.with(|router| {
         let r = router.borrow();
-        r.get_bridge_addr(src_chain)
-            .map_err(|_| format!("not bridge address in {} chain", src_chain))
+        r.get_bridge_addr(chain_id)
+            .map_err(|_| format!("not bridge address in {} chain", chain_id))
     })
 }
 
