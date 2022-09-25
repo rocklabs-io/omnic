@@ -21,37 +21,9 @@ const OWNER: &'static str = "aaaaa-aa";
 
 type Result<T> = std::result::Result<T, String>;
 
-#[derive(CandidType, Deserialize, Default)]
-pub struct BridgeAddress<T> {
-    bridges: BTreeMap<u32, T>,
-}
-
-impl<T: std::clone::Clone> BridgeAddress<T> {
-    pub fn new() -> Self {
-        BridgeAddress {
-            bridges: BTreeMap::new(),
-        }
-    }
-    pub fn get_bridge_addr(&self, src_chain: u32) -> Option<T> {
-        self.bridges.get(&src_chain).cloned()
-    }
-
-    pub fn is_bridge_exist(&self, src_chain: u32) -> bool {
-        self.bridges.contains_key(&src_chain)
-    }
-
-    pub fn add_bridge_addr(&mut self, src_chain: u32, bridge_addr: T) {
-        self.bridges.entry(src_chain).or_insert(bridge_addr);
-    }
-
-    pub fn remove_bridge_addr(&mut self, src_chain: u32) -> T {
-        self.bridges.remove(&src_chain).unwrap()
-    }
-}
 
 thread_local! {
     static ROUTER: RefCell<Router<Vec<u8>>> = RefCell::new(Router::new());
-    static BRIDGES: RefCell<BridgeAddress<Vec<u8>>> = RefCell::new(BridgeAddress::new());
 }
 
 #[update(name = "process_message")]
@@ -205,9 +177,9 @@ fn add_bridge_addr(src_chain: u32, birdge_addr: Vec<u8>) -> Result<bool> {
     let owner: Principal = Principal::from_text(OWNER).unwrap();
     assert_eq!(caller, owner);
 
-    BRIDGES.with(|bridge_addrs| {
-        let mut b = bridge_addrs.borrow_mut();
-        b.add_bridge_addr(src_chain, birdge_addr);
+    ROUTER.with(|router| {
+        let mut r = router.borrow_mut();
+        r.add_bridge_addr(src_chain, birdge_addr);
         Ok(true)
     })
 }
@@ -219,28 +191,28 @@ fn remove_bridge_addr(src_chain: u32) -> Result<Vec<u8>> {
     let owner: Principal = Principal::from_text(OWNER).unwrap();
     assert_eq!(caller, owner);
 
-    BRIDGES.with(|bridge_addrs| {
-        let mut b = bridge_addrs.borrow_mut();
-        Ok(b.remove_bridge_addr(src_chain))
+    ROUTER.with(|router| {
+        let mut r = router.borrow_mut();
+        r.remove_bridge_addr(src_chain).map_err(|e| format!("remove bridge addr failed: {}", e))
     })
 }
 
 #[query(name = "get_bridge_addr")]
 #[candid_method(query, rename = "getBridgeAddr")]
 fn get_bridge_addr(src_chain: u32) -> Result<Vec<u8>> {
-    BRIDGES.with(|bridge_addrs| {
-        let b = bridge_addrs.borrow();
-        b.get_bridge_addr(src_chain)
-            .ok_or(format!("not bridge address in {} chain", src_chain))
+    ROUTER.with(|router| {
+        let r = router.borrow();
+        r.get_bridge_addr(src_chain)
+            .map_err(|_| format!("not bridge address in {} chain", src_chain))
     })
 }
 
 #[query(name = "is_bridge_addr_exist")]
 #[candid_method(query, rename = "isBridgeAddrExist")]
 fn is_bridge_addr_exist(src_chain: u32) -> Result<bool> {
-    BRIDGES.with(|bridge_addrs| {
-        let b = bridge_addrs.borrow();
-        Ok(b.is_bridge_exist(src_chain))
+    ROUTER.with(|router| {
+        let r = router.borrow();
+        Ok(r.is_bridge_exist(src_chain))
     })
 }
 

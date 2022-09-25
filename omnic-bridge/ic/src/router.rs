@@ -54,11 +54,11 @@ where
     T: std::fmt::Debug + Clone,
     T: CandidType + std::cmp::Ord,
 {
-    bridge_addr: BTreeMap<u32, BTreeMap<Nat, T>>,
+    bridge_addr: BTreeMap<u32, T>,
     pool_ids: BTreeMap<u32, BTreeMap<Nat, Nat>>, // src_chain_id -> src_pool_id -> pool_id
     pools: BTreeMap<Nat, Pool<T>>,               // pool_id -> Pool
-                                                 // TODO
-                                                 // weights: BTreeMap<Nat, f32>, // allocate weights for different chain
+    // TODO
+    // weights: BTreeMap<Nat, f32>, // allocate weights for different chain
 }
 
 impl<T> Router<T>
@@ -74,28 +74,33 @@ where
         }
     }
 
-    pub fn get_pools_length(&self) -> Nat {
-        Nat::from(self.pools.len())
+    pub fn get_bridge_addr(&self, chain_id: u32) -> Result<T> {
+        self.bridge_addr.get(&chain_id)
+            .ok_or(Error::Pool(PoolError::Invalid(format!(
+                "chain id is not found: {}",
+                chain_id
+            ))))
+            .cloned()
     }
 
-    pub fn get_bridge_addr(&self, chain_id: u32, pool_id: Nat) -> Result<T> {
-        //
-        self.bridge_addr
-            .get(&chain_id)
-            .map_or(
-                Err(Error::Pool(PoolError::Invalid(format!(
+    pub fn is_bridge_exist(&self, chain_id: u32) -> bool {
+        self.bridge_addr.contains_key(&chain_id)
+    }
+
+    pub fn add_bridge_addr(&mut self, chain_id: u32, bridge_addr: T) {
+        self.bridge_addr.entry(chain_id).or_insert(bridge_addr);
+    }
+
+    pub fn remove_bridge_addr(&mut self, chain_id: u32) -> Result<T> {
+        self.bridge_addr.remove(&chain_id)
+                .ok_or(Error::Pool(PoolError::Invalid(format!(
                     "chain id is not found: {}",
                     chain_id
-                )))),
-                |b| {
-                    b.get(&pool_id)
-                        .ok_or(Error::Pool(PoolError::Invalid(format!(
-                            "pool id is not found: {}",
-                            pool_id
-                        ))))
-                },
-            )
-            .cloned()
+                ))))
+    }
+
+    pub fn get_pools_length(&self) -> Nat {
+        Nat::from(self.pools.len())
     }
 
     pub fn get_pool_id(&self, src_chain_id: u32, src_pool_id: Nat) -> Result<Nat> {
@@ -245,10 +250,10 @@ where
         // 2. check if src & dst chain bridge address exists
 
         let src_bridge_addr = self
-            .get_bridge_addr(src_chain_id, src_pool_id.clone())
+            .get_bridge_addr(src_chain_id)
             .unwrap();
         let dst_bridge_addr = self
-            .get_bridge_addr(dst_chain_id, dst_pool_id.clone())
+            .get_bridge_addr(dst_chain_id)
             .unwrap();
 
         //3. src_chain_id pool mint token to src bridge address
