@@ -1,0 +1,5 @@
+type Result = variant { Ok : bool; Err : text };
+service : () -> {
+  is_valid : (text, text) -> (Result) query;
+  process_message : (text, text) -> (Result);
+}

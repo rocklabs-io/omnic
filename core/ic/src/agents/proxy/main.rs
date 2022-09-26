@@ -22,8 +22,8 @@ use omnic::{Message, chains::{ChainRoots}};
 ic_cron::implement_cron!();
 
 const OPTIMISTIC_DELAY: u64 = 1800; // 30 mins
-const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 60 * 5; // 5 min in nano second
-const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 10; // 1 min in nano second
+const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 30; //60 * 5; // 5 min in nano second
+const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 5; //10; // 1 min in nano second
 
 #[derive(CandidType, Deserialize, Clone)]
 enum Task {
@@ -83,7 +83,19 @@ struct StateMachine {
     sub_state: State
 }
 
+impl StateMachine {
+    pub fn set_chains(&mut self, ids: Vec<u32>, rpc_urls: Vec<String>) {
+        self.chain_ids = ids;
+        self.rpc_urls = rpc_urls;
+    }
+}
+
 const OMNIC_ABI: &[u8] = include_bytes!("./omnic.abi");
+
+const GOERLI_CHAIN_ID: u32 = 5;
+const GOERLI_URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
+const GOERLI_OMNIC_ADDR: &str = "0312504E22B40A6f03FcCFEA0C8c0e9Ad3E36918";
+const GOERLI_START_BLOCK: u64 = 7558863;
 
 thread_local! {
     static CHAINS: RefCell<HashMap<u32, ChainRoots>>  = RefCell::new(HashMap::new());
@@ -94,23 +106,26 @@ thread_local! {
 #[candid_method(init)]
 fn init() {
     // add goerli chain config
-    // CHAINS.with(|chains| {
-    //     let mut chains = chains.borrow_mut();
-    //     // ledger.init_metadata(ic_cdk::caller(), args.clone());
-    //     chains.insert(GOERLI_CHAIN_ID, ChainConfig {
-    //         chain_id: GOERLI_CHAIN_ID,
-    //         rpc_url: GOERLI_URL.clone().into(),
-    //         omnic_addr:GOERLI_OMNIC_ADDR.clone().into(),
-    //         omnic_start_block: 7468220,
-    //         current_block: 7468220,
-    //         batch_size: 1000,
-    //     });
-    // });
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        // ledger.init_metadata(ic_cdk::caller(), args.clone());
+        chains.insert(GOERLI_CHAIN_ID, ChainRoots::new(
+            GOERLI_CHAIN_ID,
+            vec![GOERLI_URL.clone().into()],
+            GOERLI_OMNIC_ADDR.clone().into(),
+            GOERLI_START_BLOCK,
+            Some(1000),
+        ));
+    });
 
     // init state machine
     STATE_MACHINE.with(|s| {
         let mut state_machine = s.borrow_mut();
         // append s.chain_ids;
+        state_machine.set_chains(
+            vec![GOERLI_CHAIN_ID],
+            vec![GOERLI_URL.to_string()]
+        );
     });
 
     // set up cron job
@@ -154,6 +169,16 @@ fn is_valid(proof: String, message: String) -> Result<bool, String> {
             Ok(chain.is_root_exist(root))
         })
     }
+}
+
+#[query(name = "get_latest_root")]
+#[candid_method(query, rename = "get_latest_root")]
+fn get_latest_root(chain_id: u32) -> Result<String, String> {
+    CHAINS.with(|c| {
+        let chains = c.borrow();
+        let chain = chains.get(&chain_id).ok_or("src chain id not exist".to_string())?;
+        Ok(format!("{:x}", chain.latest_root()))
+    })
 }
 
 #[update(name = "process_message")]
@@ -223,6 +248,7 @@ async fn fetch_root() {
                             let root: Result<H256, ic_web3::contract::Error> = c
                                 .query("getLatestRoot", (), None, Options::default(), BlockId::Number(BlockNumber::Number(state.block_height.into())))
                                 .await;
+                            ic_cdk::println!("root: {:?}", root);
                             match root {
                                 Ok(r) => {
                                     if idx == 0 {

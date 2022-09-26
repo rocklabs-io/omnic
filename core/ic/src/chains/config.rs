@@ -57,6 +57,20 @@ pub struct ChainRoots {
 }
 
 impl ChainRoots {
+    pub fn new(
+        chain_id: u32, 
+        rpc_urls: Vec<String>, 
+        omnic_addr: String, 
+        omnic_start_block: u64,
+        batch_size: Option<u64>
+    ) -> ChainRoots {
+        let config = ChainConfig::new(chain_id, rpc_urls, omnic_addr, omnic_start_block, batch_size);
+        ChainRoots {
+            config: config,
+            roots: RootDB::new(),
+        }
+    }
+
     pub fn set_current_block(&mut self, v: u64) {
         self.config.set_current_block(v);
     }
