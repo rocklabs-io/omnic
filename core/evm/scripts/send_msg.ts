@@ -16,8 +16,9 @@ async function main() {
 
   console.log("calling omnic.sendMessage...");
   let dest_chain = 0; // send to IC
+  let recipient_pid_hex = "0x00000000000000020101";
   // let recepient = ethers.utils.hexZeroPad(omnic_canister.toHex(), 32); // send to omnic canister
-  let recepient = ethers.utils.hexZeroPad(omnic_contract_addr, 32);
+  let recepient = ethers.utils.hexZeroPad(recipient_pid_hex, 32);
   console.log("recepient:", recepient);
   let data = ethers.utils.hexlify(ethers.utils.toUtf8Bytes("hello omnic!"));
   let tx = await omnic.sendMessage(dest_chain, recepient, false, data);

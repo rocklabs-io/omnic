@@ -1,0 +1,4 @@
+type Result = variant { Ok : bool; Err : text };
+service : {
+  handle_message : (nat32, nat64, vec nat8, vec nat8) -> (Result) query;
+}

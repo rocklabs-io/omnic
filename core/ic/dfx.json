@@ -19,12 +19,11 @@
             ]
         },
         "demo": {
-            "candid": "src/demo.did",
-            "package": "demo",
+            "candid": "src/agents/demo.did",
             "type": "custom",
             "wasm": "target/wasm32-unknown-unknown/release/demo_opt.wasm",
             "build": [
-              "cargo build --target wasm32-unknown-unknown --release",
+              "cargo build --target wasm32-unknown-unknown --bin demo --release",
               "ic-cdk-optimizer target/wasm32-unknown-unknown/release/demo.wasm -o target/wasm32-unknown-unknown/release/demo_opt.wasm"
             ]
         }

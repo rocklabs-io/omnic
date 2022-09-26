@@ -40,7 +40,7 @@ pub const TREE_DEPTH: usize = 32;
 const EMPTY_SLICE: &[H256] = &[];
 
 pub use error::*;
-use full::*;
+pub use full::*;
 pub use light::*;
 pub use proof::*;
 pub use tree::*;

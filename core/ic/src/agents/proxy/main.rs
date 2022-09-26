@@ -6,6 +6,7 @@ omnic proxy canister:
 use std::cell::{RefCell};
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::convert::TryInto;
 
 use ic_web3::Web3;
 use ic_web3::contract::{Contract, Options};
@@ -13,11 +14,14 @@ use ic_web3::types::{H256, Address, BlockNumber, BlockId};
 use ic_web3::transports::ICHttp;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
 use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
+use ic_cdk::api::call::{call, CallResult};
+use ic_cdk::export::Principal;
 
 use ic_cron::types::Iterations;
 
-use accumulator::{MerkleProof, Proof, TREE_DEPTH};
+use accumulator::{MerkleProof, Proof, TREE_DEPTH, merkle_root_from_branch};
 use omnic::{Message, chains::{ChainRoots}};
+use omnic::Decode;
 
 ic_cron::implement_cron!();
 
@@ -142,19 +146,25 @@ fn init() {
 // relayer canister call this to check if a message is valid before process_message
 #[query(name = "is_valid")]
 #[candid_method(query, rename = "is_valid")]
-fn is_valid(proof: String, message: String) -> Result<bool, String> {
+fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
     // verify message proof: use proof, message to calculate the merkle root, 
     //     if message.need_verify is false, we only check if root exist in the hashmap
     //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
-    let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
+    // let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
+    //     format!("error in parse message json: {:?}", e)
+    // })?;
+    // ic_cdk::println!("msg: {:?}, proof: {:?}, leaf_index: {:?}", hex::encode(&message.clone()), proof.clone(), leaf_index);
+    let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
         format!("error in parse message json: {:?}", e)
     })?;
     let h = m.to_leaf();
-    let p: Proof<{ TREE_DEPTH }> = serde_json::from_str(proof.as_str()).map_err(|e| {
-        format!("error in parse proof json: {:?}", e)
-    })?;
-    assert_eq!(h, p.leaf);
-    let root = p.root();
+    // let p: [H256; TREE_DEPTH] = serde_json::from_str(proof.as_str()).map_err(|e| {
+    //     format!("error in parse proof json: {:?}", e)
+    // })?;
+    let p_h256: Vec<H256> = proof.iter().map(|v| H256::from_slice(&v)).collect();
+    let p: [H256; TREE_DEPTH] = p_h256.try_into().map_err(|e| format!("convert to proof failed: {:?}", e))?;
+    // calculate root with leaf hash & proof
+    let root = merkle_root_from_branch(h, &p, TREE_DEPTH, leaf_index as usize);
     if m.wait_optimistic {
         let now = get_time();
         CHAINS.with(|c| {
@@ -183,19 +193,47 @@ fn get_latest_root(chain_id: u32) -> Result<String, String> {
 
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
-async fn process_message(proof: String, message: String) -> Result<bool, String> {
+async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
     // TODO only relayers can call?
     // verify message proof: use proof, message to calculate the merkle root, 
     //     if message.need_verify is false, we only check if root exist in the hashmap
     //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
     // if valid, call dest canister.handleMessage or send tx to dest chain
     // if invalid, return error
-    is_valid(proof, message.clone())?;
-    let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
+    let valid = is_valid(message.clone(), proof, leaf_index)?;
+    if !valid {
+        ic_cdk::println!("message does not pass verification!");
+        return Err("message does not pass verification!".into());
+    }
+    // let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
+    //     format!("error in parse message json: {:?}", e)
+    // })?;
+    let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
         format!("error in parse message json: {:?}", e)
     })?;
+    // take last 10 bytes
+    let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
+    let sender = m.sender.as_bytes();
+    ic_cdk::println!("recipient: {:?}", Principal::to_text(&recipient));
     if m.destination == 0 {
         // todo! call ic canister
+        let ret: CallResult<(Result<bool, String>,)> = 
+            call(recipient, "handle_message", (m.origin, m.nonce, sender, m.body, )).await;
+        match ret {
+            Ok((res, )) => {
+                match res {
+                    Ok(_) => {
+                        ic_cdk::println!("handle_message success!");
+                    },
+                    Err(err) => {
+                        ic_cdk::println!("handle_message failed: {:?}", err);
+                    }
+                }
+            },
+            Err((_code, msg)) => {
+                ic_cdk::println!("call app canister failed: {:?}", (_code, msg));
+            }
+        }
     } else {
         // todo! send tx to chain
     }
