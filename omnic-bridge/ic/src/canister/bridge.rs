@@ -1,6 +1,7 @@
 use candid::Principal;
-use ic_cdk::export::candid::{candid_method, Nat};
+use ic_cdk::export::candid::{candid_method, Deserialize, CandidType, Nat};
 use ic_cdk_macros::{query, update};
+use ic_cdk::api::call::CallResult;
 use ic_web3::ethabi::{decode, ParamType};
 use ic_web3::transports::ICHttp;
 use ic_web3::Web3;
@@ -30,11 +31,63 @@ const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd"
 const KEY_NAME: &str = "dfx_test_key";
 const TOKEN_ABI: &[u8] = include_bytes!("./bridge.json");
 
-type Result<T> = std::result::Result<T, String>;
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
+pub enum TxError {
+    InsufficientBalance,
+    InsufficientAllowance,
+    Unauthorized,
+    LedgerTrap,
+    AmountTooSmall,
+    BlockUsed,
+    ErrorOperationStyle,
+    ErrorTo,
+    Other(String),
+}
+pub type TxReceipt = std::result::Result<Nat, TxError>;
 
+type Result<T> = std::result::Result<T, String>;
+#[derive(Deserialize, CandidType, Clone, Debug)]
+pub struct WrapperTokenAddr
+{
+    wrapper_tokens: BTreeMap<Nat, String>, // pool_id -> canister address
+}
+
+impl WrapperTokenAddr {
+    pub fn new() -> Self {
+        WrapperTokenAddr {
+            wrapper_tokens: BTreeMap::new(),
+        }
+    }
+
+    pub fn get_wrapper_token_addr(&self, pool_id: Nat) -> Result<String> {
+        self.wrapper_tokens.get(&pool_id)
+            .ok_or(format!(
+                "chain id is not found: {}",
+                pool_id
+            ))
+            .cloned()
+    }
+
+    pub fn is_wrapper_token_exist(&self, pool_id: Nat) -> bool {
+        self.wrapper_tokens.contains_key(&pool_id)
+    }
+
+    pub fn add_wrapper_tokene_addr(&mut self, pool_id: Nat, wrapper_canister_token: String) {
+        self.wrapper_tokens.entry(pool_id).or_insert(wrapper_canister_token);
+    }
+
+    pub fn remove_wrapper_token_addr(&mut self, pool_id: Nat) -> Result<String> {
+        self.wrapper_tokens.remove(&pool_id)
+                .ok_or(format!(
+                    "pool id is not found: {}",
+                    pool_id
+                ))
+    }
+}
 
 thread_local! {
     static ROUTER: RefCell<Router<Vec<u8>>> = RefCell::new(Router::new());
+    static WRAPPER_TOKENS: RefCell<WrapperTokenAddr> = RefCell::new(WrapperTokenAddr::new());
 }
 
 #[update(name = "process_message")]
@@ -148,41 +201,105 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
             .into_fixed_bytes()
             .ok_or("can not convert recipient to bytes")?;
 
-        ROUTER.with(|router| {
-            let mut r = router.borrow_mut();
+        // if dst chain_id == 0 means mint/lock mode for evm <=> ic
+        // else means swap between evms
+        if dst_chain_id == 0 {
             let mut buffer1 = [0u8; 32];
             let mut buffer2 = [0u8; 32];
-            let mut buffer3 = [0u8; 32];
-            src_pool_id.to_little_endian(&mut buffer1);
-            dst_pool_id.to_little_endian(&mut buffer2);
-            amount.to_little_endian(&mut buffer3);
-            // udpate token ledger
-            r.swap(
-                src_chain_id,
-                Nat::from(BigUint::from_bytes_le(&buffer1)),
-                dst_chain_id,
-                Nat::from(BigUint::from_bytes_le(&buffer2)),
-                Nat::from(BigUint::from_bytes_le(&buffer3)),
-            )
-        }).map_err(|_| format!("remove liquidity failed"))?;
+            let pool_id: Nat = ROUTER.with(|router| {
+                let r = router.borrow();
+                src_pool_id.to_little_endian(&mut buffer1);
+                amount.to_little_endian(&mut buffer2);
+                r.get_pool_id(src_chain_id, Nat::from(BigUint::from_bytes_le(&buffer1)))
+            }).map_err(|e| format!("get pool id failed: {:?}", e))?;
 
-        // call send_token method to transfer token to recipient
-        let dst_bridge_addr: Vec<u8> = get_bridge_addr(dst_chain_id).unwrap();
+            // get wrapper token cansider address
+            let wrapper_token_addr: String = WRAPPER_TOKENS.with(|wrapper_tokens| {
+                let w = wrapper_tokens.borrow();
+                w.get_wrapper_token_addr(pool_id)
+            }).map_err(|e| format!("get wrapper token address failed: {}", e))?;
 
-        //send_token
-        let mut buffer = [0u8; 32];
-        amount.to_little_endian(&mut buffer);
-        send_token(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
+            let wrapper_token_addr: Principal = Principal::from_text(&wrapper_token_addr).unwrap();
+            // DIP20
+            let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+                wrapper_token_addr,
+                "mint",
+                (Principal::from_slice(&recipient), Nat::from(BigUint::from_bytes_le(&buffer2))),
+            ).await;
+            match transfer_res {
+                Ok((res, )) => {
+                    match res {
+                        Ok(_) => {}
+                        Err(err) => {
+                            return Err(format!("mint error: {:?}", err));
+                        }
+                    }
+                }
+                Err((_code, msg)) => {
+                    return Err(msg);
+                }
+            }
+            Ok(true)
+        } else {
+            ROUTER.with(|router| {
+                let mut r = router.borrow_mut();
+                let mut buffer1 = [0u8; 32];
+                let mut buffer2 = [0u8; 32];
+                let mut buffer3 = [0u8; 32];
+                src_pool_id.to_little_endian(&mut buffer1);
+                dst_pool_id.to_little_endian(&mut buffer2);
+                amount.to_little_endian(&mut buffer3);
+                // udpate token ledger
+                r.swap(
+                    src_chain_id,
+                    Nat::from(BigUint::from_bytes_le(&buffer1)),
+                    dst_chain_id,
+                    Nat::from(BigUint::from_bytes_le(&buffer2)),
+                    Nat::from(BigUint::from_bytes_le(&buffer3)),
+                )
+            }).map_err(|_| format!("remove liquidity failed"))?;
+    
+            // call send_token method to transfer token to recipient
+            let dst_bridge_addr: Vec<u8> = get_bridge_addr(dst_chain_id).unwrap();
+    
+            //send_token
+            let mut buffer = [0u8; 32];
+            amount.to_little_endian(&mut buffer);
+            send_token(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
+        }
     } else {
         Err("unsupported!".to_string())
     }
 }
 
-#[update(name = "send_message")]
-#[candid_method(update, rename = "sendMessage")]
-fn send_message() -> Result<bool> {
-    //TODO
-    Ok(false)
+#[update(name = "burn_wrapper_token")]
+#[candid_method(update, rename = "burnWrapperToken")]
+async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Vec<u8>, amount: Nat) -> Result<bool> {
+    let caller = ic_cdk::caller();
+    // DIP20
+    let hole_address: Principal = Principal::from_text("aaaaa-aa").unwrap();
+    let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+        wrapper_token_addr,
+        "transferFrom",
+        (caller, hole_address, amount.clone(), ),
+    ).await;
+    match transfer_res {
+        Ok((res, )) => {
+            match res {
+                Ok(_) => {}
+                Err(err) => {
+                    return Err(format!("transferFrom error: {:?}", err));
+                }
+            }
+        }
+        Err((_code, msg)) => {
+            return Err(msg);
+        }
+    }
+
+    let amount: Vec<u8> = BigUint::from(amount).to_bytes_be();
+    let bridge_addr: Vec<u8> = get_bridge_addr(chain_id).unwrap();
+    send_token(chain_id, bridge_addr, to, amount).await
 }
 
 // call a contract, transfer some token to addr
