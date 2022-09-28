@@ -25,8 +25,8 @@ use omnic::Decode;
 
 ic_cron::implement_cron!();
 
-const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 60 * 5; //60 * 5; // 5 min in nano second
-const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 60; //60; // 1 min in nano second
+const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 30; //60 * 5; // 5 min in nano second
+const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 5; //60; // 1 min in nano second
 
 #[derive(CandidType, Deserialize, Clone)]
 enum Task {
@@ -87,11 +87,20 @@ struct StateMachine {
 }
 
 impl StateMachine {
-    pub fn set_chains(&mut self, ids: Vec<u32>, rpc_urls: Vec<String>) {
-        self.chain_ids = ids;
-        self.rpc_urls = rpc_urls;
+
+    pub fn add_chain(&mut self, chain_id: u32) {
+        if !self.chain_exists(chain_id) {
+            self.chain_ids.push(chain_id)
+        }
+    }
+
+    pub fn chain_exists(&self, chain_id: u32) -> bool {
+        self.chain_ids.contains(&chain_id)
     }
 }
+
+// TODO: record current processed leaf_index for each chain, to prevent replay attack
+// each new message coming in shoud satisfy: msg.leaf_index == state.get_current_leaf_index(chain_id) + 1
 
 #[derive(CandidType, Clone)]
 struct StateInfo {
@@ -116,6 +125,7 @@ impl StateInfo {
 
 const OMNIC_ABI: &[u8] = include_bytes!("./omnic.abi");
 
+//https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd
 const GOERLI_CHAIN_ID: u32 = 5;
 const GOERLI_URL: &str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
 const GOERLI_OMNIC_ADDR: &str = "0312504E22B40A6f03FcCFEA0C8c0e9Ad3E36918";
@@ -136,29 +146,7 @@ fn init() {
         info.set_owner(caller);
     });
 
-    // add goerli chain config
-    CHAINS.with(|chains| {
-        let mut chains = chains.borrow_mut();
-        // ledger.init_metadata(ic_cdk::caller(), args.clone());
-        chains.insert(GOERLI_CHAIN_ID, ChainRoots::new(
-            GOERLI_CHAIN_ID,
-            vec![GOERLI_URL.clone().into()],
-            GOERLI_OMNIC_ADDR.clone().into(),
-            GOERLI_START_BLOCK,
-            Some(1000),
-        ));
-    });
-
-    // init state machine
-    STATE_MACHINE.with(|s| {
-        let mut state_machine = s.borrow_mut();
-        // append s.chain_ids;
-        state_machine.set_chains(
-            vec![GOERLI_CHAIN_ID],
-            vec![GOERLI_URL.to_string()]
-        );
-    });
-
+    // TODO: should we move this to a separate function, call this after chains are added?
     // set up cron job
     cron_enqueue(
         Task::FetchRoots, 
@@ -170,30 +158,69 @@ fn init() {
     ).unwrap();
 }
 
-// #[update(name = "add_chain", guard = "is_authorized")]
-// #[candid_method(update, rename = "add_chain")]
-// fn add_chain(
-//     chain_id: u32, 
-//     urls: Vec<String>, 
-//     omnic_addr: String, 
-//     start_block: u64, 
-//     batch_size: u64
-// ) -> Result<bool, String> {
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "add_chain")]
+fn add_chain(
+    chain_id: u32, 
+    urls: Vec<String>, 
+    omnic_addr: String, 
+    start_block: u64
+) -> Result<bool, String> {
+    // add chain config
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        if !chains.contains_key(&chain_id) {
+            chains.insert(chain_id, ChainRoots::new(
+                chain_id,
+                urls,
+                omnic_addr.into(),
+                start_block,
+                Some(1000)
+            ));
+        }
+    });
+    // add chain_id to state machine
+    STATE_MACHINE.with(|s| {
+        let mut state_machine = s.borrow_mut();
+        // append s.chain_ids;
+        if !state_machine.chain_exists(chain_id) {
+            state_machine.add_chain(chain_id);    
+        }
+    });
+    Ok(true)
+}
 
-// }
-
+// TODO: delete chain, what if state_machine is in progress?
 // #[update(name = "delete_chain", guard = "is_authorized")]
 // #[candid_method(update, rename = "delete_chain")]
 // fn delete_chain() -> Result<bool, String> {
 
 // }
 
-// // update chain settings
-// #[update(name = "update_chain, guard = "is_authorized"")]
-// #[candid_method(update, rename = "update_chain")]
-// fn update_chain() -> Result<bool, String> {
-
-// }
+// update chain settings
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "update_chain")]
+fn update_chain(
+    chain_id: u32, 
+    urls: Vec<String>, 
+    omnic_addr: String, 
+    start_block: u64
+) -> Result<bool, String> {
+    // add chain config
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        if chains.contains_key(&chain_id) {
+            chains.insert(chain_id, ChainRoots::new(
+                chain_id,
+                urls,
+                omnic_addr.into(),
+                start_block,
+                Some(1000)
+            ));
+        }
+    });
+    Ok(true)
+}
 
 // relayer canister call this to check if a message is valid before process_message
 #[query(name = "is_valid")]
@@ -231,7 +258,6 @@ fn get_latest_root(chain_id: u32) -> Result<String, String> {
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
 async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
-    // TODO only relayers can call?
     // verify message proof: use proof, message to calculate the merkle root, 
     //     if message.need_verify is false, we only check if root exist in the hashmap
     //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
@@ -271,7 +297,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         }
     } else {
         // todo! send tx to chain
-        // send tx to dest chain, call omnic.processMessage
+        // TODO: send tx to dest chain, call omnic.processMessage
         // let http = ICHttp::new(&state.rpc_urls[idx], max_resp_bytes, cycles_per_call)?;
         // let w3 = Web3::new(v)?;
         // let contract_address = Address::from_str(&state.omnic_addr).unwrap();
@@ -280,14 +306,15 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         //     contract_address,
         //     OMNIC_ABI
         // )?;
-        // let root: Result<H256, ic_web3::contract::Error> = c
-        //     .call("processMessage",
+        // let res: Result<H256, ic_web3::contract::Error> = c
+        //     .signed_call("processMessage",
         //      (), None, Options::default(), BlockId::Number(BlockNumber::Number(state.block_height.into())))
         //     .await;
     }
     Ok(true)
 }
 
+// TODO: aggregate roots from multiple different rpc providers
 async fn fetch_root() {
     // query omnic contract.getLatestRoot, 
     // fetch from multiple rpc providers and aggregrate results, should be exact match
@@ -493,10 +520,15 @@ fn get_time() -> u64 {
     ic_cdk::api::time() / 1000000000
 }
 
-fn is_authorized(user: Principal) -> bool {
+fn is_authorized() -> Result<(), String> {
+    let user = ic_cdk::api::caller();
     STATE_INFO.with(|info| {
         let info = info.borrow();
-        info.is_owner(user)
+        if !info.is_owner(user) {
+            Err("unauthorized!".into())
+        } else {
+            Ok(())
+        }
     })
 }
 

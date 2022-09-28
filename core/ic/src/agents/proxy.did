@@ -1,7 +1,8 @@
-type Result = variant { Ok : text; Err : text };
-type Result_1 = variant { Ok : bool; Err : text };
+type Result = variant { Ok : bool; Err : text };
+type Result_1 = variant { Ok : text; Err : text };
 service : () -> {
-  get_latest_root : (nat32) -> (Result) query;
-  is_valid : (vec nat8, vec vec nat8, nat32) -> (Result_1) query;
-  process_message : (vec nat8, vec vec nat8, nat32) -> (Result_1);
+  add_chain : (nat32, vec text, text, nat64) -> (Result);
+  get_latest_root : (nat32) -> (Result_1) query;
+  is_valid : (vec nat8, vec vec nat8, nat32) -> (Result) query;
+  process_message : (vec nat8, vec vec nat8, nat32) -> (Result);
 }
