@@ -246,10 +246,13 @@ async fn fetch_root() {
     let state = STATE_MACHINE.with(|s| {
         s.borrow().clone()
     });
+
+    let max_resp_bytes = Some(50);
+    let cycles_per_call = None;
     
     let next_state = match state.sub_state {
         State::Init => {
-            match ICHttp::new(&state.rpc_urls[0], None, None) {
+            match ICHttp::new(&state.rpc_urls[0], max_resp_bytes, cycles_per_call) {
                 Ok(v) => { 
                     let w3 = Web3::new(v);
                     match w3.eth().block_number().await {
@@ -272,7 +275,7 @@ async fn fetch_root() {
         },
         State::Fetching(idx) => {
             // query root in block height
-            match ICHttp::new(&state.rpc_urls[idx], None, None) {
+            match ICHttp::new(&state.rpc_urls[idx], max_resp_bytes, cycles_per_call) {
                 Ok(v) => {
                     let w3 = Web3::new(v);
                     let contract_address = Address::from_str(&state.omnic_addr).unwrap();
