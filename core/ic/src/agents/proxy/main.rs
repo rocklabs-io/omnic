@@ -172,7 +172,13 @@ fn init() {
 
 // #[update(name = "add_chain", guard = "is_authorized")]
 // #[candid_method(update, rename = "add_chain")]
-// fn add_chain() -> Result<bool, String> {
+// fn add_chain(
+//     chain_id: u32, 
+//     urls: Vec<String>, 
+//     omnic_addr: String, 
+//     start_block: u64, 
+//     batch_size: u64
+// ) -> Result<bool, String> {
 
 // }
 
@@ -331,7 +337,7 @@ async fn fetch_root() {
                             let root: Result<H256, ic_web3::contract::Error> = c
                                 .query("getLatestRoot", (), None, Options::default(), BlockId::Number(BlockNumber::Number(state.block_height.into())))
                                 .await;
-                            ic_cdk::println!("root: {:?}", root);
+                            ic_cdk::println!("root from {:?}: {:?}", state.rpc_urls[idx], root);
                             match root {
                                 Ok(r) => {
                                     if idx == 0 {
@@ -428,7 +434,7 @@ async fn fetch_roots() {
                         state.rpc_urls = rpc_urls;
                         state.omnic_addr = omnic_addr;
                     });
-
+                    ic_cdk::println!("fetching for chain {:?}...", chain_id);
                     cron_enqueue(
                         Task::FetchRoot, 
                         ic_cron::types::SchedulingOptions {
