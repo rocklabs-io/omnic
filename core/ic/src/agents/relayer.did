@@ -1,2 +1,0 @@
-type Result = variant { Ok : bool; Err : text };
-service : () -> { sync : () -> (Result) }
