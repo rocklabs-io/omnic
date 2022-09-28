@@ -25,7 +25,6 @@ use omnic::Decode;
 
 ic_cron::implement_cron!();
 
-const OPTIMISTIC_DELAY: u64 = 1800; // 30 mins
 const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 60 * 5; //60 * 5; // 5 min in nano second
 const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 60; //60; // 1 min in nano second
 
@@ -94,6 +93,27 @@ impl StateMachine {
     }
 }
 
+#[derive(CandidType, Clone)]
+struct StateInfo {
+    owner: Principal,
+}
+
+impl StateInfo {
+    pub fn default() -> StateInfo {
+        StateInfo {
+            owner: Principal::management_canister()
+        }
+    }
+
+    pub fn set_owner(&mut self, owner: Principal) {
+        self.owner = owner;
+    }
+
+    pub fn is_owner(&self, user: Principal) -> bool {
+        self.owner == user
+    }
+}
+
 const OMNIC_ABI: &[u8] = include_bytes!("./omnic.abi");
 
 const GOERLI_CHAIN_ID: u32 = 5;
@@ -102,13 +122,20 @@ const GOERLI_OMNIC_ADDR: &str = "0312504E22B40A6f03FcCFEA0C8c0e9Ad3E36918";
 const GOERLI_START_BLOCK: u64 = 7558863;
 
 thread_local! {
+    static STATE_INFO: RefCell<StateInfo> = RefCell::new(StateInfo::default());
     static CHAINS: RefCell<HashMap<u32, ChainRoots>>  = RefCell::new(HashMap::new());
-    static STATE_MACHINE: RefCell<StateMachine> = RefCell::new(StateMachine::default())
+    static STATE_MACHINE: RefCell<StateMachine> = RefCell::new(StateMachine::default());
 }
 
 #[init]
 #[candid_method(init)]
 fn init() {
+    let caller = ic_cdk::api::caller();
+    STATE_INFO.with(|info| {
+        let mut info = info.borrow_mut();
+        info.set_owner(caller);
+    });
+
     // add goerli chain config
     CHAINS.with(|chains| {
         let mut chains = chains.borrow_mut();
@@ -143,6 +170,25 @@ fn init() {
     ).unwrap();
 }
 
+// #[update(name = "add_chain", guard = "is_authorized")]
+// #[candid_method(update, rename = "add_chain")]
+// fn add_chain() -> Result<bool, String> {
+
+// }
+
+// #[update(name = "delete_chain", guard = "is_authorized")]
+// #[candid_method(update, rename = "delete_chain")]
+// fn delete_chain() -> Result<bool, String> {
+
+// }
+
+// // update chain settings
+// #[update(name = "update_chain, guard = "is_authorized"")]
+// #[candid_method(update, rename = "update_chain")]
+// fn update_chain() -> Result<bool, String> {
+
+// }
+
 // relayer canister call this to check if a message is valid before process_message
 #[query(name = "is_valid")]
 #[candid_method(query, rename = "is_valid")]
@@ -150,35 +196,20 @@ fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bo
     // verify message proof: use proof, message to calculate the merkle root, 
     //     if message.need_verify is false, we only check if root exist in the hashmap
     //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
-    // let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
-    //     format!("error in parse message json: {:?}", e)
-    // })?;
-    // ic_cdk::println!("msg: {:?}, proof: {:?}, leaf_index: {:?}", hex::encode(&message.clone()), proof.clone(), leaf_index);
     let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
         format!("error in parse message json: {:?}", e)
     })?;
     let h = m.to_leaf();
-    // let p: [H256; TREE_DEPTH] = serde_json::from_str(proof.as_str()).map_err(|e| {
-    //     format!("error in parse proof json: {:?}", e)
-    // })?;
     let p_h256: Vec<H256> = proof.iter().map(|v| H256::from_slice(&v)).collect();
     let p: [H256; TREE_DEPTH] = p_h256.try_into().map_err(|e| format!("convert to proof failed: {:?}", e))?;
     // calculate root with leaf hash & proof
     let root = merkle_root_from_branch(h, &p, TREE_DEPTH, leaf_index as usize);
-    if m.wait_optimistic {
-        let now = get_time();
-        CHAINS.with(|c| {
-            let chains = c.borrow();
-            let chain = chains.get(&m.origin).ok_or("src chain id not exist".to_string())?;
-            Ok(chain.is_root_valid(root, now))
-        })
-    } else {
-        CHAINS.with(|c| {
-            let chains = c.borrow();
-            let chain = chains.get(&m.origin).ok_or("src chain id not exist".to_string())?;
-            Ok(chain.is_root_exist(root))
-        })
-    }
+    // do not add optimistic yet
+    CHAINS.with(|c| {
+        let chains = c.borrow();
+        let chain = chains.get(&m.origin).ok_or("src chain id not exist".to_string())?;
+        Ok(chain.is_root_exist(root))
+    })
 }
 
 #[query(name = "get_latest_root")]
@@ -205,18 +236,15 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         ic_cdk::println!("message does not pass verification!");
         return Err("message does not pass verification!".into());
     }
-    // let m: Message = serde_json::from_str(message.as_str()).map_err(|e| {
-    //     format!("error in parse message json: {:?}", e)
-    // })?;
     let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
         format!("error in parse message json: {:?}", e)
     })?;
 
     let sender = m.sender.as_bytes();
-    ic_cdk::println!("recipient: {:?}", Principal::to_text(&recipient));
     if m.destination == 0 {
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
+        ic_cdk::println!("recipient: {:?}", Principal::to_text(&recipient));
         // todo! call ic canister
         let ret: CallResult<(Result<bool, String>,)> = 
             call(recipient, "handle_message", (m.origin, m.nonce, sender, m.body, )).await;
@@ -457,6 +485,13 @@ fn heart_beat() {
 /// get the unix timestamp in second
 fn get_time() -> u64 {
     ic_cdk::api::time() / 1000000000
+}
+
+fn is_authorized(user: Principal) -> bool {
+    STATE_INFO.with(|info| {
+        let info = info.borrow();
+        info.is_owner(user)
+    })
 }
 
 fn main() {
