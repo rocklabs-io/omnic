@@ -211,11 +211,12 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
     let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
         format!("error in parse message json: {:?}", e)
     })?;
-    // take last 10 bytes
-    let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
+
     let sender = m.sender.as_bytes();
     ic_cdk::println!("recipient: {:?}", Principal::to_text(&recipient));
     if m.destination == 0 {
+        // take last 10 bytes
+        let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
         // todo! call ic canister
         let ret: CallResult<(Result<bool, String>,)> = 
             call(recipient, "handle_message", (m.origin, m.nonce, sender, m.body, )).await;
@@ -236,6 +237,19 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         }
     } else {
         // todo! send tx to chain
+        // send tx to dest chain, call omnic.processMessage
+        // let http = ICHttp::new(&state.rpc_urls[idx], max_resp_bytes, cycles_per_call)?;
+        // let w3 = Web3::new(v)?;
+        // let contract_address = Address::from_str(&state.omnic_addr).unwrap();
+        // let contract = Contract::from_json(
+        //     w3.eth(),
+        //     contract_address,
+        //     OMNIC_ABI
+        // )?;
+        // let root: Result<H256, ic_web3::contract::Error> = c
+        //     .call("processMessage",
+        //      (), None, Options::default(), BlockId::Number(BlockNumber::Number(state.block_height.into())))
+        //     .await;
     }
     Ok(true)
 }
