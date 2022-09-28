@@ -247,7 +247,7 @@ async fn fetch_root() {
         s.borrow().clone()
     });
 
-    let max_resp_bytes = Some(50);
+    let max_resp_bytes = Some(300);
     let cycles_per_call = None;
     
     let next_state = match state.sub_state {
