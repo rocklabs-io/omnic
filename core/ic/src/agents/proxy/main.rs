@@ -26,8 +26,8 @@ use omnic::Decode;
 ic_cron::implement_cron!();
 
 const OPTIMISTIC_DELAY: u64 = 1800; // 30 mins
-const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 30; //60 * 5; // 5 min in nano second
-const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 5; //10; // 1 min in nano second
+const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 60 * 5; //60 * 5; // 5 min in nano second
+const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 60; //60; // 1 min in nano second
 
 #[derive(CandidType, Deserialize, Clone)]
 enum Task {
