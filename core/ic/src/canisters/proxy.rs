@@ -223,14 +223,13 @@ fn update_chain(
 #[candid_method(query, rename = "is_valid")]
 fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
     // verify message proof: use proof, message to calculate the merkle root, 
-    //     if message.need_verify is false, we only check if root exist in the hashmap
-    //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
+    // check if the merkle root exists in corresponding chain state
     let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
-        format!("error in parse message json: {:?}", e)
+        format!("parse message from bytes failed: {:?}", e)
     })?;
     let h = m.to_leaf();
     let p_h256: Vec<H256> = proof.iter().map(|v| H256::from_slice(&v)).collect();
-    let p: [H256; TREE_DEPTH] = p_h256.try_into().map_err(|e| format!("convert to proof failed: {:?}", e))?;
+    let p: [H256; TREE_DEPTH] = p_h256.try_into().map_err(|e| format!("parse proof failed: {:?}", e))?;
     // calculate root with leaf hash & proof
     let root = merkle_root_from_branch(h, &p, TREE_DEPTH, leaf_index as usize);
     // do not add optimistic yet
@@ -255,8 +254,7 @@ fn get_latest_root(chain_id: u32) -> Result<String, String> {
 #[candid_method(update, rename = "process_message")]
 async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
     // verify message proof: use proof, message to calculate the merkle root, 
-    //     if message.need_verify is false, we only check if root exist in the hashmap
-    //     if message.need_verify is true, we additionally check root.confirm_at <= ic_cdk::api::time()
+    // check if the root exists in corresponding chain state
     // if valid, call dest canister.handleMessage or send tx to dest chain
     // if invalid, return error
     let valid = is_valid(message.clone(), proof, leaf_index)?;
@@ -265,7 +263,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         return Err("message does not pass verification!".into());
     }
     let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
-        format!("error in parse message json: {:?}", e)
+        format!("parse message from bytes failed: {:?}", e)
     })?;
 
     let sender = m.sender.as_bytes();
