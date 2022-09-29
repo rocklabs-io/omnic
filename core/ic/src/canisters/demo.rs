@@ -3,18 +3,9 @@ omnic proxy canister:
     fetch_root: fetch merkel roots from all supported chains and insert to chain state
 */
 
-use std::cell::{RefCell};
-use std::collections::HashMap;
-use std::str::FromStr;
 use std::str;
-
-use ic_web3::Web3;
-use ic_web3::contract::{Contract, Options};
-use ic_web3::types::{H256, Address, BlockNumber, BlockId};
-use ic_web3::transports::ICHttp;
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
-use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
-use ic_cdk::api::call::{call, CallResult};
+use ic_cdk_macros::{query, update};
+use ic_cdk::export::candid::{candid_method};
 use ic_cdk::export::Principal;
 
 
