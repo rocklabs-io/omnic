@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.9;
+
+//internal
+import {QueueLib} from "./libs/Queue.sol";
+import {QueueManager} from "./utils/QueueManager.sol";
+import {MerkleLib} from "./libs/Merkle.sol";
+import {Types} from "./libs/Types.sol";
+import {TypeCasts} from "./utils/Utils.sol";
+import {IOmnicReciver} from "./interfaces/IOmnicReciver.sol";
+
+import {Omnic} from "./Omnic.sol";
+
+//external
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+
+// Omnic Crosschain message passing protocol core contract
+
+contract DemoApp {
+
+    address omnicAddr;
+
+    // ============ Events  ============
+    event ReceivedMessage(
+        uint32 indexed srcChainId,
+        bytes32 srcSender,
+        uint32 nonce,
+        bytes payload
+    );
+
+    modifier onlyOmnicContract() {
+        require(msg.sender == omnicAddr, "!omnicContract");
+        _;
+    }
+
+    constructor(address omnic) {
+        omnicAddr = omnic;
+    }
+
+    function sendMessage(
+        uint32 _dstChainId,
+        bytes32 _recipientAddress,
+        bool _waitOptimistic, // customized
+        bytes memory _payload
+    ) {
+        // send message to dst chain, call omnic contract
+        Omnic(omnicAddr).sendMessage(
+            _dstChainId,
+            _recipientAddress,
+            _waitOptimistic, 
+            _payload
+        );
+    }
+
+    // only omnic canister can call this func
+    function handleMessage(
+        uint32 srcChainId,
+        bytes32 srcSender,
+        uint32 nonce,
+        bytes memory payload
+    )
+        public
+        onlyOmnicContract
+        returns (bool success)
+    {
+        // emit event when received message
+        emit ReceivedMessage(srcChainId, srcSender, nonce, payload);
+        return true;
+    }
+}
