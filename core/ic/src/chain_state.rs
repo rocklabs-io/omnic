@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
 use ic_web3::types::H256;
+use candid::{CandidType, Deserialize};
 use crate::config::{ChainConfig, ChainType};
 
+#[derive(CandidType, Deserialize, Clone)]
 pub struct ChainState {
     pub config: ChainConfig,
     pub roots: VecDeque<Vec<u8>>,

@@ -155,9 +155,9 @@ fn init() {
 }
 
 // get canister's evm address
-#[update(name = "get_canister_evm_addr")]
-#[candid_method(update, rename = "get_canister_evm_addr")]
-async fn get_canister_evm_addr(chain_type: ChainType) -> Result<String, String> {
+#[update(name = "get_canister_addr")]
+#[candid_method(update, rename = "get_canister_addr")]
+async fn get_canister_addr(chain_type: ChainType) -> Result<String, String> {
     match chain_type {
         ChainType::Evm => match get_eth_addr(None, None, KEY_NAME.to_string()).await {
                 Ok(addr) => { Ok(hex::encode(addr)) },
@@ -254,6 +254,16 @@ fn update_chain(
         }
     });
     Ok(true)
+}
+
+#[query(name = "get_chains")]
+#[candid_method(query, rename = "get_chains")]
+fn get_chains() -> Result<Vec<ChainState>, String> {
+    // add chain config
+    CHAINS.with(|chains| {
+        let chains = chains.borrow();
+        Ok(chains.clone().into_iter().map(|(_id, c)| c).collect())
+    })
 }
 
 // relayer canister call this to check if a message is valid before process_message

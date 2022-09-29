@@ -1,9 +1,24 @@
+type ChainConfig = record {
+  rpc_urls : vec text;
+  omnic_addr : text;
+  chain_id : nat32;
+  chain_type : ChainType;
+  omnic_start_block : nat64;
+};
+type ChainState = record {
+  next_index : nat32;
+  canister_addr : text;
+  config : ChainConfig;
+  roots : vec vec nat8;
+};
 type ChainType = variant { Evm; Solana; Cosmos };
 type Result = variant { Ok : bool; Err : text };
 type Result_1 = variant { Ok : text; Err : text };
+type Result_2 = variant { Ok : vec ChainState; Err : text };
 service : () -> {
   add_chain : (nat32, vec text, text, nat64) -> (Result);
-  get_canister_evm_addr : (ChainType) -> (Result_1);
+  get_canister_addr : (ChainType) -> (Result_1);
+  get_chains : () -> (Result_2) query;
   get_latest_root : (nat32) -> (Result_1) query;
   is_valid : (vec nat8, vec vec nat8, nat32) -> (Result) query;
   process_message : (vec nat8, vec vec nat8, nat32) -> (Result);
