@@ -1,10 +1,11 @@
 use std::collections::VecDeque;
 use ic_web3::types::H256;
-use crate::config::ChainConfig;
+use crate::config::{ChainConfig, ChainType};
 
 pub struct ChainState {
     pub config: ChainConfig,
     pub roots: VecDeque<Vec<u8>>,
+    pub canister_addr: String, // the address controlled by the proxy canister on this chain
     // pub txs: Vec<Message>, // outgoging txs
 }
 
@@ -15,11 +16,20 @@ impl ChainState {
         ChainState {
             config: chain_config,
             roots: VecDeque::new(),
+            canister_addr: "".into(),
         }
     }
 
     pub fn update_config(&mut self, new_config: ChainConfig) {
         self.config = new_config;
+    }
+
+    pub fn chain_type(&self) -> ChainType {
+        self.config.chain_type.clone()
+    }
+
+    pub fn set_canister_addr(&mut self, addr: String) {
+        self.canister_addr = addr;
     }
 
     pub fn insert_root(&mut self, r: H256) {

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 
 use ic_web3::types::H256;
+use ic_web3::ic::get_eth_addr;
 
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
 use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
@@ -17,12 +18,13 @@ use ic_cdk::export::Principal;
 use ic_cron::types::Iterations;
 
 use accumulator::{TREE_DEPTH, merkle_root_from_branch};
-use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState};
+use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
 use omnic::Decode;
 use omnic::HomeContract;
 
 ic_cron::implement_cron!();
 
+const KEY_NAME: &str = "dfx_test_key";
 const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 30; //60 * 5; // 5 min in nano second
 const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 5; //60; // 1 min in nano second
 
@@ -112,7 +114,7 @@ struct StateInfo {
 impl StateInfo {
     pub fn default() -> StateInfo {
         StateInfo {
-            owner: Principal::management_canister()
+            owner: Principal::management_canister(),
         }
     }
 
@@ -152,6 +154,40 @@ fn init() {
     ).unwrap();
 }
 
+// get canister's evm address
+#[update(name = "get_canister_evm_addr")]
+#[candid_method(update, rename = "get_canister_evm_addr")]
+async fn get_canister_evm_addr(chain_type: ChainType) -> Result<String, String> {
+    match chain_type {
+        EVM => match get_eth_addr(None, None, KEY_NAME.to_string()).await {
+                Ok(addr) => { Ok(hex::encode(addr)) },
+                Err(e) => { Err(e) },
+            },
+        _ => Err("chain type not supported yet!".into()),
+    }
+}
+
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "set_canister_addrs")]
+async fn set_canister_addrs(chain_type: ChainType) -> Result<bool, String> {
+    let evm_addr = get_eth_addr(None, None, KEY_NAME.to_string())
+        .await
+        .map(|v| hex::encode(v))
+        .map_err(|e| format!("calc evm address failed: {:?}", e))?;
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        for (id, chain) in chains.iter_mut() {
+            match chain.chain_type() {
+                EVM => chain.set_canister_addr(evm_addr.clone()),
+                _ => {
+                    ic_cdk::println!("chain type not supported yet!");
+                }
+            }
+        }
+    });
+    Ok(true)
+}
+
 #[update(guard = "is_authorized")]
 #[candid_method(update, rename = "add_chain")]
 fn add_chain(
@@ -166,6 +202,7 @@ fn add_chain(
         if !chains.contains_key(&chain_id) {
             chains.insert(chain_id, ChainState::new(
                 ChainConfig::new(
+                    ChainType::EVM,
                     chain_id,
                     urls,
                     omnic_addr.into(),
@@ -207,6 +244,7 @@ fn update_chain(
         if chains.contains_key(&chain_id) {
             chains.insert(chain_id, ChainState::new(
                 ChainConfig::new(
+                    ChainType::EVM,
                     chain_id,
                     urls,
                     omnic_addr.into(),
@@ -291,7 +329,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         }
     } else {
         // todo! send tx to chain
-        // client.dispatch_message(m)
+        // client.dispatch_message(caller, m)
     }
     Ok(true)
 }

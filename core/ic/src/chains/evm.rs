@@ -14,14 +14,6 @@ use crate::traits::chain::HomeContract;
 const OMNIC_ABI: &[u8] = include_bytes!("./omnic.abi");
 
 pub struct EVMChainClient {
-    // chain_id: u32,
-    // rpc_url: String,
-    // omnic_addr: String,
-
-    // // ic http client config
-    // max_resp_bytes: u64,
-    // cycles_per_call: u64,
-
     w3: Web3<ICHttp>,
     contract: Contract<ICHttp>,
 }
@@ -52,8 +44,33 @@ impl EVMChainClient {
 
 #[async_trait]
 impl HomeContract for EVMChainClient {
-    async fn dispatch_message(&self, msg: &Message) -> Result<Option<H256>, OmnicError> {
+    async fn dispatch_message(&self, caller: String, msg: &Message) -> Result<Option<H256>, OmnicError> {
         unimplemented!();
+        // // add nonce to options
+        // let tx_count = w3.eth()
+        //     .transaction_count(canister_addr, None)
+        //     .await
+        //     .map_err(|e| format!("get tx count error: {}", e))?;
+        // // get gas_price
+        // let gas_price = w3.eth()
+        //     .gas_price()
+        //     .await
+        //     .map_err(|e| format!("get gas_price error: {}", e))?;
+        // // legacy transaction type is still ok
+        // let options = Options::with(|op| { 
+        //     op.nonce = Some(tx_count);
+        //     op.gas_price = Some(gas_price);
+        //     op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
+        // });
+        // let to_addr = Address::from_str(&addr).unwrap();
+        // let txhash = contract
+        //     .signed_call("transfer", (to_addr, value,), options, key_info, CHAIN_ID)
+        //     .await
+        //     .map_err(|e| format!("token transfer failed: {}", e))?;
+
+        // ic_cdk::println!("txhash: {}", hex::encode(txhash));
+
+        // Ok(format!("{}", hex::encode(txhash)))
     }
 
     async fn get_latest_root(&self, height: Option<u64>) -> Result<H256, OmnicError> {
