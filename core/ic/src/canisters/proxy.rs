@@ -307,55 +307,66 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         format!("parse message from bytes failed: {:?}", e)
     })?;
 
-    let sender = m.sender.as_bytes();
     if m.destination == 0 {
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
         ic_cdk::println!("recipient: {:?}", Principal::to_text(&recipient));
-        // call ic recipient canister
-        let ret: CallResult<(Result<bool, String>,)> = 
-            call(recipient, "handle_message", (m.origin, m.nonce, sender, m.body, )).await;
-        match ret {
-            Ok((res, )) => {
-                match res {
-                    Ok(_) => {
-                        ic_cdk::println!("handle_message success!");
-                    },
-                    Err(err) => {
-                        ic_cdk::println!("handle_message failed: {:?}", err);
-                    }
-                }
-            },
-            Err((_code, msg)) => {
-                ic_cdk::println!("call app canister failed: {:?}", (_code, msg));
-            }
-        }
+        call_to_canister(recipient, &m).await
     } else {
         // send tx to dst chain
-        let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
-            let chains = chains.borrow();
-            match chains.get(&m.destination) {
-                Some(c) => (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone()),
-                None => {
-                    ic_cdk::println!("chain {:?} not exist!", m.destination);
-                    ("".into(), "".into(), "".into())
+        call_to_chain(m.destination, message).await
+    }
+}
+
+async fn call_to_canister(recipient: Principal, m: &Message) -> Result<bool, String> {
+    // call ic recipient canister
+    let ret: CallResult<(Result<bool, String>,)> = 
+        call(recipient, "handle_message", (m.origin, m.nonce, m.sender.as_bytes(), m.body.clone(), )).await;
+    match ret {
+        Ok((res, )) => {
+            match res {
+                Ok(_) => {
+                    ic_cdk::println!("handle_message success!");
+                },
+                Err(err) => {
+                    ic_cdk::println!("handle_message failed: {:?}", err);
                 }
             }
-        });
-        if caller == "" || omnic_addr == "" {
-            return Err("caller address is empty".into());
+            // message delivered
+            Ok(true)
+        },
+        Err((_code, msg)) => {
+            ic_cdk::println!("call app canister failed: {:?}", (_code, msg.clone()));
+            // message delivery failed
+            Err(format!("call app canister failed: {:?}", (_code, msg)))
         }
-        let client = EVMChainClient::new(rpc.clone(), omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL)
-            .map_err(|e| format!("init EVMChainClient failed: {:?}", e))?;
-        client
-            .dispatch_message(caller, m.destination, message)
-            .await
-            .map(|txhash| {
-                ic_cdk::println!("dispatch_message txhash: {:?}", hex::encode(txhash))
-            })
-            .map_err(|e| format!("dispatch_message failed: {:?}", e))?;
     }
-    Ok(true)
+}
+
+async fn call_to_chain(dst_chain: u32, msg_bytes: Vec<u8>) -> Result<bool, String> {
+    let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
+        let chains = chains.borrow();
+        match chains.get(&dst_chain) {
+            Some(c) => (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone()),
+            None => {
+                ic_cdk::println!("chain {:?} not exist!", dst_chain);
+                ("".into(), "".into(), "".into())
+            }
+        }
+    });
+    if caller == "" || omnic_addr == "" {
+        return Err("caller address is empty".into());
+    }
+    let client = EVMChainClient::new(rpc.clone(), omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL)
+        .map_err(|e| format!("init EVMChainClient failed: {:?}", e))?;
+    client
+        .dispatch_message(caller, dst_chain, msg_bytes)
+        .await
+        .map(|txhash| {
+            ic_cdk::println!("dispatch_message txhash: {:?}", hex::encode(txhash));
+            true
+        })
+        .map_err(|e| format!("dispatch_message failed: {:?}", e))
 }
 
 // TODO: aggregate roots from multiple different rpc providers
