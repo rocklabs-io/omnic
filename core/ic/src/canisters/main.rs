@@ -356,7 +356,7 @@ async fn fetch_root() {
                                     if s.root != r {
                                         State::Fail
                                     } else {
-                                        if idx + 1 == state.rpc_urls.len() {
+                                        if idx + 1 == state.rpc_count() {
                                             State::End
                                         } else {
                                             State::Fetching(idx + 1)
