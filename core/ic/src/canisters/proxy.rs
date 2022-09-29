@@ -25,7 +25,7 @@ use omnic::consts::KEY_NAME;
 
 ic_cron::implement_cron!();
 
-const  MAX_RESP_BYTES: Option<u64> = Some(300);
+const MAX_RESP_BYTES: Option<u64> = Some(300);
 const CYCLES_PER_CALL: Option<u64> = None;
 
 const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 30; //60 * 5; // 5 min in nano second
@@ -158,8 +158,10 @@ fn init() {
 #[update(name = "get_canister_addr")]
 #[candid_method(update, rename = "get_canister_addr")]
 async fn get_canister_addr(chain_type: ChainType) -> Result<String, String> {
+    let cid = ic_cdk::id();
+    let derivation_path = vec![cid.clone().as_slice().to_vec()];
     match chain_type {
-        ChainType::Evm => match get_eth_addr(None, None, KEY_NAME.to_string()).await {
+        ChainType::Evm => match get_eth_addr(Some(cid), Some(derivation_path), KEY_NAME.to_string()).await {
                 Ok(addr) => { Ok(hex::encode(addr)) },
                 Err(e) => { Err(e) },
             },
@@ -170,7 +172,9 @@ async fn get_canister_addr(chain_type: ChainType) -> Result<String, String> {
 #[update(guard = "is_authorized")]
 #[candid_method(update, rename = "set_canister_addrs")]
 async fn set_canister_addrs() -> Result<bool, String> {
-    let evm_addr = get_eth_addr(None, None, KEY_NAME.to_string())
+    let cid = ic_cdk::id();
+    let derivation_path = vec![cid.clone().as_slice().to_vec()];
+    let evm_addr = get_eth_addr(Some(cid), Some(derivation_path), KEY_NAME.to_string())
         .await
         .map(|v| hex::encode(v))
         .map_err(|e| format!("calc evm address failed: {:?}", e))?;
