@@ -106,9 +106,6 @@ impl StateMachine {
     }
 }
 
-// TODO: record current processed leaf_index for each chain, to prevent replay attack
-// each new message coming in shoud satisfy: msg.leaf_index == state.get_current_leaf_index(chain_id) + 1
-
 #[derive(CandidType, Clone)]
 struct StateInfo {
     owner: Principal,
@@ -306,22 +303,22 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
     let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
         format!("parse message from bytes failed: {:?}", e)
     })?;
-
+    // check leaf_index == next_index, then bump next_index
     let next_index = CHAINS.with(|chains| {
         let chains = chains.borrow();
         let c = chains.get(&m.origin).expect("chain not found");
         c.next_index()
     });
     if next_index != leaf_index {
-        ic_cdk::println!("next_index: {} != leaf_index: {} + 1, ", next_index, leaf_index);
-        return Err(format!("next_index: {} != leaf_index: {} + 1, ", next_index, leaf_index));
+        ic_cdk::println!("next_index: {} != leaf_index: {}, ", next_index, leaf_index);
+        return Err(format!("next_index: {} != leaf_index: {}, ", next_index, leaf_index));
     }
     CHAINS.with(|chains| {
         let mut chains = chains.borrow_mut();
         let c = chains.get_mut(&m.origin).expect("chain not found");
         c.bump_index();
     });
-
+    // send msg to destination
     if m.destination == 0 {
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
