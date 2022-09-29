@@ -5,6 +5,7 @@ use crate::config::{ChainConfig, ChainType};
 pub struct ChainState {
     pub config: ChainConfig,
     pub roots: VecDeque<Vec<u8>>,
+    pub next_index: u32, // leaf_index for next message
     pub canister_addr: String, // the address controlled by the proxy canister on this chain
     // pub txs: Vec<Message>, // outgoging txs
 }
@@ -16,6 +17,7 @@ impl ChainState {
         ChainState {
             config: chain_config,
             roots: VecDeque::new(),
+            next_index: 0,
             canister_addr: "".into(),
         }
     }
@@ -30,6 +32,14 @@ impl ChainState {
 
     pub fn set_canister_addr(&mut self, addr: String) {
         self.canister_addr = addr;
+    }
+
+    pub fn bump_index(&mut self) {
+        self.next_index += 1;
+    }
+
+    pub fn next_index(&self) -> u32 {
+        self.next_index
     }
 
     pub fn insert_root(&mut self, r: H256) {

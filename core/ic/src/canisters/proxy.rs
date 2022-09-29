@@ -307,6 +307,21 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         format!("parse message from bytes failed: {:?}", e)
     })?;
 
+    let next_index = CHAINS.with(|chains| {
+        let chains = chains.borrow();
+        let c = chains.get(&m.origin).expect("chain not found");
+        c.next_index()
+    });
+    if next_index != leaf_index {
+        ic_cdk::println!("next_index: {} != leaf_index: {} + 1, ", next_index, leaf_index);
+        return Err(format!("next_index: {} != leaf_index: {} + 1, ", next_index, leaf_index));
+    }
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        let c = chains.get_mut(&m.origin).expect("chain not found");
+        c.bump_index();
+    });
+
     if m.destination == 0 {
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
@@ -346,13 +361,8 @@ async fn call_to_canister(recipient: Principal, m: &Message) -> Result<bool, Str
 async fn call_to_chain(dst_chain: u32, msg_bytes: Vec<u8>) -> Result<bool, String> {
     let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
         let chains = chains.borrow();
-        match chains.get(&dst_chain) {
-            Some(c) => (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone()),
-            None => {
-                ic_cdk::println!("chain {:?} not exist!", dst_chain);
-                ("".into(), "".into(), "".into())
-            }
-        }
+        let c = chains.get(&dst_chain).expect("chain not found");
+        (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
     });
     if caller == "" || omnic_addr == "" {
         return Err("caller address is empty".into());
