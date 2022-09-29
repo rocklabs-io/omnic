@@ -1,6 +1,6 @@
 use ic_web3::types::{H256, Log};
 use ic_web3::ethabi::{decode, Event, EventParam, ParamType, RawLog, Token, Error};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use crate::{types::Message, OmnicError};
 use crate::OmnicError::LogDecodeError;
 use crate::traits::encode::Decode;
@@ -28,7 +28,7 @@ impl AsRef<Message> for RawMessage {
     }
 }
 
-fn decode_body(data: &[u8]) -> Result<Vec<Token>, Error> {
+fn _decode_body(data: &[u8]) -> Result<Vec<Token>, Error> {
     let types = vec![
         ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Uint(32), 
         ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Bool,
@@ -66,8 +66,8 @@ impl TryFrom<Log> for RawMessage {
         
         let msg_hash = res.params.iter().find(|p| p.name == "messageHash").ok_or(LogDecodeError("missing messgaHash".into()))?;
         let leaf_index = res.params.iter().find(|p| p.name == "leafIndex").ok_or(LogDecodeError("missing leafIndex".into()))?;
-        let dst_chain = res.params.iter().find(|p| p.name == "dstChainId").ok_or(LogDecodeError("missing dstChainId".into()))?;
-        let dst_nonce = res.params.iter().find(|p| p.name == "nonce").ok_or(LogDecodeError("missing nonce".into()))?;
+        let _dst_chain = res.params.iter().find(|p| p.name == "dstChainId").ok_or(LogDecodeError("missing dstChainId".into()))?;
+        let _dst_nonce = res.params.iter().find(|p| p.name == "nonce").ok_or(LogDecodeError("missing nonce".into()))?;
         let message = res.params.iter().find(|p| p.name == "message").ok_or(LogDecodeError("missing message".into()))?;
 
         // ic_cdk::println!("msg hash: {:?}", H256::from_slice(&msg_hash.value.clone().into_fixed_bytes().unwrap()));

@@ -21,10 +21,13 @@ use accumulator::{TREE_DEPTH, merkle_root_from_branch};
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
 use omnic::Decode;
 use omnic::HomeContract;
+use omnic::consts::KEY_NAME;
 
 ic_cron::implement_cron!();
 
-const KEY_NAME: &str = "dfx_test_key";
+const  MAX_RESP_BYTES: Option<u64> = Some(300);
+const CYCLES_PER_CALL: Option<u64> = None;
+
 const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 30; //60 * 5; // 5 min in nano second
 const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 5; //60; // 1 min in nano second
 
@@ -159,7 +162,7 @@ fn init() {
 #[candid_method(update, rename = "get_canister_evm_addr")]
 async fn get_canister_evm_addr(chain_type: ChainType) -> Result<String, String> {
     match chain_type {
-        EVM => match get_eth_addr(None, None, KEY_NAME.to_string()).await {
+        ChainType::Evm => match get_eth_addr(None, None, KEY_NAME.to_string()).await {
                 Ok(addr) => { Ok(hex::encode(addr)) },
                 Err(e) => { Err(e) },
             },
@@ -169,16 +172,16 @@ async fn get_canister_evm_addr(chain_type: ChainType) -> Result<String, String> 
 
 #[update(guard = "is_authorized")]
 #[candid_method(update, rename = "set_canister_addrs")]
-async fn set_canister_addrs(chain_type: ChainType) -> Result<bool, String> {
+async fn set_canister_addrs() -> Result<bool, String> {
     let evm_addr = get_eth_addr(None, None, KEY_NAME.to_string())
         .await
         .map(|v| hex::encode(v))
         .map_err(|e| format!("calc evm address failed: {:?}", e))?;
     CHAINS.with(|chains| {
         let mut chains = chains.borrow_mut();
-        for (id, chain) in chains.iter_mut() {
+        for (_id, chain) in chains.iter_mut() {
             match chain.chain_type() {
-                EVM => chain.set_canister_addr(evm_addr.clone()),
+                ChainType::Evm => chain.set_canister_addr(evm_addr.clone()),
                 _ => {
                     ic_cdk::println!("chain type not supported yet!");
                 }
@@ -202,7 +205,7 @@ fn add_chain(
         if !chains.contains_key(&chain_id) {
             chains.insert(chain_id, ChainState::new(
                 ChainConfig::new(
-                    ChainType::EVM,
+                    ChainType::Evm,
                     chain_id,
                     urls,
                     omnic_addr.into(),
@@ -244,7 +247,7 @@ fn update_chain(
         if chains.contains_key(&chain_id) {
             chains.insert(chain_id, ChainState::new(
                 ChainConfig::new(
-                    ChainType::EVM,
+                    ChainType::Evm,
                     chain_id,
                     urls,
                     omnic_addr.into(),
@@ -328,8 +331,29 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
             }
         }
     } else {
-        // todo! send tx to chain
-        // client.dispatch_message(caller, m)
+        // send tx to dst chain
+        let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
+            let chains = chains.borrow();
+            match chains.get(&m.destination) {
+                Some(c) => (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone()),
+                None => {
+                    ic_cdk::println!("chain {:?} not exist!", m.destination);
+                    ("".into(), "".into(), "".into())
+                }
+            }
+        });
+        if caller == "" || omnic_addr == "" {
+            return Err("caller address is empty".into());
+        }
+        let client = EVMChainClient::new(rpc.clone(), omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL)
+            .map_err(|e| format!("init EVMChainClient failed: {:?}", e))?;
+        client
+            .dispatch_message(caller, m.destination, message)
+            .await
+            .map(|txhash| {
+                ic_cdk::println!("dispatch_message txhash: {:?}", hex::encode(txhash))
+            })
+            .map_err(|e| format!("dispatch_message failed: {:?}", e))?;
     }
     Ok(true)
 }
@@ -341,13 +365,10 @@ async fn fetch_root() {
     let state = STATE_MACHINE.with(|s| {
         s.borrow().clone()
     });
-
-    let max_resp_bytes = Some(300);
-    let cycles_per_call = None;
     
     let next_state = match state.sub_state {
         State::Init => {
-            match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), max_resp_bytes, cycles_per_call) {
+            match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
                 Ok(client) => { 
                     match client.get_block_number().await {
                         Ok(h) => {
@@ -369,7 +390,7 @@ async fn fetch_root() {
         },
         State::Fetching(idx) => {
             // query root in block height
-            match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), max_resp_bytes, cycles_per_call) {
+            match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
                 Ok(client) => {
                     let root = client.get_latest_root(Some(state.block_height)).await;
                     ic_cdk::println!("root from {:?}: {:?}", state.rpc_urls[idx], root);
@@ -518,9 +539,9 @@ fn heart_beat() {
 }
 
 /// get the unix timestamp in second
-fn get_time() -> u64 {
-    ic_cdk::api::time() / 1000000000
-}
+// fn get_time() -> u64 {
+//     ic_cdk::api::time() / 1000000000
+// }
 
 fn is_authorized() -> Result<(), String> {
     let user = ic_cdk::api::caller();

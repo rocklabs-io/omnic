@@ -1,12 +1,13 @@
 use ic_web3::Web3;
 use ic_web3::transports::ICHttp;
 use ic_web3::contract::{Contract, Options};
-use ic_web3::types::{H256, Address, BlockNumber, BlockId};
+use ic_web3::types::{U64, H256, Address, BlockNumber, BlockId};
+use ic_web3::ic::KeyInfo;
 
 use std::str::FromStr;
 use async_trait::async_trait;
 
-use crate::types::Message;
+use crate::consts::KEY_NAME;
 use crate::error::OmnicError;
 use crate::error::OmnicError::*;
 use crate::traits::chain::HomeContract;
@@ -28,7 +29,7 @@ impl EVMChainClient {
         let http = ICHttp::new(&rpc_url, max_resp_bytes, cycles_per_call)?;
         let w3 = Web3::new(http);
         let contract_address = Address::from_str(&omnic_addr)
-            .map_err(|e| Other("address decode failed!".into()))?;
+            .map_err(|e| Other(format!("address decode failed: {:?}", e)))?;
         let contract = Contract::from_json(
             w3.eth(),
             contract_address,
@@ -44,33 +45,36 @@ impl EVMChainClient {
 
 #[async_trait]
 impl HomeContract for EVMChainClient {
-    async fn dispatch_message(&self, caller: String, msg: &Message) -> Result<Option<H256>, OmnicError> {
-        unimplemented!();
-        // // add nonce to options
-        // let tx_count = w3.eth()
-        //     .transaction_count(canister_addr, None)
-        //     .await
-        //     .map_err(|e| format!("get tx count error: {}", e))?;
-        // // get gas_price
-        // let gas_price = w3.eth()
-        //     .gas_price()
-        //     .await
-        //     .map_err(|e| format!("get gas_price error: {}", e))?;
-        // // legacy transaction type is still ok
-        // let options = Options::with(|op| { 
-        //     op.nonce = Some(tx_count);
-        //     op.gas_price = Some(gas_price);
-        //     op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
-        // });
-        // let to_addr = Address::from_str(&addr).unwrap();
-        // let txhash = contract
-        //     .signed_call("transfer", (to_addr, value,), options, key_info, CHAIN_ID)
-        //     .await
-        //     .map_err(|e| format!("token transfer failed: {}", e))?;
+    async fn dispatch_message(&self, caller: String, dst_chain: u32, msg_bytes: Vec<u8>) -> Result<H256, OmnicError> {
+        let caller = Address::from_str(&caller)
+            .map_err(|e| Other(format!("address decode failed: {:?}", e)))?;
+        // ecdsa key info
+        let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
+        let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
+        // add nonce to options
+        let tx_count = self.w3.eth()
+            .transaction_count(caller, None)
+            .await
+            .map_err(|e| ClientError(format!("get tx count error: {}", e)))?;
+        // get gas_price
+        let gas_price = self.w3.eth()
+            .gas_price()
+            .await
+            .map_err(|e| ClientError(format!("get gas_price error: {}", e)))?;
+        // legacy transaction type is still ok
+        let options = Options::with(|op| { 
+            op.nonce = Some(tx_count);
+            op.gas_price = Some(gas_price);
+            op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
+        });
+        let txhash = self.contract
+            .signed_call("processMessage", (msg_bytes,), options, key_info, dst_chain as u64)
+            .await
+            .map_err(|e| ClientError(format!("processMessage failed: {}", e)))?;
 
-        // ic_cdk::println!("txhash: {}", hex::encode(txhash));
+        ic_cdk::println!("txhash: {}", hex::encode(txhash));
 
-        // Ok(format!("{}", hex::encode(txhash)))
+        Ok(txhash)
     }
 
     async fn get_latest_root(&self, height: Option<u64>) -> Result<H256, OmnicError> {
@@ -87,7 +91,7 @@ impl HomeContract for EVMChainClient {
             .await;
         match root {
             Ok(r) => Ok(r),
-            Err(e) => Err(Other(format!("get root error: {:?}", e)))
+            Err(e) => Err(ClientError(format!("get root error: {:?}", e)))
         }
     }
 
@@ -95,6 +99,6 @@ impl HomeContract for EVMChainClient {
         self.w3.eth().block_number()
             .await
             .map(|v| v.as_u64())
-            .map_err(|e| Other(format!("get block number error: {:?}", e)))
+            .map_err(|e| ClientError(format!("get block number error: {:?}", e)))
     }
 }

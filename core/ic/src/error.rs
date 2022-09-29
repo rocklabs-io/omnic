@@ -19,7 +19,7 @@ pub enum OmnicError {
     DBError(String),
 
     #[error("home error: `{0}`")]
-    HomeError(String),
+    ClientError(String),
 
     #[error(transparent)]
     RPCError(#[from] ic_web3::error::Error),

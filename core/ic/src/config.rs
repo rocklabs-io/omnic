@@ -1,9 +1,8 @@
 use candid::{Deserialize, CandidType};
-use ic_web3::types::H256;
 
 #[derive(CandidType, Deserialize, Clone)]
 pub enum ChainType {
-    EVM,
+    Evm,
     Cosmos,
     Solana,
 }

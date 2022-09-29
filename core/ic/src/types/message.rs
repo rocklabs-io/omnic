@@ -72,7 +72,7 @@ impl Decode for Message {
         reader.read_exact(recipient.as_mut())?;
 
         let mut v = [0u8; 1];
-        reader.read_exact(&mut v);
+        reader.read_exact(&mut v)?;
         let wait_optimistic = v[0] == 1; //u32::from_be_bytes(v) == 1;
 
         let mut body = vec![];

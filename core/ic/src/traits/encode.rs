@@ -1,6 +1,5 @@
 use crate::error::OmnicError;
 use ic_web3::types::H256;
-use std::convert::TryFrom;
 
 /// Simple trait for types with a canonical encoding
 pub trait Encode {
