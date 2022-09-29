@@ -12,7 +12,7 @@ edition = "2018"
 
 [[bin]]
 name = "proxy"
-path = "src/canisters/proxy.rs"
+path = "src/canisters/main.rs"
 
 [[bin]]
 name = "demo"
