@@ -19,6 +19,7 @@ import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 contract DemoApp {
 
+    address owner;
     address omnicAddr;
 
     // ============ Events  ============
@@ -34,8 +35,21 @@ contract DemoApp {
         _;
     }
 
+    modifier onlyOwner() {
+        require(msg.sender == owner, "!owner");
+        _;
+    }
+
     constructor(address omnic) {
+        owner = msg.sender;
         omnicAddr = omnic;
+    }
+
+    function setOmnicContractAddr(address _newAddr)
+        public
+        onlyOwner
+    {
+        omnicAddr = _newAddr;
     }
 
     function sendMessage(
