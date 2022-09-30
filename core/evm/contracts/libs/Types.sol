@@ -26,7 +26,7 @@ library Types {
         bytes memory _payload
     ) internal pure returns (bytes memory) {
         return
-            abi.encodePacked(
+            abi.encode(
                 _srcChainId,
                 _srcSenderAddress,
                 _nonce,

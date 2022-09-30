@@ -1,7 +1,7 @@
 use ic_web3::Web3;
 use ic_web3::transports::ICHttp;
 use ic_web3::contract::{Contract, Options};
-use ic_web3::types::{U64, H256, Address, BlockNumber, BlockId};
+use ic_web3::types::{U64, U256, H256, Address, BlockNumber, BlockId};
 use ic_web3::ic::KeyInfo;
 
 use std::str::FromStr;
@@ -63,10 +63,13 @@ impl HomeContract for EVMChainClient {
             .map_err(|e| ClientError(format!("get gas_price error: {}", e)))?;
         // legacy transaction type is still ok
         let options = Options::with(|op| { 
+            op.gas = Some(U256::from(100000));
             op.nonce = Some(tx_count);
-            op.gas_price = Some(gas_price);
-            op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
+            // op.gas_price = Some(gas_price);
+            op.gas_price = Some(U256::from(20));
+            // op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
         });
+        ic_cdk::println!("gas price: {:?}", gas_price);
         let txhash = self.contract
             .signed_call("processMessage", (msg_bytes,), options, key_info, dst_chain as u64)
             .await

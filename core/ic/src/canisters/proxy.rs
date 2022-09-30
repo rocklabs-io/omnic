@@ -28,8 +28,8 @@ ic_cron::implement_cron!();
 const MAX_RESP_BYTES: Option<u64> = Some(300);
 const CYCLES_PER_CALL: Option<u64> = None;
 
-const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 30; //60 * 5; // 5 min in nano second
-const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 5; //60; // 1 min in nano second
+const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 15; //60 * 5; // 5 min in nano second
+const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 3; //60; // 1 min in nano second
 
 #[derive(CandidType, Deserialize, Clone)]
 enum Task {

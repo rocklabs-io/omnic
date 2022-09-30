@@ -46,7 +46,9 @@ module.exports = {
     },
 	mumbai: { // polygon mumbai testnet
       url: `https://polygon-mumbai.g.alchemy.com/v2/${alchemyKey}`,
-      accounts: [testPrivKey]
+      accounts: [testPrivKey],
+      gas: 100000,
+      gasPrice: 10,
     },
     mainnet: {
       url: `https://mainnet.infura.io/v3/${infuraKey}`,

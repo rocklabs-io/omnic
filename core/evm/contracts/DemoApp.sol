@@ -57,7 +57,7 @@ contract DemoApp {
         bytes32 _recipientAddress,
         bool _waitOptimistic, // customized
         bytes memory _payload
-    ) {
+    ) public {
         // send message to dst chain, call omnic contract
         Omnic(omnicAddr).sendMessage(
             _dstChainId,
