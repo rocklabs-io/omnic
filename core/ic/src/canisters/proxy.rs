@@ -143,6 +143,7 @@ fn init() {
     });
 
     // TODO: should we move this to a separate function, call this after chains are added?
+    // yvon: it's ok too. for now I just make main state not go to FETCHING when chains is empty
     // set up cron job
     cron_enqueue(
         Task::FetchRoots, 
@@ -498,7 +499,9 @@ async fn fetch_roots() {
         State::Init => {
             STATE_MACHINE.with(|s| {
                 let mut state = s.borrow_mut();
-                state.state = State::Fetching(0);
+                if state.chain_ids.len() > 0 {
+                    state.state = State::Fetching(0);
+                }
             });
         }
         State::Fetching(idx) => {
