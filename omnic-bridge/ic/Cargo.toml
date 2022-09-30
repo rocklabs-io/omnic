@@ -23,6 +23,8 @@ derive_more = "0.99.1"
 ic-web3 = { git = "https://github.com/rocklabs-io/ic-web3" }
 ic-cron = "0.7.0"
 candid = "0.7.4"
+ic-kit = "0.4.3"
+assert-panic = "1.0.1"
 ic-cdk = "0.5.1"
 ic-cdk-macros = "0.5.1"
 serde = { version = "1.0.137", features = ["derive"]}

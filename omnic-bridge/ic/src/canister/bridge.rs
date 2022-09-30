@@ -72,7 +72,7 @@ impl WrapperTokenAddr {
         self.wrapper_tokens.contains_key(&pool_id)
     }
 
-    pub fn add_wrapper_tokene_addr(&mut self, pool_id: Nat, wrapper_canister_token: String) {
+    pub fn add_wrapper_token_addr(&mut self, pool_id: Nat, wrapper_canister_token: String) {
         self.wrapper_tokens.entry(pool_id).or_insert(wrapper_canister_token);
     }
 
@@ -355,9 +355,9 @@ async fn send_token(chain_id: u32, token_addr: Vec<u8>, addr: Vec<u8>, value: Ve
 #[update(name = "create_pool")]
 #[candid_method(update, rename = "createPool")]
 fn create_pool(src_chain: u32, src_pool_id: Nat) -> Result<bool> {
-    let caller: Principal = ic_cdk::caller();
+    // let caller: Principal = ic_cdk::caller();
     let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert_eq!(caller, owner);
+    // assert_eq!(caller, owner);
 
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
@@ -368,6 +368,17 @@ fn create_pool(src_chain: u32, src_pool_id: Nat) -> Result<bool> {
             .map_err(|e| format!("create pool failed: {}", e))?;
         r.add_pool_id(src_chain, src_pool_id)
             .map_err(|e| format!("create pool failed: {}", e))
+    })
+}
+
+#[query(name = "get_pool_id")]
+#[candid_method(query, rename = "get_pool_id")]
+fn get_pool_id(src_chain: u32, src_pool_id: Nat) -> Result<Nat> {
+
+    ROUTER.with(|router| {
+        let r = router.borrow();
+        r.get_pool_id(src_chain, src_pool_id)
+            .map_err(|e| format!("failed to get pool id: {:?}", e))
     })
 }
 
@@ -453,6 +464,52 @@ fn is_bridge_addr_exist(src_chain: u32) -> Result<bool> {
     })
 }
 
+#[update(name = "add_wrapper_token_addr")]
+#[candid_method(update, rename = "add_wrapper_token_addr")]
+fn add_wrapper_token_addr(pool_id: Nat, wrapper_token_addr: String) -> Result<bool> {
+    // let caller: Principal = ic_cdk::caller();
+    // let owner: Principal = Principal::from_text(OWNER).unwrap();
+    // assert_eq!(caller, owner);
+
+    WRAPPER_TOKENS.with(|wrapper| {
+        let mut w = wrapper.borrow_mut();
+        w.add_wrapper_token_addr(pool_id, wrapper_token_addr);
+        Ok(true)
+    })
+}
+
+#[update(name = "remove_wrapper_token_addr")]
+#[candid_method(update, rename = "remove_wrapper_token_addr")]
+fn remove_wrapper_token_addr(pool_id: Nat) -> Result<String> {
+    let caller: Principal = ic_cdk::caller();
+    let owner: Principal = Principal::from_text(OWNER).unwrap();
+    assert_eq!(caller, owner);
+
+    WRAPPER_TOKENS.with(|wrapper| {
+        let mut w = wrapper.borrow_mut();
+        w.remove_wrapper_token_addr(pool_id).map_err(|e| format!("remove wrapper token addr failed: {}", e))
+    })
+}
+
+#[query(name = "get_wrapper_token_addr")]
+#[candid_method(query, rename = "get_wrapper_token_addr")]
+fn get_wrapper_token_addr(pool_id: Nat) -> Result<String> {
+    WRAPPER_TOKENS.with(|wrapper| {
+        let w = wrapper.borrow();
+        w.get_wrapper_token_addr(pool_id.clone())
+            .map_err(|_| format!("not wrapper token address in {} chain", pool_id))
+    })
+}
+
+#[query(name = "is_wrapper_token_exist")]
+#[candid_method(query, rename = "is_wrapper_token_exist")]
+fn is_wrapper_token_exist(pool_id: Nat) -> Result<bool> {
+    WRAPPER_TOKENS.with(|wrapper| {
+        let w = wrapper.borrow();
+        Ok(w.is_wrapper_token_exist(pool_id))
+    })
+}
+
 #[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
     // The line below generates did types and service definition from the
@@ -464,3 +521,40 @@ fn main() {
 
 #[cfg(any(target_arch = "wasm32", test))]
 fn main() {}
+
+
+// the test should be executed in one thread
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_web3::{
+        ethabi::{Token, encode, ParamType, Bytes},
+        types::{Address, U256},
+    };
+    use ic_cdk::export::candid::{Deserialize, CandidType, Nat};
+    use ic_kit::{mock_principals::{alice, bob, john}, MockContext};
+
+    #[test]
+    #[ignore]
+    fn should_create_pool() {
+        let src_chain_id: u32 = 1; //ethereum
+        let src_pool_id: Nat = 0.into(); // fake usdt pool id
+        let res: bool = create_pool(src_chain_id, src_pool_id.clone()).unwrap_or(false);
+        assert!(res);
+        let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
+        assert_eq!(pool_id, Nat::from(0))
+    }
+
+    #[test]
+    #[ignore]
+    fn should_add_wrapper_token_addr() {
+        let src_chain_id: u32 = 1; //ethereum
+        let src_pool_id: Nat = 0.into(); // fake usdt pool id
+        let wrapper_token_addr: &str = "aaaaa-aa"; //wrapper usdt canister address
+        let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
+        let res: bool = add_wrapper_token_addr(pool_id, wrapper_token_addr.to_string()).unwrap_or(false);
+        assert!(res);
+    }
+
+
+}
