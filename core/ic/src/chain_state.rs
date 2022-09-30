@@ -19,7 +19,7 @@ impl ChainState {
         ChainState {
             config: chain_config,
             roots: VecDeque::new(),
-            next_index: 30,
+            next_index: 0,
             canister_addr: "".into(),
         }
     }

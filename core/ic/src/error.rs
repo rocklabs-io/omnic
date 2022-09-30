@@ -12,8 +12,8 @@ pub enum OmnicError {
     #[error(transparent)]
     ABIDecodeError(#[from] ethabi::Error),
 
-    #[error("log decode failed: `{0}`")]
-    LogDecodeError(String),
+    #[error("decode failed: `{0}`")]
+    DecodeError(String),
 
     #[error("db error: `{0}`")]
     DBError(String),

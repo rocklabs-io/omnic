@@ -19,7 +19,6 @@ use ic_cron::types::Iterations;
 
 use accumulator::{TREE_DEPTH, merkle_root_from_branch};
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
-use omnic::Decode;
 use omnic::HomeContract;
 use omnic::consts::KEY_NAME;
 
@@ -276,7 +275,7 @@ fn get_chains() -> Result<Vec<ChainState>, String> {
 fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
     // verify message proof: use proof, message to calculate the merkle root, 
     // check if the merkle root exists in corresponding chain state
-    let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
+    let m = Message::from_raw(message.clone()).map_err(|e| {
         format!("parse message from bytes failed: {:?}", e)
     })?;
     let h = m.to_leaf();
@@ -314,7 +313,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         ic_cdk::println!("message does not pass verification!");
         return Err("message does not pass verification!".into());
     }
-    let m = Message::read_from(&mut message.clone().as_slice()).map_err(|e| {
+    let m = Message::from_raw(message.clone()).map_err(|e| {
         format!("parse message from bytes failed: {:?}", e)
     })?;
     // check leaf_index == next_index, then bump next_index

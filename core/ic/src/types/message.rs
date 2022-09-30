@@ -1,9 +1,9 @@
 
 use candid::Deserialize;
 use ic_web3::types::H256;
-use crate::{utils::keccak256, Decode, Encode, OmnicError};
-
-const PREFIX_LEN: usize = 77;
+use crate::{utils::keccak256, OmnicError};
+use crate::OmnicError::DecodeError;
+use ic_web3::ethabi::{decode, encode, ParamType, Token, Error};
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Message {
@@ -17,74 +17,48 @@ pub struct Message {
     pub destination: u32,
     /// 32  Address in destination convention
     pub recipient: H256,
-    /// 1   Wait for optimistic verification period
-    pub wait_optimistic: bool,
     /// 0+  Message contents
     pub body: Vec<u8>,
 }
 
-/// A partial Nomad message between chains
-#[derive(Debug, Default, Clone)]
-pub struct MessageBody {
-    /// 4   SLIP-44 ID
-    pub destination: u32,
-    /// 32  Address in destination convention
-    pub recipient: H256,
-    /// 0+  Message contents
-    pub body: Vec<u8>,
+fn decode_body(data: &[u8]) -> Result<Vec<Token>, Error> {
+    let types = vec![
+        ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Uint(32), 
+        ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Bytes
+    ];
+    decode(&types, data)
 }
 
-impl Encode for Message {
-    fn write_to<W>(&self, writer: &mut W) -> std::io::Result<usize>
-    where
-        W: std::io::Write,
-    {
-        writer.write_all(&self.origin.to_be_bytes())?;
-        writer.write_all(self.sender.as_ref())?;
-        writer.write_all(&self.nonce.to_be_bytes())?;
-        writer.write_all(&self.destination.to_be_bytes())?;
-        writer.write_all(self.recipient.as_ref())?;
-        let v = if self.wait_optimistic { 1u8 } else { 0u8 };
-        writer.write_all(&v.to_be_bytes())?;
-        writer.write_all(&self.body)?;
-        Ok(PREFIX_LEN + self.body.len())
-    }
+fn encode_body(msg: &Message) -> Vec<u8> {
+    let tokens = [
+        Token::Uint(msg.origin.into()),
+        Token::FixedBytes(msg.sender.as_bytes().to_vec()),
+        Token::Uint(msg.nonce.into()),
+        Token::Uint(msg.destination.into()),
+        Token::FixedBytes(msg.recipient.as_bytes().to_vec()),
+        Token::Bytes(msg.body.clone())
+    ];
+    encode(&tokens)
 }
 
-impl Decode for Message {
-    fn read_from<R>(reader: &mut R) -> Result<Self, OmnicError>
-    where
-        R: std::io::Read,
-    {
-        let mut origin = [0u8; 4];
-        reader.read_exact(&mut origin)?;
+impl Message {
+    pub fn from_raw(raw_bytes: Vec<u8>) -> Result<Self, OmnicError> {
+        let res = decode_body(&raw_bytes)?;
+        let origin = res[0].clone().into_uint().ok_or(DecodeError("get origin failed".into()))?.as_u32();
+        let sender_bytes = res[1].clone().into_fixed_bytes().ok_or(DecodeError("get sender failed".into()))?;
+        let sender = H256::from_slice(&sender_bytes);
+        let nonce = res[2].clone().into_uint().ok_or(DecodeError("get nonce failed".into()))?.as_u32();
+        let destination = res[3].clone().into_uint().ok_or(DecodeError("get destination failed".into()))?.as_u32();
+        let recipient_bytes = res[4].clone().into_fixed_bytes().ok_or(DecodeError("get recipient failed".into()))?;
+        let recipient = H256::from_slice(&recipient_bytes);
+        let body = res[5].clone().into_bytes().ok_or(DecodeError("get body failed".into()))?;
 
-        let mut sender = H256::zero();
-        reader.read_exact(sender.as_mut())?;
-
-        let mut nonce = [0u8; 4];
-        reader.read_exact(&mut nonce)?;
-
-        let mut destination = [0u8; 4];
-        reader.read_exact(&mut destination)?;
-
-        let mut recipient = H256::zero();
-        reader.read_exact(recipient.as_mut())?;
-
-        let mut v = [0u8; 1];
-        reader.read_exact(&mut v)?;
-        let wait_optimistic = v[0] == 1; //u32::from_be_bytes(v) == 1;
-
-        let mut body = vec![];
-        reader.read_to_end(&mut body)?;
-
-        Ok(Self {
-            origin: u32::from_be_bytes(origin),
+        Ok(Message {
+            origin,
             sender,
-            destination: u32::from_be_bytes(destination),
+            nonce,
+            destination,
             recipient,
-            nonce: u32::from_be_bytes(nonce),
-            wait_optimistic,
             body,
         })
     }
@@ -93,7 +67,8 @@ impl Decode for Message {
 impl Message {
     /// Convert the message to a leaf
     pub fn to_leaf(&self) -> H256 {
-        keccak256(&self.to_vec()).into()
+        let raw = encode_body(&self);
+        keccak256(&raw).into()
     }
 }
 
