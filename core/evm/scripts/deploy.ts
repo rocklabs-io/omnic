@@ -4,6 +4,13 @@ const hre = require("hardhat");
 
 const main = async function () {
   let chain = hre.network.name;
+  // let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+
+  // const omnic_contract_addr = config.omnic_evm_contracts[chain];
+  // // const omnic_canister = Principal.fromText("rdmx6-jaaaa-aaaaa-aaadq-cai");
+
+  // const omnic = await ethers.getContractAt("Omnic", omnic_contract_addr);
+
   const Omnic = await ethers.getContractFactory("Omnic");
   const omnic = await Omnic.deploy();
 

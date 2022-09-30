@@ -259,6 +259,22 @@ fn update_chain(
     Ok(true)
 }
 
+// update chain settings
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "set_next_index")]
+fn set_next_index(
+    chain_id: u32, 
+    next_index: u32
+) -> Result<bool, String> {
+    // add chain config
+    CHAINS.with(|chains| {
+        let mut chains = chains.borrow_mut();
+        let mut chain = chains.get_mut(&chain_id).expect("chain id not found!");
+        chain.next_index = next_index;
+    });
+    Ok(true)
+}
+
 #[query(name = "get_chains")]
 #[candid_method(query, rename = "get_chains")]
 fn get_chains() -> Result<Vec<ChainState>, String> {

@@ -21,7 +21,7 @@ async function main() {
 	  let recepient = ethers.utils.hexZeroPad(omnic_contract_addr, 32);
 	  console.log("recepient:", recepient);
 	  let data = ethers.utils.hexlify(ethers.utils.toUtf8Bytes("hello omnic!"));
-	  let tx = await omnic.sendMessage(dest_chain, recepient, false, data);
+	  let tx = await omnic.sendMessage(dest_chain, recepient, data);
 	  console.log("tx:", tx.hash);
   }
 }

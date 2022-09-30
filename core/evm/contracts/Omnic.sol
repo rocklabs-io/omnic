@@ -22,19 +22,9 @@ contract Omnic is QueueManager, Ownable {
 
     // ============ Constants ============
     uint32 public immutable chainId;
-    bytes32 public committedRoot;
-
-    // omnic state
-    enum States {
-        UnInitialized,
-        Active, // contract is good
-        Stopped // fraud occurs in contract
-    }
-    // Current state of contract
-    States public state;
 
     // re-entrancy
-    uint8 internal entered;
+    uint8 internal entered = 1;
 
     // ic canister which is responsible for message management, verification and update
     address public omnicProxyCanisterAddr;
@@ -53,11 +43,6 @@ contract Omnic is QueueManager, Ownable {
 
     modifier onlyProxyCanister() {
         require(msg.sender == omnicProxyCanisterAddr, "!proxyCanisterAddress");
-        _;
-    }
-
-    modifier notStopped() {
-        require(state != States.Stopped, "contract stopped");
         _;
     }
 
@@ -84,17 +69,6 @@ contract Omnic is QueueManager, Ownable {
     // ============== Start ===============
     constructor() {
         chainId = uint32(block.chainid);
-    }
-
-    function initialize(address _proxyCanisterAddr)
-        public
-        initializer
-    {
-        // initialize queue,
-        __QueueManager_initialize();
-        omnicProxyCanisterAddr = _proxyCanisterAddr;
-        entered = 1;
-        state = States.Active;
     }
 
     function sendMessage(

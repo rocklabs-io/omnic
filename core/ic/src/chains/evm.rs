@@ -65,9 +65,11 @@ impl HomeContract for EVMChainClient {
         let options = Options::with(|op| { 
             op.gas = Some(U256::from(100000));
             op.nonce = Some(tx_count);
-            // op.gas_price = Some(gas_price);
-            op.gas_price = Some(U256::from(20));
-            // op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
+            op.gas_price = Some(gas_price);
+            // op.gas_price = Some(U256::from(50));
+            // op.transaction_type = Some(U64::from(2)); //EIP1559_TX_ID
+            // op.max_fee_per_gas = Some(U256::from(1500000028));
+            // op.max_priority_fee_per_gas = Some(U256::from(1500000018));
         });
         ic_cdk::println!("gas price: {:?}", gas_price);
         let txhash = self.contract

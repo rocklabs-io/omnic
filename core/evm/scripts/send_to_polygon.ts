@@ -16,12 +16,12 @@ async function main() {
 
   console.log("calling omnic.sendMessage...");
   let dest_chain = 80001; // send to Polygon testnet
-  let recipient = "0x7E58Df2620ADDa3BA6FF6Aca989343D11807450E";
+  let recipient = "0x0e8F24712bc468170D1B24b64fA0A8a94871553B";
   // let recepient = ethers.utils.hexZeroPad(omnic_canister.toHex(), 32); // send to omnic canister
   let recepient = ethers.utils.hexZeroPad(recipient, 32);
   console.log("recepient:", recepient);
   let data = ethers.utils.hexlify(ethers.utils.toUtf8Bytes("hello omnic demo app on polygon!"));
-  let tx = await omnic.sendMessage(dest_chain, recepient, false, data);
+  let tx = await omnic.sendMessage(dest_chain, recepient, data);
   console.log("tx:", tx);
 }
 
