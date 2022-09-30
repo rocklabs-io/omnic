@@ -6,7 +6,9 @@ omnic proxy canister:
 use std::cell::{RefCell};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::iter::FromIterator;
 
+use ic_cron::task_scheduler::TaskScheduler;
 use ic_web3::types::H256;
 use ic_web3::ic::get_eth_addr;
 
@@ -36,7 +38,7 @@ enum Task {
     FetchRoot
 }
 
-#[derive(Deserialize, Clone, PartialEq, Eq)]
+#[derive(CandidType, Deserialize, Clone, PartialEq, Eq)]
 enum State {
     Init,
     Fetching(usize),
@@ -83,7 +85,18 @@ struct StateMachine {
     rpc_urls: Vec<String>,
     block_height: u64,
     omnic_addr: String,
-    root: H256,
+    roots: HashMap<H256, usize>,
+    state: State,
+    sub_state: State
+}
+
+#[derive(CandidType, Deserialize)]
+struct StateMachineStable {
+    chain_ids: Vec<u32>,
+    rpc_urls: Vec<String>,
+    block_height: u64,
+    omnic_addr: String,
+    roots: Vec<([u8;32], usize)>,
     state: State,
     sub_state: State
 }
@@ -105,7 +118,35 @@ impl StateMachine {
     }
 }
 
-#[derive(CandidType, Clone)]
+impl From<StateMachineStable> for StateMachine {
+    fn from(s: StateMachineStable) -> Self {
+        Self {
+            chain_ids: s.chain_ids,
+            rpc_urls: s.rpc_urls,
+            block_height: s.block_height,
+            omnic_addr: s.omnic_addr,
+            roots: HashMap::from_iter(s.roots.into_iter().map(|(x, y)| (H256::from(x), y))),
+            state: s.state,
+            sub_state: s.sub_state,
+        }
+    }
+}
+
+impl From<StateMachine> for StateMachineStable {
+    fn from(s: StateMachine) -> Self {
+        Self {
+            chain_ids: s.chain_ids,
+            rpc_urls: s.rpc_urls,
+            block_height: s.block_height,
+            omnic_addr: s.omnic_addr,
+            roots: Vec::from_iter(s.roots.into_iter().map(|(x, y)| (x.to_fixed_bytes(), y))),
+            state: s.state,
+            sub_state: s.sub_state,
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone)]
 struct StateInfo {
     owner: Principal,
 }
@@ -142,6 +183,7 @@ fn init() {
     });
 
     // TODO: should we move this to a separate function, call this after chains are added?
+    // yvon: it's ok too. for now I just make main state not go to FETCHING when chains is empty
     // set up cron job
     cron_enqueue(
         Task::FetchRoots, 
@@ -420,7 +462,9 @@ async fn fetch_root() {
                     match client.get_block_number().await {
                         Ok(h) => {
                             STATE_MACHINE.with(|s| {
-                                s.borrow_mut().block_height = h;
+                                let mut state = s.borrow_mut();
+                                state.block_height = h;
+                                state.roots = HashMap::default(); // reset roots in this round
                             });
                             State::Fetching(0)
                         },
@@ -443,31 +487,20 @@ async fn fetch_root() {
                     ic_cdk::println!("root from {:?}: {:?}", state.rpc_urls[idx], root);
                     match root {
                         Ok(r) => {
-                            if idx == 0 {
-                                STATE_MACHINE.with(|s| {
-                                    s.borrow_mut().root = r;
-                                });
-                                if idx + 1 == state.rpc_count() {
-                                    State::End
+                            incr_state_root(r);
+                            STATE_MACHINE.with(|s| {
+                                let s = s.borrow();
+                                let (check_result, _) = check_roots_result(&s.roots, s.rpc_count());
+                                if !check_result {
+                                    State::Fail
                                 } else {
-                                    State::Fetching(idx + 1)
-                                }
-                            } else {
-                                // compare and set the result with root
-                                // if result != state.root, convert to fail
-                                STATE_MACHINE.with(|s| {
-                                    let s = s.borrow();
-                                    if s.root != r {
-                                        State::Fail
+                                    if idx + 1 == state.rpc_count() {
+                                        State::End
                                     } else {
-                                        if idx + 1 == state.rpc_count() {
-                                            State::End
-                                        } else {
-                                            State::Fetching(idx + 1)
-                                        }
+                                        State::Fetching(idx + 1)
                                     }
-                                })
-                            }
+                                }
+                            })
                         },
                         Err(e) => {
                             ic_cdk::println!("query root failed: {}", e);
@@ -513,7 +546,9 @@ async fn fetch_roots() {
         State::Init => {
             STATE_MACHINE.with(|s| {
                 let mut state = s.borrow_mut();
-                state.state = State::Fetching(0);
+                if state.chain_ids.len() > 0 {
+                    state.state = State::Fetching(0);
+                }
             });
         }
         State::Fetching(idx) => {
@@ -547,7 +582,10 @@ async fn fetch_roots() {
                     CHAINS.with(|c| {
                         let mut chain = c.borrow_mut();
                         let chain_state = chain.get_mut(&state.chain_ids[idx as usize]).expect("chain id not exist");
-                        chain_state.insert_root(state.root);
+                        let (check_result, root) = check_roots_result(&state.roots, state.rpc_count());
+                        if check_result {
+                            chain_state.insert_root(root);
+                        }
                     });
                     // update state
                     STATE_MACHINE.with(|s| {
@@ -585,6 +623,45 @@ fn heart_beat() {
     }
 }
 
+#[pre_upgrade]
+fn pre_upgrade() {
+    let chains = CHAINS.with(|c| {
+        c.replace(HashMap::default())
+    });
+    let state_info = STATE_INFO.with(|s| {
+        s.replace(StateInfo::default())
+    });
+    let state_machine = STATE_MACHINE.with(|s| {
+        s.replace(StateMachine::default())
+    });
+    ic_cdk::storage::stable_save((chains, state_info, StateMachineStable::from(state_machine), _take_cron_state())).expect("pre upgrade error");
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    let (chains, 
+        state_info, 
+        state_machine, 
+        cron_state
+    ): (HashMap<u32, 
+        ChainState>, 
+        StateInfo, 
+        StateMachineStable, 
+        Option<TaskScheduler>
+    ) = ic_cdk::storage::stable_restore().expect("post upgrade error");
+    
+    CHAINS.with(|c| {
+        c.replace(chains);
+    });
+    STATE_INFO.with(|s| {
+        s.replace(state_info);
+    });
+    STATE_MACHINE.with(|s| {
+        s.replace(state_machine.into());
+    });
+    _put_cron_state(cron_state);
+}
+
 /// get the unix timestamp in second
 // fn get_time() -> u64 {
 //     ic_cdk::api::time() / 1000000000
@@ -600,6 +677,63 @@ fn is_authorized() -> Result<(), String> {
             Ok(())
         }
     })
+}
+
+fn incr_state_root(root: H256) {
+    STATE_MACHINE.with(|s| {
+        let mut state = s.borrow_mut();
+        state
+            .roots
+            .entry(root)
+            .and_modify(|c| *c += 1)
+            .or_insert(1);
+    })
+}
+
+/// check if the roots match the criteria so far, return the check result and root
+fn check_roots_result(roots: &HashMap<H256, usize>, total_result: usize) -> (bool, H256) {
+    // when rpc fail, the root is vec![0; 32]
+    if total_result <= 2 {
+        // rpc len <= 2, all roots must match
+        if roots.len() != 1 {
+            return (false, H256::zero());
+        } else {
+            let r = roots.keys().next().unwrap().clone();
+            return (r != H256::zero(), r);
+        }
+    } else {
+        // rpc len > 2, half of the rpc result should be the same
+        let limit = total_result / 2;
+        // if contains > n/2 root, def fail
+        let root_count = roots.keys().len();
+        if root_count > limit {
+            return (false, H256::zero());
+        }
+
+        // if #ZERO_HASH > n/2, def fail
+        let error_count = roots.get(&H256::zero()).unwrap_or(&0);
+        if error_count > &limit {
+            return (false, H256::zero());
+        }
+
+        // if the #(root of most count) + #(rest rpc result) <= n / 2, def fail
+        let mut possible_root = H256::zero();
+        let mut possible_count: usize = 0;
+        let mut current_count = 0;
+        for (k ,v ) in roots {
+            if v > &possible_count {
+                possible_count = *v;
+                possible_root = k.clone();
+            }
+            current_count += *v;
+        }
+        if possible_count + (total_result - current_count) <= limit {
+            return (false, H256::zero());
+        }
+
+        // otherwise return true and root of most count
+        return (true, possible_root.clone())
+    }
 }
 
 fn main() {
