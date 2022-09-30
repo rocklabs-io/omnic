@@ -100,7 +100,6 @@ contract Omnic is QueueManager, Ownable {
     function sendMessage(
         uint32 _dstChainId,
         bytes32 _recipientAddress,
-        bool _waitOptimistic, // customized
         bytes memory _payload
     ) public {
         require(_payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
@@ -114,7 +113,6 @@ contract Omnic is QueueManager, Ownable {
             _nonce,
             _dstChainId,
             _recipientAddress,
-            _waitOptimistic,
             _payload
         );
         bytes32 _messageHash = keccak256(_message);
@@ -144,11 +142,10 @@ contract Omnic is QueueManager, Ownable {
             uint32 _nonce,
             uint32 _dstChainId,
             bytes32 _recipientAddress,
-            bool _waitOptimistic,
             bytes memory _payload
         ) = abi.decode(
                 _message,
-                (uint32, bytes32, uint32, uint32, bytes32, bool, bytes)
+                (uint32, bytes32, uint32, uint32, bytes32, bytes)
             );
         bytes32 _messageHash = keccak256(_message);
         require(_dstChainId == chainId, "!destination");
