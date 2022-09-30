@@ -6,7 +6,9 @@ omnic proxy canister:
 use std::cell::{RefCell};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::iter::FromIterator;
 
+use ic_cron::task_scheduler::TaskScheduler;
 use ic_web3::types::H256;
 use ic_web3::ic::get_eth_addr;
 
@@ -37,7 +39,7 @@ enum Task {
     FetchRoot
 }
 
-#[derive(Deserialize, Clone, PartialEq, Eq)]
+#[derive(CandidType, Deserialize, Clone, PartialEq, Eq)]
 enum State {
     Init,
     Fetching(usize),
@@ -89,6 +91,17 @@ struct StateMachine {
     sub_state: State
 }
 
+#[derive(CandidType, Deserialize)]
+struct StateMachineStable {
+    chain_ids: Vec<u32>,
+    rpc_urls: Vec<String>,
+    block_height: u64,
+    omnic_addr: String,
+    roots: Vec<([u8;32], usize)>,
+    state: State,
+    sub_state: State
+}
+
 impl StateMachine {
 
     pub fn add_chain(&mut self, chain_id: u32) {
@@ -106,7 +119,35 @@ impl StateMachine {
     }
 }
 
-#[derive(CandidType, Clone)]
+impl From<StateMachineStable> for StateMachine {
+    fn from(s: StateMachineStable) -> Self {
+        Self {
+            chain_ids: s.chain_ids,
+            rpc_urls: s.rpc_urls,
+            block_height: s.block_height,
+            omnic_addr: s.omnic_addr,
+            roots: HashMap::from_iter(s.roots.into_iter().map(|(x, y)| (H256::from(x), y))),
+            state: s.state,
+            sub_state: s.sub_state,
+        }
+    }
+}
+
+impl From<StateMachine> for StateMachineStable {
+    fn from(s: StateMachine) -> Self {
+        Self {
+            chain_ids: s.chain_ids,
+            rpc_urls: s.rpc_urls,
+            block_height: s.block_height,
+            omnic_addr: s.omnic_addr,
+            roots: Vec::from_iter(s.roots.into_iter().map(|(x, y)| (x.to_fixed_bytes(), y))),
+            state: s.state,
+            sub_state: s.sub_state,
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone)]
 struct StateInfo {
     owner: Principal,
 }
@@ -565,6 +606,45 @@ fn heart_beat() {
             },
         }
     }
+}
+
+#[pre_upgrade]
+fn pre_upgrade() {
+    let chains = CHAINS.with(|c| {
+        c.replace(HashMap::default())
+    });
+    let state_info = STATE_INFO.with(|s| {
+        s.replace(StateInfo::default())
+    });
+    let state_machine = STATE_MACHINE.with(|s| {
+        s.replace(StateMachine::default())
+    });
+    ic_cdk::storage::stable_save((chains, state_info, StateMachineStable::from(state_machine), _take_cron_state())).expect("pre upgrade error");
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    let (chains, 
+        state_info, 
+        state_machine, 
+        cron_state
+    ): (HashMap<u32, 
+        ChainState>, 
+        StateInfo, 
+        StateMachineStable, 
+        Option<TaskScheduler>
+    ) = ic_cdk::storage::stable_restore().expect("post upgrade error");
+    
+    CHAINS.with(|c| {
+        c.replace(chains);
+    });
+    STATE_INFO.with(|s| {
+        s.replace(state_info);
+    });
+    STATE_MACHINE.with(|s| {
+        s.replace(state_machine.into());
+    });
+    _put_cron_state(cron_state);
 }
 
 /// get the unix timestamp in second
