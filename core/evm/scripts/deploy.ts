@@ -11,13 +11,13 @@ const main = async function () {
   console.log("omnic deployed to:", omnic.address);
 
   // recording omnic contract address
-  // let chainId = hre.network.config.chainId;
   let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
   config.omnic_evm_contracts[chain] = omnic.address;
   fs.writeFileSync("config.json", JSON.stringify(config));
 
   // set omnic canister addr to omnic contract
   console.log("setting omnic canister addr...");
+  console.log(config.omnic_canister_addr)
   let tx = await omnic.setOmnicCanisterAddr(config.omnic_canister_addr);
   console.log("tx:", tx);
 }
