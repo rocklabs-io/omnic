@@ -663,8 +663,7 @@ fn post_upgrade() {
         state_info, 
         state_machine, 
         cron_state
-    ): (HashMap<u32, 
-        ChainState>, 
+    ): (HashMap<u32, ChainState>, 
         StateInfo, 
         StateMachineStable, 
         Option<TaskScheduler>

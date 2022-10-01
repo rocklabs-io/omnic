@@ -1,4 +1,4 @@
 
 
 
-pub const KEY_NAME: &str = "dfx_test_key";
+pub const KEY_NAME: &str = "test_key_1";
