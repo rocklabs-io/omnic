@@ -1,5 +1,4 @@
-use candid::Principal;
-use ic_cdk::export::candid::{candid_method, Deserialize, CandidType, Nat};
+use ic_cdk::export::candid::{candid_method, Deserialize, CandidType, Nat, Principal};
 use ic_cdk_macros::{query, update};
 use ic_cdk::api::call::CallResult;
 use ic_web3::ethabi::{decode, ParamType};
@@ -220,11 +219,17 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
             }).map_err(|e| format!("get wrapper token address failed: {}", e))?;
 
             let wrapper_token_addr: Principal = Principal::from_text(&wrapper_token_addr).unwrap();
+            let recipient_str = String::from_utf8(recipient.clone()).unwrap();
+            let properly_trimmed_string = recipient_str.trim_matches(|c: char| c.is_whitespace() || c=='\0');
+                            
+            // the length of slice only be 0, 4, 29
+            let recipient_addr: Principal = Principal::from_slice(properly_trimmed_string.as_bytes());
+
             // DIP20
             let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
                 wrapper_token_addr,
                 "mint",
-                (Principal::from_slice(&recipient), Nat::from(BigUint::from_bytes_le(&buffer2))),
+                (recipient_addr, Nat::from(BigUint::from_bytes_le(&buffer2))),
             ).await;
             match transfer_res {
                 Ok((res, )) => {
@@ -271,6 +276,7 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
         Err("unsupported!".to_string())
     }
 }
+
 
 #[update(name = "burn_wrapper_token")]
 #[candid_method(update, rename = "burnWrapperToken")]
@@ -528,11 +534,13 @@ fn main() {}
 mod tests {
     use super::*;
     use ic_web3::{
-        ethabi::{Token, encode, ParamType, Bytes},
-        types::{Address, U256},
+        ethabi::{Token, encode, ParamType, Bytes, Uint},
+        contract::tokens::{Detokenize, Tokenizable},
+        types::{Address, U256, BytesArray},
     };
     use ic_cdk::export::candid::{Deserialize, CandidType, Nat};
     use ic_kit::{mock_principals::{alice, bob, john}, MockContext};
+    use hex_literal::hex;
 
     fn add_new_pool(src_chain_id: u32, src_pool_id: Nat) -> bool {
         create_pool(src_chain_id, src_pool_id.clone()).unwrap_or(false)
@@ -562,6 +570,31 @@ mod tests {
         let wrapper_token_addr: &str = "aaaaa-aa"; //wrapper usdt canister address
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
         assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
+    }
+
+    #[async_std::test]
+    async fn should_process_swap_message() {
+        let src_chain_id: u32 = 1; //ethereum
+        let src_pool_id: Nat = 0.into(); // fake usdt pool id
+        assert!(add_new_pool(src_chain_id, src_pool_id.clone()));
+        let wrapper_token_addr: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai"; //wrapper usdt canister address
+        let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
+        assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
+
+        let token = vec![
+            3u8.into_token(), // swap
+            1u16.into_token(), // src_chain_id = 1
+            Token::Uint(Uint::from(0)), // src pool id = 0 (fake usdt)
+            0u16.into_token(), // dst chain id = 0 (ic)
+            Token::Uint(Uint::from(0)), // dst pool id = 0 (canister store usdt token from other chains)
+            Token::Uint(Uint::from(10_000_000_000u128)), // token amount = 1000000000
+            Token::FixedBytes("aaaaa-aa".to_string().into_bytes())
+        ];
+        let payload: Bytes = encode(&token);
+        let sender: Vec<u8> = hex!("0000000000000000000000000000000000000000").into();
+
+        let res: bool = process_message(src_chain_id, sender, 1, payload).await.unwrap();
+        assert!(res);
     }
 
 

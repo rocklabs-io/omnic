@@ -36,3 +36,7 @@ tiny-keccak = { version = "2.0.1", features = ["keccak"] }
 thiserror = "*"
 async-trait = { version = "0.1.42", default-features = false }
 ic-storage = { git = "https://github.com/infinity-swap/ic-helpers", package = "ic-storage", tag = "v0.3.4" }
+
+[dev-dependencies]
+hex-literal = "0.3"
+async-std = "1.12.0"
