@@ -17,11 +17,13 @@ type Result_1 = variant { Ok : text; Err : text };
 type Result_2 = variant { Ok : vec ChainState; Err : text };
 service : () -> {
   add_chain : (nat32, vec text, text, nat64) -> (Result);
+  add_owner : (principal) -> ();
   get_canister_addr : (ChainType) -> (Result_1);
   get_chains : () -> (Result_2) query;
   get_latest_root : (nat32) -> (Result_1) query;
   is_valid : (vec nat8, vec vec nat8, nat32) -> (Result) query;
   process_message : (vec nat8, vec vec nat8, nat32) -> (Result);
+  remove_owner : (principal) -> ();
   set_canister_addrs : () -> (Result);
   set_next_index : (nat32, nat32) -> (Result);
   update_chain : (nat32, vec text, text, nat64) -> (Result);
