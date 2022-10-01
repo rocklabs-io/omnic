@@ -488,25 +488,25 @@ async fn fetch_root() {
                     match root {
                         Ok(r) => {
                             incr_state_root(r);
-                            STATE_MACHINE.with(|s| {
-                                let s = s.borrow();
-                                let (check_result, _) = check_roots_result(&s.roots, s.rpc_count());
-                                if !check_result {
-                                    State::Fail
-                                } else {
-                                    if idx + 1 == state.rpc_count() {
-                                        State::End
-                                    } else {
-                                        State::Fetching(idx + 1)
-                                    }
-                                }
-                            })
                         },
                         Err(e) => {
                             ic_cdk::println!("query root failed: {}", e);
-                            State::Fail
+                            incr_state_root(H256::zero());
                         },
-                    }
+                    };
+                    STATE_MACHINE.with(|s| {
+                        let s = s.borrow();
+                        let (check_result, _) = check_roots_result(&s.roots, s.rpc_count());
+                        if !check_result {
+                            State::Fail
+                        } else {
+                            if idx + 1 == state.rpc_count() {
+                                State::End
+                            } else {
+                                State::Fetching(idx + 1)
+                            }
+                        }
+                    })
                 },
                 Err(e) => {
                     ic_cdk::println!("init evm chain client failed: {}", e);
