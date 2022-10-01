@@ -107,15 +107,15 @@ where
         //
         match self.pool_ids.get(&src_chain_id) {
             Some(pools) => match pools.get(&src_pool_id).cloned() {
-                Some(pid) => Ok(pid),
+                Some(pid) => Ok(pid.clone()),
                 None => Err(Error::Pool(PoolError::Invalid(format!(
                     "source chain id is not found: {}",
-                    src_chain_id
+                    src_pool_id
                 )))),
             },
             None => Err(Error::Pool(PoolError::Invalid(format!(
-                "source pool id is not found: {}",
-                src_pool_id
+                "source chain id is not found: {}",
+                src_chain_id
             )))),
         }
     }
@@ -143,11 +143,12 @@ where
     }
 
     pub fn add_pool_id(&mut self, src_chain: u32, src_pool_id: Nat) -> Result<bool> {
-        let pool_id: Nat = self.get_pools_length();
+        let pool_id: Nat = self.get_pools_length() - 1;
         self.pool_ids
             .entry(src_chain)
             .or_default()
-            .insert(src_pool_id, pool_id);
+            .entry(src_pool_id)
+            .or_insert(pool_id);
         Ok(true)
     }
 

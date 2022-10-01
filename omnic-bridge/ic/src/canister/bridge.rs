@@ -534,12 +534,20 @@ mod tests {
     use ic_cdk::export::candid::{Deserialize, CandidType, Nat};
     use ic_kit::{mock_principals::{alice, bob, john}, MockContext};
 
+    fn add_new_pool(src_chain_id: u32, src_pool_id: Nat) -> bool {
+        create_pool(src_chain_id, src_pool_id.clone()).unwrap_or(false)
+    }
+
+    fn add_wrapper_token(pool_id: Nat, wrapper_token_addr: String) -> bool {
+        add_wrapper_token_addr(pool_id, wrapper_token_addr).unwrap_or(false)
+    }
+
     #[test]
     #[ignore]
     fn should_create_pool() {
         let src_chain_id: u32 = 1; //ethereum
         let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        let res: bool = create_pool(src_chain_id, src_pool_id.clone()).unwrap_or(false);
+        let res: bool = add_new_pool(src_chain_id, src_pool_id.clone());
         assert!(res);
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
         assert_eq!(pool_id, Nat::from(0))
@@ -550,10 +558,10 @@ mod tests {
     fn should_add_wrapper_token_addr() {
         let src_chain_id: u32 = 1; //ethereum
         let src_pool_id: Nat = 0.into(); // fake usdt pool id
+        assert!(add_new_pool(src_chain_id, src_pool_id.clone()));
         let wrapper_token_addr: &str = "aaaaa-aa"; //wrapper usdt canister address
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
-        let res: bool = add_wrapper_token_addr(pool_id, wrapper_token_addr.to_string()).unwrap_or(false);
-        assert!(res);
+        assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
     }
 
 
