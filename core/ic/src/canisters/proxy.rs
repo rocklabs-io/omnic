@@ -4,7 +4,7 @@ omnic proxy canister:
 */
 
 use std::cell::{RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::iter::FromIterator;
 
@@ -148,22 +148,26 @@ impl From<StateMachine> for StateMachineStable {
 
 #[derive(CandidType, Deserialize, Clone)]
 struct StateInfo {
-    owner: Principal,
+    owners: HashSet<Principal>,
 }
 
 impl StateInfo {
     pub fn default() -> StateInfo {
         StateInfo {
-            owner: Principal::management_canister(),
+            owners: HashSet::default(),
         }
     }
 
-    pub fn set_owner(&mut self, owner: Principal) {
-        self.owner = owner;
+    pub fn add_owner(&mut self, owner: Principal) {
+        self.owners.insert(owner);
+    }
+
+    pub fn delete_owner(&mut self, owner: Principal) {
+        self.owners.remove(&owner);
     }
 
     pub fn is_owner(&self, user: Principal) -> bool {
-        self.owner == user
+        self.owners.contains(&user)
     }
 }
 
@@ -179,7 +183,7 @@ fn init() {
     let caller = ic_cdk::api::caller();
     STATE_INFO.with(|info| {
         let mut info = info.borrow_mut();
-        info.set_owner(caller);
+        info.add_owner(caller);
     });
 
     // TODO: should we move this to a separate function, call this after chains are added?
@@ -399,6 +403,22 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         // send tx to dst chain
         call_to_chain(m.destination, message).await
     }
+}
+
+#[update(name = "add_owner", guard = "is_authorized")]
+#[candid_method(update, rename = "add_owner")]
+async fn add_owner(owner: Principal) {
+    STATE_INFO.with(|s| {
+        s.borrow_mut().add_owner(owner);
+    });
+}
+
+#[update(name = "remove_owner", guard = "is_authorized")]
+#[candid_method(update, rename = "remove_owner")]
+async fn remove_owner(owner: Principal) {
+    STATE_INFO.with(|s| {
+        s.borrow_mut().delete_owner(owner);
+    });
 }
 
 async fn call_to_canister(recipient: Principal, m: &Message) -> Result<bool, String> {
