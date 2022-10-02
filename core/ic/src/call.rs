@@ -38,14 +38,6 @@ pub async fn call_to_chain(
     dst_chain: u32, 
     msg_bytes: Vec<u8>
 ) -> Result<bool, String> {
-    // let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
-    //     let chains = chains.borrow();
-    //     let c = chains.get(&dst_chain).expect("chain not found");
-    //     (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
-    // });
-    // if caller == "" || omnic_addr == "" {
-    //     return Err("caller address is empty".into());
-    // }
     let client = EVMChainClient::new(rpc.clone(), omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL)
         .map_err(|e| format!("init EVMChainClient failed: {:?}", e))?;
     client
