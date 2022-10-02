@@ -303,7 +303,7 @@ async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Ve
         }
     }
 
-    let amount: Vec<u8> = BigUint::from(amount).to_bytes_be();
+    let amount: Vec<u8> = BigUint::from(amount).to_bytes_le();
     let bridge_addr: Vec<u8> = get_bridge_addr(chain_id).unwrap();
     send_token(chain_id, bridge_addr, to, amount).await
 }
@@ -538,6 +538,7 @@ mod tests {
         contract::tokens::{Detokenize, Tokenizable},
         types::{Address, U256, BytesArray},
     };
+    use ic_cdk::api::call::CallResult;
     use ic_cdk::export::candid::{Deserialize, CandidType, Nat};
     use ic_kit::{mock_principals::{alice, bob, john}, MockContext};
     use hex_literal::hex;
@@ -594,6 +595,20 @@ mod tests {
         let sender: Vec<u8> = hex!("0000000000000000000000000000000000000000").into();
 
         let res: bool = process_message(src_chain_id, sender, 1, payload).await.unwrap();
+        assert!(res);
+    }
+
+    #[async_std::test]
+    async fn should_burn_wrapper_token() {
+        let dst_chain_id: u32 = 5; //goerli ethereum
+        let recipient: Vec<u8> = hex!("AAB27b150451726EC7738aa1d0A94505c8729bd1").into(); // dst chain recipient
+        let amount: Nat = Nat::from(1000000);
+        let wrapper_token_addr: Principal = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(); //wrapper usdt canister address
+
+        let bridge_addr: Vec<u8> = hex!("AAB27b150451726EC7738aa1d0A94505c8729bd1").into(); // goerli bridge adress
+        assert!(add_bridge_addr(dst_chain_id, bridge_addr).unwrap());
+
+        let res: bool = burn_wrapper_token(wrapper_token_addr, dst_chain_id, recipient, amount).await.unwrap();
         assert!(res);
     }
 
