@@ -363,6 +363,16 @@ fn get_latest_root(chain_id: u32) -> Result<String, String> {
     })
 }
 
+#[query(name = "get_next_index")]
+#[candid_method(query, rename = "get_next_index")]
+fn get_next_index(chain_id: u32) -> Result<u32, String> {
+    CHAINS.with(|c| {
+        let chains = c.borrow();
+        let chain = chains.get(&chain_id).ok_or("src chain id not exist".to_string())?;
+        Ok(chain.next_index())
+    })
+}
+
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
 async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
