@@ -4,9 +4,8 @@ omnic proxy canister:
 */
 
 use std::cell::{RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::TryInto;
-use std::iter::FromIterator;
 
 use ic_cron::task_scheduler::TaskScheduler;
 use ic_web3::types::H256;
@@ -14,7 +13,6 @@ use ic_web3::ic::get_eth_addr;
 
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
 use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
-use ic_cdk::api::call::{call, CallResult};
 use ic_cdk::export::Principal;
 
 use ic_cron::types::Iterations;
@@ -22,12 +20,11 @@ use ic_cron::types::Iterations;
 use accumulator::{TREE_DEPTH, merkle_root_from_branch};
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
 use omnic::HomeContract;
-use omnic::consts::KEY_NAME;
+use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL};
+use omnic::state::{State, StateMachine, StateMachineStable, StateInfo};
+use omnic::call::{call_to_canister, call_to_chain};
 
 ic_cron::implement_cron!();
-
-const MAX_RESP_BYTES: Option<u64> = Some(300);
-const CYCLES_PER_CALL: Option<u64> = None;
 
 const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 15; //60 * 5; // 5 min in nano second
 const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 3; //60; // 1 min in nano second
@@ -36,139 +33,6 @@ const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 3; //60; // 1 min in nano second
 enum Task {
     FetchRoots,
     FetchRoot
-}
-
-#[derive(CandidType, Deserialize, Clone, PartialEq, Eq)]
-enum State {
-    Init,
-    Fetching(usize),
-    End,
-    Fail,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self::Init
-    }
-}
-
-/// state transition
-/// chain ids: record all chain ids
-/// rpc urls: record rpc urls for this round
-/// block height: specific block height to query root
-/// root: root
-/// main state: loop forever to fetch root from each chain
-/// sub state: each time issue an sub task to handle fetch root from specific rpc url
-/// 
-/// Init: inital state
-/// Fetching(idx): fetching roots
-/// End: Round Finish
-/// Fail: Fail to fetch or root mismatch
-/// 
-/// Main State transition:
-/// Init => Move to Fetching(0)
-/// Fetching(idx) => 
-///     Sub state: Init => init rpc urls into state machine for this round, issue a sub task for fetch root of current chain id
-///     Sub state: Fetching => fetching, do nothing
-///     Sub state: Fail => Move sub state to Init, move state to fetching((idx + 1) % chains_num)
-///     Sub state: End => Update the root, move sub state to Init, move state to fetching((idx + 1) % chains_num)
-/// End, Fail => can't reach this 2 state in main state
-/// 
-/// Sub state transition:
-///     Init => get block height, move state to fail or fetching, issue a sub task
-///     Fetching => fetch root, compare and set the root, move state accordingly, issue a sub task
-///     Fail => _
-///     End => _
-#[derive(Default, Clone)]
-struct StateMachine {
-    chain_ids: Vec<u32>,
-    rpc_urls: Vec<String>,
-    block_height: u64,
-    omnic_addr: String,
-    roots: HashMap<H256, usize>,
-    state: State,
-    sub_state: State
-}
-
-#[derive(CandidType, Deserialize)]
-struct StateMachineStable {
-    chain_ids: Vec<u32>,
-    rpc_urls: Vec<String>,
-    block_height: u64,
-    omnic_addr: String,
-    roots: Vec<([u8;32], usize)>,
-    state: State,
-    sub_state: State
-}
-
-impl StateMachine {
-
-    pub fn add_chain(&mut self, chain_id: u32) {
-        if !self.chain_exists(chain_id) {
-            self.chain_ids.push(chain_id)
-        }
-    }
-
-    pub fn chain_exists(&self, chain_id: u32) -> bool {
-        self.chain_ids.contains(&chain_id)
-    }
-
-    pub fn rpc_count(&self) -> usize {
-        self.rpc_urls.len()
-    }
-}
-
-impl From<StateMachineStable> for StateMachine {
-    fn from(s: StateMachineStable) -> Self {
-        Self {
-            chain_ids: s.chain_ids,
-            rpc_urls: s.rpc_urls,
-            block_height: s.block_height,
-            omnic_addr: s.omnic_addr,
-            roots: HashMap::from_iter(s.roots.into_iter().map(|(x, y)| (H256::from(x), y))),
-            state: s.state,
-            sub_state: s.sub_state,
-        }
-    }
-}
-
-impl From<StateMachine> for StateMachineStable {
-    fn from(s: StateMachine) -> Self {
-        Self {
-            chain_ids: s.chain_ids,
-            rpc_urls: s.rpc_urls,
-            block_height: s.block_height,
-            omnic_addr: s.omnic_addr,
-            roots: Vec::from_iter(s.roots.into_iter().map(|(x, y)| (x.to_fixed_bytes(), y))),
-            state: s.state,
-            sub_state: s.sub_state,
-        }
-    }
-}
-
-#[derive(CandidType, Deserialize, Clone)]
-struct StateInfo {
-    owners: HashSet<Principal>,
-}
-
-impl StateInfo {
-    pub fn default() -> StateInfo {
-        StateInfo {
-            owners: HashSet::default(),
-        }
-    }
-
-    pub fn add_owner(&mut self, owner: Principal) {
-        self.owners.insert(owner);
-    }
-
-    pub fn delete_owner(&mut self, owner: Principal) {
-        self.owners.remove(&owner);
-    }
-
-    pub fn is_owner(&self, user: Principal) -> bool {
-        self.owners.contains(&user)
-    }
 }
 
 thread_local! {
@@ -186,8 +50,6 @@ fn init() {
         info.add_owner(caller);
     });
 
-    // TODO: should we move this to a separate function, call this after chains are added?
-    // yvon: it's ok too. for now I just make main state not go to FETCHING when chains is empty
     // set up cron job
     cron_enqueue(
         Task::FetchRoots, 
@@ -411,7 +273,16 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         call_to_canister(recipient, &m).await
     } else {
         // send tx to dst chain
-        call_to_chain(m.destination, message).await
+        // call_to_chain(m.destination, message).await
+        let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
+            let chains = chains.borrow();
+            let c = chains.get(&m.destination).expect("chain not found");
+            (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
+        });
+        if caller == "" || omnic_addr == "" {
+            return Err("caller address is empty".into());
+        }
+        call_to_chain(caller, omnic_addr, rpc, m.destination, message).await
     }
 }
 
@@ -429,52 +300,6 @@ async fn remove_owner(owner: Principal) {
     STATE_INFO.with(|s| {
         s.borrow_mut().delete_owner(owner);
     });
-}
-
-async fn call_to_canister(recipient: Principal, m: &Message) -> Result<bool, String> {
-    // call ic recipient canister
-    let ret: CallResult<(Result<bool, String>,)> = 
-        call(recipient, "handle_message", (m.origin, m.nonce, m.sender.as_bytes(), m.body.clone(), )).await;
-    match ret {
-        Ok((res, )) => {
-            match res {
-                Ok(_) => {
-                    ic_cdk::println!("handle_message success!");
-                },
-                Err(err) => {
-                    ic_cdk::println!("handle_message failed: {:?}", err);
-                }
-            }
-            // message delivered
-            Ok(true)
-        },
-        Err((_code, msg)) => {
-            ic_cdk::println!("call app canister failed: {:?}", (_code, msg.clone()));
-            // message delivery failed
-            Err(format!("call app canister failed: {:?}", (_code, msg)))
-        }
-    }
-}
-
-async fn call_to_chain(dst_chain: u32, msg_bytes: Vec<u8>) -> Result<bool, String> {
-    let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
-        let chains = chains.borrow();
-        let c = chains.get(&dst_chain).expect("chain not found");
-        (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
-    });
-    if caller == "" || omnic_addr == "" {
-        return Err("caller address is empty".into());
-    }
-    let client = EVMChainClient::new(rpc.clone(), omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL)
-        .map_err(|e| format!("init EVMChainClient failed: {:?}", e))?;
-    client
-        .dispatch_message(caller, dst_chain, msg_bytes)
-        .await
-        .map(|txhash| {
-            ic_cdk::println!("dispatch_message txhash: {:?}", hex::encode(txhash));
-            true
-        })
-        .map_err(|e| format!("dispatch_message failed: {:?}", e))
 }
 
 // TODO: aggregate roots from multiple different rpc providers
