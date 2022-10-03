@@ -30,6 +30,7 @@ module.exports = {
   networks: {
     localhost: {
       url: "http://localhost:8545",
+      accounts: [testPrivKey],
     },
     kovan: {
       url: `https://kovan.infura.io/v3/${infuraKey}`,

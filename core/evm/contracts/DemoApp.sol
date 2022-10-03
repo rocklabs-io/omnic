@@ -11,12 +11,6 @@ import {IOmnicReciver} from "./interfaces/IOmnicReciver.sol";
 
 import {Omnic} from "./Omnic.sol";
 
-//external
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-
-// Omnic Crosschain message passing protocol core contract
-
 contract DemoApp {
 
     address owner;

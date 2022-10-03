@@ -1,1 +1,12 @@
-{"omnic_canister_id":"rrkah-fqaaa-aaaaa-aaaaq-cai","omnic_canister_addr":"0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905","omnic_evm_contracts":{"goerli":"0x92Dc043616E1FC9f7817b4a448e496487E369634","mumbai":"0x9FC058A2B96F5ff4A63e5BB0855f413e833c1fA6"}}
+{
+    "OmnicCanisterId":"rrkah-fqaaa-aaaaa-aaaaq-cai",
+    "OmnicCanisterAddr":"0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
+    "networks":{
+        "goerli": {
+            "UpgradeBeaconController": "",
+            "UpgradeBeacon": "",
+            "UpgradeBeaconProxy": "",
+            "Implementation": "0x92Dc043616E1FC9f7817b4a448e496487E369634"
+        }
+    }
+}
