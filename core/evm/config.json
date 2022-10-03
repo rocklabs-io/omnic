@@ -1,6 +1,11 @@
 {
     "OmnicCanisterId":"rrkah-fqaaa-aaaaa-aaaaq-cai",
     "OmnicCanisterAddr":"0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
+    "ChainIds": {
+        "ic": 0,
+        "goerli": 5,
+        "mumbai": 80001
+    },
     "networks":{
         "goerli": {
             "UpgradeBeaconController": "",

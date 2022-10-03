@@ -6,35 +6,32 @@ const hre = require("hardhat");
 // deploy Omnic implementataion contract
 // and set the implementation address to UpgradeBeacon by calling UpgradeBeaconController
 
-export const deployOmnicImpl = async function (chain: string, upgrade: boolean) {
-  const Omnic = await ethers.getContractFactory("Omnic");
+export const deployDemo = async function (chain: string) {
+  const DemoApp = await ethers.getContractFactory("DemoApp");
 
   const omnicAddr = getContractAddr(chain, "Implementation");
-  let omnic;
+  const demoAddr = getContractAddr(chain, "Demo");
+  let demo;
   // if it is upgrade, redeploy the implementation even though we found an existing implemenataion
   // otherwise, just return the deployed one
-  if(omnicAddr == null || upgrade == true) {
-    console.log("deploying Omnic implemenataion...");
-    omnic = await Omnic.deploy();
+  if(demoAddr == null) {
+    console.log("deploying Demo App...");
+    demo = await DemoApp.deploy(omnicAddr);
 
-    await omnic.deployed();
-    console.log("chain: ", chain, "Omnic implementation deployed to:", omnic.address);
+    await demo.deployed();
+    console.log("chain: ", chain, "DemoApp deployed to:", demo.address);
+    updateConfig(chain, "Demo", demo.address);
   } else {
-    console.log("found deployed Omnic implementation:", omnicAddr);
-    omnic = await ethers.getContractAt("Omnic", omnicAddr);
+    console.log("found deployed DempApp:", demoAddr);
+    demo = await ethers.getContractAt("DemoApp", demoAddr);
   }
-  // first deployment
-  if(upgrade == false) {
-    // recording omnic contract address
-    updateConfig(chain, "Implementation", omnic.address);
-  }
-  return omnic;
+  return demo;
 }
 
 const main = async function () {
   let chain = hre.network.name;
   const upgrade = false;
-  await deployOmnicImpl(chain, upgrade);
+  await deployDemo(chain);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

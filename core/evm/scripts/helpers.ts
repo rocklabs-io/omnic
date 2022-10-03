@@ -1,6 +1,14 @@
 import fs from 'fs';
 import { ethers } from "hardhat";
 
+export const getChainId = function(network: string | number) {
+    if(typeof network == "number") {
+        return network;
+    }
+    let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+    return config.ChainIds[network];
+}
+
 export const updateConfig = function (network: string, contract: string, addr: string) {
     let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
     if(config.networks[network] == undefined) {
@@ -9,6 +17,7 @@ export const updateConfig = function (network: string, contract: string, addr: s
             "UpgradeBeacon": "",
             "UpgradeBeaconProxy": "",
             "Implementation": "",
+            "Demo": "",
         };
     }
     config.networks[network][contract] = addr;
