@@ -17,13 +17,15 @@ const send_msg = async function(chain: string, dst_chain: string, recipient: str
     getChainId(dst_chain), recipient, data
   );
   console.log("txhash:", tx.hash);
+  console.log("new merkle root:", await omnic.getLatestRoot());
 }
 
 async function main() {
   const chain = hre.network.name;
   let dst_chain = "mumbai";
-  let recipient = "";
-  let data = "";
+  let recipient_addr = "0x0e8F24712bc468170D1B24b64fA0A8a94871553B";
+  let recipient = ethers.utils.hexZeroPad(recipient_addr, 32);
+  let data = ethers.utils.hexlify(ethers.utils.toUtf8Bytes("hello omnic demo app on polygon!"));
   await send_msg(chain, dst_chain, recipient, data);
 }
 

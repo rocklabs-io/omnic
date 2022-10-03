@@ -1,17 +1,24 @@
 {
-    "OmnicCanisterId":"rrkah-fqaaa-aaaaa-aaaaq-cai",
-    "OmnicCanisterAddr":"0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
-    "ChainIds": {
-        "ic": 0,
-        "goerli": 5,
-        "mumbai": 80001
-    },
-    "networks":{
-        "goerli": {
-            "UpgradeBeaconController": "",
-            "UpgradeBeacon": "",
-            "UpgradeBeaconProxy": "",
-            "Implementation": "0x92Dc043616E1FC9f7817b4a448e496487E369634"
-        }
-    }
+	"OmnicCanisterId": "rrkah-fqaaa-aaaaa-aaaaq-cai",
+	"OmnicCanisterAddr": "0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
+	"ChainIds": {
+		"ic": 0,
+		"goerli": 5,
+		"mumbai": 80001
+	},
+	"networks": {
+		"goerli": {
+			"UpgradeBeaconController": "",
+			"UpgradeBeacon": "",
+			"UpgradeBeaconProxy": "",
+			"Implementation": "0x92Dc043616E1FC9f7817b4a448e496487E369634"
+		},
+		"localhost": {
+			"UpgradeBeaconController": "0x5b1869D9A4C187F2EAa108f3062412ecf0526b24",
+			"UpgradeBeacon": "0xCfEB869F69431e42cdB54A4F4f105C19C080A601",
+			"UpgradeBeaconProxy": "0x254dffcd3277C0b1660F6d42EFbB754edaBAbC2B",
+			"Implementation": "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab",
+			"Demo": "0xC89Ce4735882C9F0f0FE26686c53074E09B0D550"
+		}
+	}
 }
