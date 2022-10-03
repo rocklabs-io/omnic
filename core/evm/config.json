@@ -8,10 +8,11 @@
 	},
 	"networks": {
 		"goerli": {
-			"UpgradeBeaconController": "",
-			"UpgradeBeacon": "",
-			"UpgradeBeaconProxy": "",
-			"Implementation": "0x92Dc043616E1FC9f7817b4a448e496487E369634"
+			"UpgradeBeaconController": "0x11bAF5c8e5D6445683Df0db41B5742034d6F0220",
+			"UpgradeBeacon": "0x3595428bbBb6F7DB0E9A09e7A798c0b80bab51aB",
+			"UpgradeBeaconProxy": "0xF98Ea5ca4BC350739FEd5D39582774D43ae403a8",
+			"Implementation": "0xE397cDc208484E5543c0148bEfa4C1CE7f502799",
+			"Demo": "0x327A4091eeD876AD227da532b8001C099d59C272"
 		},
 		"localhost": {
 			"UpgradeBeaconController": "0x5b1869D9A4C187F2EAa108f3062412ecf0526b24",
@@ -19,6 +20,13 @@
 			"UpgradeBeaconProxy": "0x254dffcd3277C0b1660F6d42EFbB754edaBAbC2B",
 			"Implementation": "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab",
 			"Demo": "0xC89Ce4735882C9F0f0FE26686c53074E09B0D550"
+		},
+		"mumbai": {
+			"UpgradeBeaconController": "0xBbcd54E574Db24066f238Cc1381Bd222d2E8aacC",
+			"UpgradeBeacon": "0xA5f75C6B6AF7714C5C63c5C1E335B1b7749CA4eC",
+			"UpgradeBeaconProxy": "0x4DCAA1f4f21333911394e83A075941474859E75E",
+			"Implementation": "0x7729d18cd5C7Ec82140E011b49Fda45DCA3D680D",
+			"Demo": "0xcD5330aCf97E53489E3093Da52844e4D57b6Eae8"
 		}
 	}
 }

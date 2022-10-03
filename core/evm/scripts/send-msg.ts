@@ -19,7 +19,7 @@ const send_msg = async function(chain: string, dst_chain: string, recipient: str
 async function main() {
   const chain = hre.network.name;
   let dst_chain = "mumbai";
-  let recipient_addr = "0x0e8F24712bc468170D1B24b64fA0A8a94871553B";
+  let recipient_addr = "0xcD5330aCf97E53489E3093Da52844e4D57b6Eae8";
   let recipient = ethers.utils.hexZeroPad(recipient_addr, 32);
   let data = ethers.utils.hexlify(ethers.utils.toUtf8Bytes("hello omnic demo app on polygon!"));
   await send_msg(chain, dst_chain, recipient, data);
