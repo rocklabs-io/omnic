@@ -20,24 +20,22 @@ export const deployOmnicImpl = async function (chain: string, upgrade: boolean) 
 
     await omnic.deployed();
     console.log("chain: ", chain, "Omnic implementation deployed to:", omnic.address);
-    // recording omnic contract address
-    updateConfig(chain, "Implementation", omnic.address);
   } else {
     console.log("found deployed Omnic implementation:", omnicAddr);
-    omnic = ethers.getContractAt("Omnic", omnicAddr);
+    omnic = await ethers.getContractAt("Omnic", omnicAddr);
+  }
+  // first deployment
+  if(upgrade == false) {
+    // recording omnic contract address
+    updateConfig(chain, "Implementation", omnic.address);
   }
   return omnic;
-}
-
-export const setOmnicImpl = async function (chain: string, implAddr: string) {
-
 }
 
 const main = async function () {
   let chain = hre.network.name;
   const upgrade = false;
   const impl  = await deployOmnicImpl(chain, upgrade);
-  await setOmnicImpl(chain, impl.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

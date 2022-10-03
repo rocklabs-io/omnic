@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { getContractAddr, updateConfig } from "./helpers";
+import { getContractAddr, updateConfig, getProxyCanisterAddr, encodeCalldata } from "./helpers";
 const hre = require("hardhat");
 
 // deploy upgrade related contracts:
@@ -25,7 +25,13 @@ const deployProxy = async function (chain: string) {
     updateConfig(chain, "UpgradeBeaconController", controller.address);
   } else {
     console.log("found deployed UpgradeBeaconController:", controllerAddr);
-    controller = ethers.getContractAt("UpgradeBeaconController", controllerAddr);
+    controller = await ethers.getContractAt("UpgradeBeaconController", controllerAddr);
+  }
+
+  const implAddr = getContractAddr(chain, "Implementation");
+  if(implAddr == null) {
+    console.log("Implementation not found! Please deploy an initial implemetation first!");
+    return null;
   }
 
   // deploy UpgradeBeacon
@@ -33,7 +39,7 @@ const deployProxy = async function (chain: string) {
   let beacon;
   if(beaconAddr == null) {
     console.log("deploying UpgradeBeacon...");
-    beacon = await UpgradeBeacon.deploy();
+    beacon = await UpgradeBeacon.deploy(implAddr, controller.address);
 
     await beacon.deployed();
     console.log("chain: ", chain, "UpgradeBeacon deployed to:", beacon.address);
@@ -41,7 +47,7 @@ const deployProxy = async function (chain: string) {
     updateConfig(chain, "UpgradeBeacon", beacon.address);
   } else {
     console.log("found deployed UpgradeBeacon:", beaconAddr);
-    controller = ethers.getContractAt("UpgradeBeacon", beaconAddr);
+    beacon = await ethers.getContractAt("UpgradeBeacon", beaconAddr);
   }
 
   // deploy UpgradeBeaconProxy
@@ -50,7 +56,8 @@ const deployProxy = async function (chain: string) {
   let proxy;
   if(proxyAddr == null) {
     console.log("deploying UpgradeBeaconProxy...");
-    proxy = await UpgradeBeaconProxy.deploy();
+    const initCalldata = encodeCalldata(getProxyCanisterAddr());
+    proxy = await UpgradeBeaconProxy.deploy(beacon.address, initCalldata);
 
     await proxy.deployed();
     console.log("chain: ", chain, "UpgradeBeaconProxy deployed to:", proxy.address);

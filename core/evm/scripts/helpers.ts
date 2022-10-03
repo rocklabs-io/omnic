@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { ethers } from "hardhat";
 
 export const updateConfig = function (network: string, contract: string, addr: string) {
     let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
@@ -30,3 +31,15 @@ export const getContractAddr = function(network: string, contract: string) {
     return res;
 }
 
+export const getProxyCanisterAddr = function() {
+    let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+    return config.OmnicCanisterAddr;
+}
+
+export const encodeCalldata = function(addr: string) {
+    let abi = [
+        "function initialize(address proxyCanisterAddr)"
+    ];
+    let iface = new ethers.utils.Interface(abi);
+    return iface.encodeFunctionData("initialize", [addr]);
+}
