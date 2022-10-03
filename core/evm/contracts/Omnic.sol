@@ -8,20 +8,14 @@ import {MerkleLib} from "./libs/Merkle.sol";
 import {Types} from "./libs/Types.sol";
 import {TypeCasts} from "./utils/Utils.sol";
 import {IOmnicReciver} from "./interfaces/IOmnicReciver.sol";
-
-//external
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OmnicBase} from "./OmnicBase.sol";
 
 
 // Omnic Crosschain message passing protocol core contract
-contract Omnic is QueueManager, OwnableUpgradeable {
+contract Omnic is QueueManager, OmnicBase {
     using QueueLib for QueueLib.Queue;
     using MerkleLib for MerkleLib.Tree;
     MerkleLib.Tree public tree;
-
-    // ============ Constants ============
-    uint32 public chainId;
 
     // re-entrancy
     uint8 internal entered;
@@ -68,14 +62,12 @@ contract Omnic is QueueManager, OwnableUpgradeable {
 
     // ============== Start ===============
     constructor() {
-        chainId = uint32(block.chainid);
         entered = 1;
     }
 
     function initialize(address proxyCanisterAddr) public initializer {
-        __Ownable_init();
         __QueueManager_initialize();
-        chainId = uint32(block.chainid);
+        __OmnicBase_initialize();
         entered = 1;
         omnicProxyCanisterAddr = proxyCanisterAddr;
     }
