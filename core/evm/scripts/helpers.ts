@@ -45,10 +45,14 @@ export const getProxyCanisterAddr = function() {
     return config.OmnicCanisterAddr;
 }
 
+export const abi_encode = function(abi: Array<string>, func: string, args: Array<string>) {
+    let iface = new ethers.utils.Interface(abi);
+    return iface.encodeFunctionData(func, args);
+}
+
 export const encodeCalldata = function(addr: string) {
     let abi = [
         "function initialize(address proxyCanisterAddr)"
     ];
-    let iface = new ethers.utils.Interface(abi);
-    return iface.encodeFunctionData("initialize", [addr]);
+    return abi_encode(abi, "initialize", [addr]);
 }

@@ -3,10 +3,6 @@ import fs from "fs";
 import { getContractAddr, getChainId } from "./helpers";
 const hre = require("hardhat");
 
-const encode_msg = function() {
-
-}
-
 const send_msg = async function(chain: string, dst_chain: string, recipient: string, data: string) {
   const Omnic = await ethers.getContractFactory("Omnic");
   const beaconProxyAddr = getContractAddr(chain, "UpgradeBeaconProxy");
