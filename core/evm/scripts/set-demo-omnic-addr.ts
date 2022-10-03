@@ -6,7 +6,7 @@ const hre = require("hardhat");
 // deploy Omnic implementataion contract
 // and set the implementation address to UpgradeBeacon by calling UpgradeBeaconController
 
-export const deployDemo = async function (chain: string) {
+export const setDemoOmnicAddr = async function (chain: string) {
   const DemoApp = await ethers.getContractFactory("DemoApp");
 
   const omnicAddr = getContractAddr(chain, "UpgradeBeaconProxy");
@@ -23,12 +23,13 @@ export const deployDemo = async function (chain: string) {
     console.log("found deployed DempApp:", demoAddr);
     demo = await ethers.getContractAt("DemoApp", demoAddr);
   }
-  return demo;
+  let tx = await demo.setOmnicContractAddr(omnicAddr);
+  console.log("txhash:", tx.hash);
 }
 
 const main = async function () {
   let chain = hre.network.name;
-  await deployDemo(chain);
+  await setDemoOmnicAddr(chain);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
