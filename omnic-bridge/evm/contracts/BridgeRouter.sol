@@ -81,7 +81,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         _safeTransferFrom(pool.token(), msg.sender, address(pool), _amountLD);
         pool.addLiquidity(_to, _amountLD);
         // send message to bridge on ic
-        localBridge.addLiquidity(chainId, _poolId, true, _amountLD);
+        localBridge.addLiquidity(chainId, _poolId, _amountLD);
     }
 
     function removeLiquidity(
@@ -94,7 +94,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         uint256 amountLD = pool.removeLiquidity(msg.sender, _amountLP, _to);
 
         // send message to bridge on ic
-        localBridge.removeLiquidity(chainId, _srcPoolId, true, amountLD);
+        localBridge.removeLiquidity(chainId, _srcPoolId, amountLD);
     }
 
     function swap(
@@ -121,8 +121,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
             _dstChainId,
             _dstPoolId,
             _amountLD,
-            _to,
-            true
+            _to
         );
     }
 

@@ -111,8 +111,7 @@ contract Bridge is IBridge, Ownable {
         uint16 _dstChainId,
         uint256 _dstPoolId,
         uint256 _amountLD,
-        bytes32 _to,
-        bool _waitOptimistic
+        bytes32 _to
     ) external override onlyRouter {
         bytes memory _payload = abi.encode(
             uint8(OperationTypes.Swap),
@@ -123,13 +122,12 @@ contract Bridge is IBridge, Ownable {
             _amountLD,
             _to
         );
-        _send(OperationTypes.Swap, _waitOptimistic, _payload);
+        _send(OperationTypes.Swap, _payload);
     }
 
     function addLiquidity(
         uint16 _srcChainId,
         uint256 _srcPoolId,
-        bool _waitOptimistic,
         uint256 _amount
     ) external override onlyRouter {
         bytes memory _payload = abi.encode(
@@ -138,13 +136,12 @@ contract Bridge is IBridge, Ownable {
             _srcPoolId,
             _amount
         );
-        _send(OperationTypes.AddLiquidity, _waitOptimistic, _payload);
+        _send(OperationTypes.AddLiquidity, _payload);
     }
 
     function removeLiquidity(
         uint16 _srcChainId,
         uint256 _srcPoolId,
-        bool _waitOptimistic,
         uint256 _amount
     ) external override onlyRouter {
         bytes memory _payload = abi.encode(
@@ -153,7 +150,7 @@ contract Bridge is IBridge, Ownable {
             _srcPoolId,
             _amount
         );
-        _send(OperationTypes.RemoveLiquidity, _waitOptimistic, _payload);
+        _send(OperationTypes.RemoveLiquidity, _payload);
     }
 
     //--------------------------- set functions------------------------------------------------
@@ -168,14 +165,12 @@ contract Bridge is IBridge, Ownable {
     //----------------------------- internal  functions ------------------------------
     function _send(
         OperationTypes _t,
-        bool _waitOptimistic,
         bytes memory _payload
     ) internal {
         uint256 _nonce = nonce++;
         omnic.sendMessage(
             chainIdIC,
             TypeCasts.addressToBytes32(bridgeOnIC),
-            _waitOptimistic,
             _payload
         );
         emit SendMsg(_t, _nonce);

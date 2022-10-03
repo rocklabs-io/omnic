@@ -9,21 +9,18 @@ interface IBridge {
         uint16 _dstChainId,
         uint256 _dstPoolId,
         uint256 _amountLD,
-        bytes32 _to,
-        bool _waitOptimistic
+        bytes32 _to
     ) external;
 
     function addLiquidity(
         uint16 _srcChainId,
         uint256 _srcPoolId,
-        bool _waitOptimistic,
         uint256 _amount
     ) external;
 
     function removeLiquidity(
         uint16 _srcChainId,
         uint256 _srcPoolId,
-        bool _waitOptimistic,
         uint256 _amount
     ) external;
 }

@@ -66,7 +66,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
     modifier onlyRouter() {
         require(
             msg.sender == router,
-            "Stargate: only the router can call this method"
+            "only the router can call this method"
         );
         _;
     }
