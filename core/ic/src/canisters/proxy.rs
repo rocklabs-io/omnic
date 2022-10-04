@@ -20,7 +20,7 @@ use ic_cron::types::Iterations;
 use accumulator::{TREE_DEPTH, merkle_root_from_branch};
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
 use omnic::HomeContract;
-use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL};
+use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::{State, StateMachine, StateMachineStable, StateInfo};
 use omnic::call::{call_to_canister, call_to_chain};
 
@@ -239,6 +239,16 @@ fn get_next_index(chain_id: u32) -> Result<u32, String> {
 #[update(name = "send_raw_tx")]
 #[candid_method(update, rename = "send_raw_tx")]
 async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String> {
+    // check cycles
+    let available = ic_cdk::api::call::msg_cycles_available();
+    let need_cycles = raw_tx.len() as u64 * CYCLES_PER_BYTE;
+    if available < need_cycles {
+        return Err(format!("Insufficient cycles: require {} cycles. Received {}.", need_cycles, available));
+    }
+    // accept cycles
+    let _accepted = ic_cdk::api::call::msg_cycles_accept(need_cycles);
+
+    // send tx
     let (chain_type, rpc_url, omnic_addr) = CHAINS.with(|c| {
         let chains = c.borrow();
         let chain = chains.get(&dst_chain).expect("src chain id not exist");
