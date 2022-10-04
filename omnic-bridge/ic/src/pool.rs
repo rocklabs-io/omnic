@@ -1,14 +1,8 @@
-use crate::token::{Operation, Token};
-/**
-* Module     : main.rs
-* Copyright  : 2021 Rocklabs
-* License    : Apache 2.0 with LLVM Exception
-* Maintainer : Rocklabs <hello@rocklabs.io>
-* Stability  : Experimental
-*/
 use candid::{types::number::Nat, CandidType, Deserialize};
 use std::collections::BTreeMap;
 use std::string::String;
+
+use crate::token::{Operation, Token};
 
 // Pool errors
 #[derive(derive_more::Display, Debug, Clone, PartialEq)]
@@ -69,7 +63,7 @@ where
     }
 
     pub fn get_sub_token_supply_by_chain_id(&self, chain_id: u32) -> Nat {
-        //
+        // TODO: handle unwrap
         let token = self.get_token_by_chain_id(chain_id).unwrap();
         Nat::from(token.get_total_supply())
     }
