@@ -45,7 +45,7 @@ contract FactoryPool is Ownable {
     ) public onlyRouter returns (address poolAddress) {
         require(
             address(pools[_poolId]) == address(0x0),
-            "Stargate: Pool already created"
+            "Pool already created"
         );
 
         Pool pool = new Pool(

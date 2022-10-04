@@ -100,6 +100,9 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         convertRate = 10**(uint256(localDecimals).sub(sharedDecimals));
     }
 
+    // LD: local decimal
+    // SD: shared decimal
+
     //----------------------------- router called  functions --------------------------------------
     function addLiquidity(address _to, uint256 _amountLD)
         external
@@ -152,7 +155,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
     function _amountLPtoSD(uint256 _amountLP) internal view returns (uint256) {
         require(
             totalSupply > 0,
-            "Stargate: cant convert LPtoSD when totalSupply == 0"
+            "cant convert LPtoSD when totalSupply == 0"
         );
         return _amountLP.mul(totalLiquidity).div(totalSupply);
     }
@@ -160,7 +163,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
     function _amountSDtoLP(uint256 _amountSD) internal view returns (uint256) {
         require(
             totalLiquidity > 0,
-            "Stargate: cant convert SDtoLP when totalLiq == 0"
+            "cant convert SDtoLP when totalLiq == 0"
         );
         return _amountSD.mul(totalSupply).div(totalLiquidity);
     }
@@ -222,7 +225,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         );
         require(
             success && (data.length == 0 || abi.decode(data, (bool))),
-            "Stargate: TRANSFER_FAILED"
+            "TRANSFER_FAILED"
         );
     }
 }

@@ -49,9 +49,9 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(uint16 _chainId, address _localBridge) {
+    constructor(address _localBridge) {
         require(_localBridge != address(0x0), "address cannot be 0x0");
-        chainId = _chainId;
+        chainId = uint16(block.chainid);
         localBridge = Bridge(_localBridge);
     }
 

@@ -31,12 +31,12 @@ contract Bridge is IBridge, Ownable {
     IOmnic public immutable omnic;
     Router public immutable router;
     uint16 public chainIdIC;
-    address public bridgeOnIC;
+    address public bridgeCanister;
 
     //---------------------------- events -----------------------------------------------
 
     event SendMsg(OperationTypes msgType, uint256 nonce);
-    event UdpateBridgeOnIC(address oldAddress, address newAddress);
+    event UdpateBridgeCanister(address oldAddress, address newAddress);
 
 
     //------------------------------- modifiers & constructor------------------------------------------
@@ -46,10 +46,10 @@ contract Bridge is IBridge, Ownable {
         _;
     }
 
-    modifier onlyBridgeOnIC() {
+    modifier onlyBridgeCanister() {
         require(
-            msg.sender == address(bridgeOnIC),
-            "Bridge: caller must be IC Bridge."
+            msg.sender == address(bridgeCanister),
+            "Bridge: caller must be IC Bridge canister"
         );
         _;
     }
@@ -58,22 +58,22 @@ contract Bridge is IBridge, Ownable {
         address _omnic,
         address _router,
         uint16 _chainIdIC,
-        address _bridgeOnIc
+        address _bridgeCanister
     ) {
         require(_omnic != address(0x0), "_omnic cannot be 0x0");
         require(_router != address(0x0), "_router cannot be 0x0");
-        require(_bridgeOnIc != address(0x0), "_bridgeOnIc cannot be 0x0");
+        require(_bridgeCanister != address(0x0), "_bridgeOnIc cannot be 0x0");
         omnic = IOmnic(_omnic);
         router = Router(_router);
         chainIdIC = _chainIdIC;
-        bridgeOnIC = _bridgeOnIc;
+        bridgeCanister = _bridgeCanister;
     }
 
-    //----------------------------- router called  functions ------------------------------
+    //----------------------------- brdige canister called  functions ------------------------------
 
-    function handle(bytes memory _payload)
+    function handleBridgeMessage(bytes memory _payload)
         external
-        onlyBridgeOnIC
+        onlyBridgeCanister
         returns (bool)
     {
         uint8 t;
@@ -99,7 +99,7 @@ contract Bridge is IBridge, Ownable {
         uint256 _srcPoolId,
         uint256 _amountLD,
         bytes32 _to
-    ) external onlyBridgeOnIC returns (bool) {
+    ) external onlyBridgeCanister returns (bool) {
         router.revertFailedSwap(_srcChainId, _srcPoolId, _amountLD, _to);
         return true;
     }
@@ -155,11 +155,11 @@ contract Bridge is IBridge, Ownable {
 
     //--------------------------- set functions------------------------------------------------
 
-    function setBridgeOnIC(address _newAddress) public onlyOwner {
+    function setBridgeCanister(address _newAddress) public onlyOwner {
         require(_newAddress != address(0x0), "address cannot be 0x0");
-        address oldAddress = bridgeOnIC;
-        bridgeOnIC = _newAddress;
-        emit UdpateBridgeOnIC(oldAddress, _newAddress);
+        address oldAddress = bridgeCanister;
+        bridgeCanister = _newAddress;
+        emit UdpateBridgeCanister(oldAddress, _newAddress);
     }
 
     //----------------------------- internal  functions ------------------------------
@@ -170,7 +170,7 @@ contract Bridge is IBridge, Ownable {
         uint256 _nonce = nonce++;
         omnic.sendMessage(
             chainIdIC,
-            TypeCasts.addressToBytes32(bridgeOnIC),
+            TypeCasts.addressToBytes32(bridgeCanister),
             _payload
         );
         emit SendMsg(_t, _nonce);
