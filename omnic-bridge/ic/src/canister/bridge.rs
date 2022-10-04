@@ -25,10 +25,12 @@ const OPERATION_REMOVE_LIQUIDITY: u8 = 2u8;
 const OPERATION_SWAP: u8 = 3;
 
 const OWNER: &'static str = "aaaaa-aa";
+const PROXY: &'static str = "aaaaa-aa"; // udpate when proxy canister deployed.
 
 const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd";
 const KEY_NAME: &str = "dfx_test_key";
 const TOKEN_ABI: &[u8] = include_bytes!("./bridge.json");
+
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub enum TxError {
@@ -348,22 +350,41 @@ async fn send_token(chain_id: u32, token_addr: Vec<u8>, addr: Vec<u8>, value: Ve
     });
     let to_addr = Address::from_slice(&addr);
     let value = U256::from_little_endian(&value);
-    let txhash = contract
-        .signed_call("transfer", (to_addr, value,), options, key_info, chain_id as u64)
+    let signed = contract
+        .sign("transfer", (to_addr, value,), options, key_info, chain_id as u64)
         .await
-        .map_err(|e| format!("token transfer failed: {}", e))?;
+        .map_err(|e| format!("sign transfer failed: {}", e))?;
 
-    ic_cdk::println!("txhash: {}", hex::encode(txhash));
-
-    Ok(true)
+    let raw_tx: Vec<u8> = signed.raw_transaction.0; 
+    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
+    let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+        proxy_canister,
+        "send_raw_tx",
+        (chain_id, raw_tx),
+    ).await;
+    match transfer_res {
+        Ok((res, )) => {
+            match res {
+                Ok(_) => {
+                    Ok(true)
+                }
+                Err(err) => {
+                    return Err(format!("mint error: {:?}", err));
+                }
+            }
+        }
+        Err((_code, msg)) => {
+            return Err(msg);
+        }
+    }
 }
 
 #[update(name = "create_pool")]
 #[candid_method(update, rename = "createPool")]
 fn create_pool(src_chain: u32, src_pool_id: Nat) -> Result<bool> {
-    // let caller: Principal = ic_cdk::caller();
+    let caller: Principal = ic_cdk::caller();
     let owner: Principal = Principal::from_text(OWNER).unwrap();
-    // assert_eq!(caller, owner);
+    assert_eq!(caller, owner);
 
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
