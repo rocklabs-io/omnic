@@ -13,7 +13,7 @@ use ic_web3::{
 use num_bigint::BigUint;
 use omnic_bridge::pool::Pool;
 use omnic_bridge::router::{Router, RouterInterfaces};
-use omnic_bridge::token::Token as BrideToken;
+use omnic_bridge::token::Token as BridgeToken;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
@@ -368,7 +368,7 @@ fn create_pool(src_chain: u32, src_pool_id: Nat) -> Result<bool> {
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
         let pool_id: Nat = r.get_pools_length();
-        let tokens: BTreeMap<u32, BrideToken<Vec<u8>>> = BTreeMap::new();
+        let tokens: BTreeMap<u32, BridgeToken<Vec<u8>>> = BTreeMap::new();
         let pool = Pool::new(pool_id.clone(), tokens);
         r.add_pool(pool)
             .map_err(|e| format!("create pool failed: {}", e))?;
@@ -409,7 +409,7 @@ fn add_supported_token(
             .map_err(|e| format!("{}", e))?;
         let mut pool = r.get_pool(pool_id.clone()).map_err(|e| format!("{}", e))?;
         let balances: BTreeMap<Vec<u8>, Nat> = BTreeMap::new();
-        let token = BrideToken::new(
+        let token = BridgeToken::new(
             src_chain,
             src_pool_id,
             name,
