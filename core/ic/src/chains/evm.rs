@@ -1,7 +1,7 @@
 use ic_web3::Web3;
 use ic_web3::transports::ICHttp;
 use ic_web3::contract::{Contract, Options};
-use ic_web3::types::{U64, U256, H256, Address, BlockNumber, BlockId};
+use ic_web3::types::{U64, U256, H256, Bytes, Address, BlockNumber, BlockId};
 use ic_web3::ic::KeyInfo;
 
 use std::str::FromStr;
@@ -80,6 +80,14 @@ impl HomeContract for EVMChainClient {
         ic_cdk::println!("txhash: {}", hex::encode(txhash));
 
         Ok(txhash)
+    }
+
+    async fn send_raw_tx(&self, raw_tx: Vec<u8>) -> Result<Vec<u8>, OmnicError> {
+        let raw = Bytes::from(raw_tx);
+        self.w3.eth().send_raw_transaction(raw)
+            .await
+            .map(|res| res.as_bytes().to_vec())
+            .map_err(|err| ClientError(format!("send_raw_tx failed: {:?}", err)))
     }
 
     async fn get_latest_root(&self, height: Option<u64>) -> Result<H256, OmnicError> {

@@ -235,6 +235,28 @@ fn get_next_index(chain_id: u32) -> Result<u32, String> {
     })
 }
 
+// application canister call this method to send tx to destination chain
+#[update(name = "send_raw_tx")]
+#[candid_method(update, rename = "send_raw_tx")]
+async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String> {
+    let (chain_type, rpc_url, omnic_addr) = CHAINS.with(|c| {
+        let chains = c.borrow();
+        let chain = chains.get(&dst_chain).expect("src chain id not exist");
+        (chain.chain_type(), chain.config.rpc_urls[0].clone(), chain.config.omnic_addr.clone())
+    });
+    match chain_type {
+        ChainType::Evm => {},
+        _ => return Err("chain type not supported yet".into()),
+    }
+
+    let client = EVMChainClient::new(rpc_url, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
+        .map_err(|e| format!("init client failed: {:?}", e))?;
+
+    client.send_raw_tx(raw_tx)
+        .await
+        .map_err(|e| format!("{:?}", e))
+}
+
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
 async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
