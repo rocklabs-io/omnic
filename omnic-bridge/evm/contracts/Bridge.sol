@@ -154,6 +154,8 @@ contract Bridge is IBridge, Ownable {
 
     function createPool (
         uint16 _srcChainId,
+        address _pool,
+        uint256 _poolId,
         address _token,
         uint8 _sharedDecimals,
         uint8 _localDecimals,
@@ -163,6 +165,8 @@ contract Bridge is IBridge, Ownable {
         bytes memory _payload = abi.encode(
             uint8(OperationTypes.CreatePool),
             _srcChainId,
+            _pool,
+            _poolId,
             _token,
             _sharedDecimals,
             _localDecimals,

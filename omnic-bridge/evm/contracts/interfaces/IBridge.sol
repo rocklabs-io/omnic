@@ -26,6 +26,8 @@ interface IBridge {
 
     function createPool (
         uint16 _srcChainId,
+        address _pool,
+        uint256 _poolId,
         address _token,
         uint8 _sharedDecimals,
         uint8 _localDecimals,

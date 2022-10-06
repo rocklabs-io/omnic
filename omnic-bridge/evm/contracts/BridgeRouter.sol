@@ -185,10 +185,10 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         uint8 _localDecimals,
         string memory _name,
         string memory _symbol
-    ) external onlyOwner returns (address pool) {
+    ) external onlyOwner returns (address) {
         require(_token != address(0x0), "_token cannot be 0x0");
         
-        pool = factory.createPool(
+        (address pool, uint256 poolId) = factory.createPool(
                 _token,
                 _sharedDecimals,
                 _localDecimals,
@@ -196,7 +196,8 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
                 _symbol
             );
         // send message to bridge on ic to create according pool automatically
-        localBridge.createPool(chainId, _token, _sharedDecimals, _localDecimals, _name, _symbol);
+        localBridge.createPool(chainId, pool, poolId, _token, _sharedDecimals, _localDecimals, _name, _symbol);
+        return pool;
     }
 
     //----------------------------- internal  functions ------------------------------

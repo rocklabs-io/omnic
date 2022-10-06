@@ -42,11 +42,11 @@ contract FactoryPool is Ownable {
         uint8 _localDecimals,
         string memory _name,
         string memory _symbol
-    ) public onlyRouter returns (address poolAddress) {
-        uint _poolId = allPools.length;
+    ) public onlyRouter returns (address, uint256) {
+        uint256 poolId = allPools.length;
 
         Pool pool = new Pool(
-            _poolId,
+            poolId,
             router,
             _token,
             _sharedDecimals,
@@ -54,10 +54,11 @@ contract FactoryPool is Ownable {
             _name,
             _symbol
         );
-        getPoolId[_token] = _poolId;
-        pools[_poolId] = pool;
-        poolAddress = address(pool);
+        getPoolId[_token] = poolId;
+        pools[poolId] = pool;
+        address poolAddress = address(pool);
         allPools.push(poolAddress);
+        return (poolAddress, poolId);
     }
 
     function renounceOwnership() public override onlyOwner {}
