@@ -1,0 +1,19 @@
+{
+	"OmnicCanisterId": "rrkah-fqaaa-aaaaa-aaaaq-cai",
+	"OmnicCanisterAddr": "0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
+	"BridgeCanisterId": "",
+	"BridgeCanisterAdd": "",
+	"ChainIds": {
+		"ic": 0,
+		"goerli": 5,
+		"mumbai": 80001
+	},
+	"networks": {
+		"goerli": {
+			"Omnic": "0xF98Ea5ca4BC350739FEd5D39582774D43ae403a8"
+		},
+		"mumbai": {
+			"Omnic": "0x4DCAA1f4f21333911394e83A075941474859E75E"
+		}
+	}
+}

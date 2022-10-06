@@ -30,7 +30,7 @@ contract Bridge is IBridge, Ownable {
     uint256 public nonce;
     IOmnic public immutable omnic;
     Router public immutable router;
-    uint16 public chainIdIC;
+    uint16 public immutable chainIdIC = 0;
     address public bridgeCanister;
 
     //---------------------------- events -----------------------------------------------
@@ -57,7 +57,6 @@ contract Bridge is IBridge, Ownable {
     constructor(
         address _omnic,
         address _router,
-        uint16 _chainIdIC,
         address _bridgeCanister
     ) {
         require(_omnic != address(0x0), "_omnic cannot be 0x0");
@@ -65,7 +64,6 @@ contract Bridge is IBridge, Ownable {
         require(_bridgeCanister != address(0x0), "_bridgeOnIc cannot be 0x0");
         omnic = IOmnic(_omnic);
         router = Router(_router);
-        chainIdIC = _chainIdIC;
         bridgeCanister = _bridgeCanister;
     }
 

@@ -49,26 +49,25 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(address _localBridge) {
-        require(_localBridge != address(0x0), "address cannot be 0x0");
+    constructor() {
         chainId = uint16(block.chainid);
-        localBridge = Bridge(_localBridge);
     }
 
-    function setBridgeAndFactory(Bridge _bridge, FactoryPool _factory)
+    // must be called after deployment
+    function setBridgeAndFactory(address _bridge, address _factory)
         external
         onlyOwner
     {
-        require(
-            address(localBridge) == address(0x0) &&
-                address(factory) == address(0x0),
-            "bridge and factory already initialized"
-        ); // 1 time only
-        require(address(_bridge) != address(0x0), "bridge cant be 0x0");
-        require(address(_factory) != address(0x0), "factory cant be 0x0");
+        // require(
+        //     address(localBridge) == address(0x0) &&
+        //         address(factory) == address(0x0),
+        //     "bridge and factory already initialized"
+        // ); // 1 time only
+        require(_bridge != address(0x0), "bridge cant be 0x0");
+        require(_factory != address(0x0), "factory cant be 0x0");
 
-        localBridge = _bridge;
-        factory = _factory;
+        localBridge = Bridge(_bridge);
+        factory = FactoryPool(_factory);
     }
 
     //--------------------------- main functions------------------------------------------------
@@ -181,7 +180,6 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     //--------------------------- config functions------------------------------------------------
 
     function createPool(
-        uint256 _poolId,
         address _token,
         uint8 _sharedDecimals,
         uint8 _localDecimals,
@@ -191,7 +189,6 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         require(_token != address(0x0), "_token cannot be 0x0");
         return
             factory.createPool(
-                _poolId,
                 _token,
                 _sharedDecimals,
                 _localDecimals,

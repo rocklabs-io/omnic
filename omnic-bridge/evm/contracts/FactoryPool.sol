@@ -22,12 +22,12 @@ contract FactoryPool is Ownable {
     //---------------------------------------------------------------------------
     // MODIFIERS
     modifier onlyRouter() {
-        require(msg.sender == router, "Stargate: caller must be Router.");
+        require(msg.sender == router, "caller must be Router.");
         _;
     }
 
     constructor(address _router) {
-        require(_router != address(0x0), "Stargate: _router cant be 0x0"); // 1 time only
+        require(_router != address(0x0), "_router cant be 0x0"); // 1 time only
         router = _router;
     }
 
@@ -36,17 +36,13 @@ contract FactoryPool is Ownable {
     }
 
     function createPool(
-        uint256 _poolId,
         address _token,
         uint8 _sharedDecimals,
         uint8 _localDecimals,
         string memory _name,
         string memory _symbol
     ) public onlyRouter returns (address poolAddress) {
-        require(
-            address(pools[_poolId]) == address(0x0),
-            "Pool already created"
-        );
+        uint _poolId = allPools.length;
 
         Pool pool = new Pool(
             _poolId,
