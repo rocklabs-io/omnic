@@ -9,7 +9,10 @@
 				"cargo build --target wasm32-unknown-unknown --bin bridge --release",
 				"ic-cdk-optimizer target/wasm32-unknown-unknown/release/bridge.wasm -o target/wasm32-unknown-unknown/release/bridge_opt.wasm"
 			  ]
-        }
+        },
+		"usdt": {
+			"main": "token/token.mo"
+		}
     },
     "defaults": {
         "build": {
