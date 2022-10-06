@@ -15,6 +15,7 @@ contract FactoryPool is Ownable {
 
     //---------------------------- variables -----------------------------------------------
 
+    mapping(address => uint256) public getPoolId; // token_addr -> poolId
     mapping(uint256 => Pool) public pools; // poolId -> PoolInfo
     address[] public allPools;
     address public immutable router;
@@ -53,6 +54,7 @@ contract FactoryPool is Ownable {
             _name,
             _symbol
         );
+        getPoolId[_token] = _poolId;
         pools[_poolId] = pool;
         poolAddress = address(pool);
         allPools.push(poolAddress);
