@@ -23,4 +23,13 @@ interface IBridge {
         uint256 _srcPoolId,
         uint256 _amount
     ) external;
+
+    function createPool (
+        uint16 _srcChainId,
+        address _token,
+        uint8 _sharedDecimals,
+        uint8 _localDecimals,
+        string memory _name,
+        string memory _symbol
+    ) external;
 }

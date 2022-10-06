@@ -23,7 +23,8 @@ contract Bridge is IBridge, Ownable {
         Invalid, // 0
         AddLiquidity, // 1
         Swap, // 2
-        RemoveLiquidity // 3
+        RemoveLiquidity, // 3
+        CreatePool // 4
     }
 
     //--------------------------- variables ----------------------------------------------
@@ -149,6 +150,26 @@ contract Bridge is IBridge, Ownable {
             _amount
         );
         _send(OperationTypes.RemoveLiquidity, _payload);
+    }
+
+    function createPool (
+        uint16 _srcChainId,
+        address _token,
+        uint8 _sharedDecimals,
+        uint8 _localDecimals,
+        string memory _name,
+        string memory _symbol
+    ) external override onlyRouter {
+        bytes memory _payload = abi.encode(
+            uint8(OperationTypes.CreatePool),
+            _srcChainId,
+            _token,
+            _sharedDecimals,
+            _localDecimals,
+            _name,
+            _symbol
+        );
+        _send(OperationTypes.CreatePool, _payload);
     }
 
     //--------------------------- set functions------------------------------------------------
