@@ -196,7 +196,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
                 _symbol
             );
         // send message to bridge on ic to create according pool automatically
-        localBridge.createPool(chainId, pool, poolId, _token, _sharedDecimals, _localDecimals, _name, _symbol);
+        localBridge.createPool(poolId, _sharedDecimals, _localDecimals, _name, _symbol);
         return pool;
     }
 

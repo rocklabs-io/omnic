@@ -23,6 +23,7 @@ ic_cron::implement_cron!();
 const OPERATION_ADD_LIQUIDITY: u8 = 1u8;
 const OPERATION_REMOVE_LIQUIDITY: u8 = 2u8;
 const OPERATION_SWAP: u8 = 3;
+const OPERATION_CREATE_POOL: u8 = 4;
 
 const OWNER: &'static str = "aaaaa-aa";
 const PROXY: &'static str = "aaaaa-aa"; // udpate when proxy canister deployed.
@@ -274,6 +275,57 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
             amount.to_little_endian(&mut buffer);
             send_token(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
         }
+    } else if operation_type == OPERATION_CREATE_POOL {
+        // create accroding pool to manage tokens
+        let types = vec![
+            ParamType::Uint(8),
+            ParamType::Uint(256),
+            ParamType::Uint(8), // shared_decimals
+            ParamType::Uint(8), // local_decimals
+            ParamType::String,
+            ParamType::String, 
+        ];
+        let d = decode(&types, &payload).map_err(|e| format!("payload decode error: {}", e))?;
+
+        let src_pool_id: U256 = d[1]
+            .clone()
+            .into_uint()
+            .ok_or("can not convert src_pool_id to U256".to_string())?;
+        let shared_decimal: u8 = d[2]
+            .clone()
+            .into_uint()
+            .ok_or("can not convert shared_decimals to U256".to_string())?
+            .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
+        let local_decimal: u8 = d[3]
+            .clone()
+            .into_uint()
+            .ok_or("can not convert local_decimals U256".to_string())?
+            .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
+        let token_name: String = d[4]
+            .clone()
+            .into_string()
+            .ok_or("can not convert token_name to String".to_string())?;
+        let token_symbol: String = d[5]
+            .clone()
+            .into_string()
+            .ok_or("can not convert token_symbol to String".to_string())?;
+        
+        let mut buffer = [0u8; 32];
+        src_pool_id.to_little_endian(&mut buffer);
+        let pool_id : Nat = create_pool(
+            src_chain, 
+            Nat::from(BigUint::from_bytes_le(&buffer)), 
+            token_symbol.clone()
+        )?;
+        add_supported_token(
+            src_chain, 
+            Nat::from(BigUint::from_bytes_le(&buffer)), 
+            pool_id, 
+            token_name, 
+            token_symbol, 
+            local_decimal, 
+            shared_decimal
+        )
     } else {
         Err("unsupported!".to_string())
     }
@@ -381,31 +433,49 @@ async fn send_token(chain_id: u32, token_addr: Vec<u8>, addr: Vec<u8>, value: Ve
 
 #[update(name = "create_pool")]
 #[candid_method(update, rename = "createPool")]
-fn create_pool(src_chain: u32, src_pool_id: Nat) -> Result<bool> {
+fn create_pool(src_chain: u32, src_pool_id: Nat, symbol: String) -> Result<Nat> {
     let caller: Principal = ic_cdk::caller();
     let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert_eq!(caller, owner);
+    assert!(caller == owner || caller == ic_cdk::id(), "only owner or this canister can create a new pool.");
 
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
+        if r.contain_pool_by_symbol(&symbol).unwrap() {
+            let pool_id: Nat = 
+                r.get_pool_id_by_symbol(&symbol)
+                    .map_err(|e| format!("fail to get pool by symbol: {}", e))?;
+            return Ok(pool_id);
+        }
         let pool_id: Nat = r.get_pools_length();
         let tokens: BTreeMap<u32, BridgeToken<Vec<u8>>> = BTreeMap::new();
         let pool = Pool::new(pool_id.clone(), tokens);
         r.add_pool(pool)
             .map_err(|e| format!("create pool failed: {}", e))?;
         r.add_pool_id(src_chain, src_pool_id)
-            .map_err(|e| format!("create pool failed: {}", e))
+            .map_err(|e| format!("add pool id failed: {}", e))?;
+        r.add_pool_symbol(symbol)
+            .map_err(|e| format!("add pool symbol failed: {}", e))?;
+        Ok(pool_id)
     })
 }
 
 #[query(name = "get_pool_id")]
 #[candid_method(query, rename = "get_pool_id")]
 fn get_pool_id(src_chain: u32, src_pool_id: Nat) -> Result<Nat> {
-
     ROUTER.with(|router| {
         let r = router.borrow();
         r.get_pool_id(src_chain, src_pool_id)
             .map_err(|e| format!("failed to get pool id: {:?}", e))
+    })
+}
+
+#[query(name = "get_pool_id_by_symbol")]
+#[candid_method(query, rename = "get_pool_id_by_symbol")]
+fn get_pool_id_by_symbol(symbol: String) -> Result<Nat> {
+    ROUTER.with(|router| {
+        let r = router.borrow();
+        r.get_pool_id_by_symbol(&symbol)
+            .map_err(|e| format!("failed to get pool id by symbol {}: {:?}", symbol, e))
     })
 }
 
@@ -414,6 +484,7 @@ fn get_pool_id(src_chain: u32, src_pool_id: Nat) -> Result<Nat> {
 fn add_supported_token(
     src_chain: u32,
     src_pool_id: Nat,
+    pool_id: Nat,
     name: String,
     symbol: String,
     local_decimals: u8,
@@ -421,14 +492,14 @@ fn add_supported_token(
 ) -> Result<bool> {
     let caller: Principal = ic_cdk::caller();
     let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert_eq!(caller, owner);
+    assert!(caller == owner || caller == ic_cdk::id(), "only owner or this canister can add a new token.");
 
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
-        let pool_id: Nat = r
-            .get_pool_id(src_chain.clone(), src_pool_id.clone())
-            .map_err(|e| format!("{}", e))?;
         let mut pool = r.get_pool(pool_id.clone()).map_err(|e| format!("{}", e))?;
+        if pool.contain_token(src_chain) {
+            return Err(format!("{} token has been added.", symbol));
+        }
         let balances: BTreeMap<Vec<u8>, Nat> = BTreeMap::new();
         let token = BridgeToken::new(
             src_chain,
@@ -564,8 +635,8 @@ mod tests {
     use ic_kit::{mock_principals::{alice, bob, john}, MockContext};
     use hex_literal::hex;
 
-    fn add_new_pool(src_chain_id: u32, src_pool_id: Nat) -> bool {
-        create_pool(src_chain_id, src_pool_id.clone()).unwrap_or(false)
+    fn add_new_pool(src_chain_id: u32, src_pool_id: Nat, symbol: String) -> bool {
+        create_pool(src_chain_id, src_pool_id, symbol).is_ok()
     }
 
     fn add_wrapper_token(pool_id: Nat, wrapper_token_addr: String) -> bool {
@@ -577,10 +648,13 @@ mod tests {
     fn should_create_pool() {
         let src_chain_id: u32 = 1; //ethereum
         let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        let res: bool = add_new_pool(src_chain_id, src_pool_id.clone());
+        let symbol: String = "USDT".to_string();
+        let res: bool = add_new_pool(src_chain_id, src_pool_id.clone(), symbol.clone());
         assert!(res);
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
-        assert_eq!(pool_id, Nat::from(0))
+        assert_eq!(pool_id, Nat::from(0));
+        let pool_id = get_pool_id_by_symbol(symbol).unwrap();
+        assert_eq!(pool_id, Nat::from(0));
     }
 
     #[test]
@@ -588,7 +662,7 @@ mod tests {
     fn should_add_wrapper_token_addr() {
         let src_chain_id: u32 = 1; //ethereum
         let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        assert!(add_new_pool(src_chain_id, src_pool_id.clone()));
+        assert!(add_new_pool(src_chain_id, src_pool_id.clone(), "USDT".to_string()));
         let wrapper_token_addr: &str = "aaaaa-aa"; //wrapper usdt canister address
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
         assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
@@ -598,7 +672,7 @@ mod tests {
     async fn should_process_swap_message() {
         let src_chain_id: u32 = 1; //ethereum
         let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        assert!(add_new_pool(src_chain_id, src_pool_id.clone()));
+        assert!(add_new_pool(src_chain_id, src_pool_id.clone(), "USDT".to_string()));
         let wrapper_token_addr: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai"; //wrapper usdt canister address
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
         assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
@@ -631,6 +705,29 @@ mod tests {
 
         let res: bool = burn_wrapper_token(wrapper_token_addr, dst_chain_id, recipient, amount).await.unwrap();
         assert!(res);
+    }
+
+    #[async_std::test]
+    async fn should_process_create_pool_message() {
+        let src_chain_id: u32 = 5; //goerli ethereum
+        let name: String = String::from("Fake USDT");
+        let symbol: String = String::from("USDT");
+
+        let token = vec![
+            4u8.into_token(), // create_pool
+            Token::Uint(Uint::from(0)), // src pool id = 0 (fake usdt)
+            10u8.into_token(), // shared_decimals 10
+            18u8.into_token(), // local_decimals 18 (real decimal of token on evm)
+            Token::String(name), // token name
+            Token::String(symbol.clone()), // token symbol
+        ];
+        let payload: Bytes = encode(&token);
+        let sender: Vec<u8> = hex!("0000000000000000000000000000000000000000").into();
+
+        let res: bool = process_message(src_chain_id, sender, 1, payload).await.unwrap();
+        assert!(res);
+        let pool_id: Nat = get_pool_id_by_symbol(symbol).unwrap();
+        assert_eq!(pool_id, Nat::from(0));
     }
 
 

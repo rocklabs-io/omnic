@@ -153,10 +153,7 @@ contract Bridge is IBridge, Ownable {
     }
 
     function createPool (
-        uint16 _srcChainId,
-        address _pool,
         uint256 _poolId,
-        address _token,
         uint8 _sharedDecimals,
         uint8 _localDecimals,
         string memory _name,
@@ -164,10 +161,7 @@ contract Bridge is IBridge, Ownable {
     ) external override onlyRouter {
         bytes memory _payload = abi.encode(
             uint8(OperationTypes.CreatePool),
-            _srcChainId,
-            _pool,
             _poolId,
-            _token,
             _sharedDecimals,
             _localDecimals,
             _name,

@@ -57,8 +57,9 @@ where
     bridge_addr: BTreeMap<u32, T>,
     pool_ids: BTreeMap<u32, BTreeMap<Nat, Nat>>, // src_chain_id -> src_pool_id -> pool_id
     pools: BTreeMap<Nat, Pool<T>>,               // pool_id -> Pool
+    pool_symbols: BTreeMap<String, Nat>,         // pool symbol -> pool_id
     // TODO
-    // weights: BTreeMap<Nat, f32>, // allocate weights for different chain
+    weights: BTreeMap<Nat, f32>, // allocate weights for different chain
 }
 
 impl<T> Router<T>
@@ -71,11 +72,14 @@ where
             bridge_addr: BTreeMap::new(),
             pool_ids: BTreeMap::new(),
             pools: BTreeMap::new(),
+            pool_symbols: BTreeMap::new(),
+            weights: BTreeMap::new()
         }
     }
 
     pub fn get_bridge_addr(&self, chain_id: u32) -> Result<T> {
-        self.bridge_addr.get(&chain_id)
+        self.bridge_addr
+            .get(&chain_id)
             .ok_or(Error::Pool(PoolError::Invalid(format!(
                 "chain id is not found: {}",
                 chain_id
@@ -92,11 +96,12 @@ where
     }
 
     pub fn remove_bridge_addr(&mut self, chain_id: u32) -> Result<T> {
-        self.bridge_addr.remove(&chain_id)
-                .ok_or(Error::Pool(PoolError::Invalid(format!(
-                    "chain id is not found: {}",
-                    chain_id
-                ))))
+        self.bridge_addr
+            .remove(&chain_id)
+            .ok_or(Error::Pool(PoolError::Invalid(format!(
+                "chain id is not found: {}",
+                chain_id
+            ))))
     }
 
     pub fn get_pools_length(&self) -> Nat {
@@ -125,6 +130,20 @@ where
         Ok(self.get_pool(pool_id).is_ok())
     }
 
+    pub fn get_pool_id_by_symbol(&self, symbol: &str) -> Result<Nat> {
+        //
+        self.pool_symbols
+            .get(symbol)
+            .ok_or(Error::Pool(PoolError::Invalid(format!(
+                "{} pool has not created yet. Please check the input!",
+                symbol.to_owned()
+            )))).cloned()
+    }
+
+    pub fn contain_pool_by_symbol(&self, symbol: &str) -> Result<bool> {
+        Ok(self.pool_symbols.contains_key(symbol))
+    }
+
     pub fn get_pool(&self, pool_id: Nat) -> Result<Pool<T>> {
         //
         match self.pools.get(&pool_id).cloned() {
@@ -149,6 +168,12 @@ where
             .or_default()
             .entry(src_pool_id)
             .or_insert(pool_id);
+        Ok(true)
+    }
+
+    pub fn add_pool_symbol(&mut self, symbol: String) -> Result<bool> {
+        let pool_id: Nat = self.get_pools_length() - 1;
+        self.pool_symbols.entry(symbol.clone()).or_insert(pool_id);
         Ok(true)
     }
 
@@ -250,12 +275,8 @@ where
         }
         // 2. check if src & dst chain bridge address exists
 
-        let src_bridge_addr = self
-            .get_bridge_addr(src_chain_id)
-            .unwrap();
-        let dst_bridge_addr = self
-            .get_bridge_addr(dst_chain_id)
-            .unwrap();
+        let src_bridge_addr = self.get_bridge_addr(src_chain_id).unwrap();
+        let dst_bridge_addr = self.get_bridge_addr(dst_chain_id).unwrap();
 
         //3. src_chain_id pool mint token to src bridge address
         if !token1.mint(src_bridge_addr, amount.clone()) {
