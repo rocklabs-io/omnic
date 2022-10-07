@@ -21,7 +21,7 @@ path = "src/canisters/demo.rs"
 [dependencies]
 accumulator = { path = "./accumulator" }
 #ic-web3 = { git = "https://github.com/rocklabs-io/ic-web3" }
-ic-web3 = "0.1.3"
+ic-web3 = "0.1.5"
 #ic-cron = "0.7.0"
 ic-cron = { git = "https://github.com/rocklabs-io/ic-cron" }
 candid = "0.8.0"

@@ -13,6 +13,7 @@ use ic_web3::ic::get_eth_addr;
 
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
 use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
+use ic_cdk::api::management_canister::http_request::HttpResponse;
 use candid::types::principal::Principal;
 
 use ic_cron::types::Iterations;
@@ -59,6 +60,13 @@ fn init() {
             iterations: Iterations::Infinite,
         },
     ).unwrap();
+}
+
+#[query]
+async fn transform(raw: HttpResponse) -> HttpResponse {
+    let mut t = raw;
+    t.headers = vec![];
+    t
 }
 
 // get canister's evm address
@@ -195,7 +203,7 @@ fn get_chains() -> Result<Vec<ChainState>, String> {
 
 #[update(name = "fetch_root")]
 #[candid_method(update, rename = "fetch_root")]
-async fn fetch(chain_id: u32) -> Result<String, String> {
+async fn fetch(chain_id: u32, height: u64) -> Result<String, String> {
     let (_caller, omnic_addr, rpc) = CHAINS.with(|chains| {
         let chains = chains.borrow();
         let c = chains.get(&chain_id).expect("chain not found");
@@ -204,7 +212,7 @@ async fn fetch(chain_id: u32) -> Result<String, String> {
 
     let client = EVMChainClient::new(rpc, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
         .map_err(|e| format!("init client failed: {:?}", e))?;
-    client.get_latest_root(None)
+    client.get_latest_root(Some(height))
         .await
         .map(|v| hex::encode(v))
         .map_err(|e| format!("get root err: {:?}", e))
