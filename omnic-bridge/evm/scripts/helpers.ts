@@ -15,7 +15,7 @@ export const updateConfig = function (network: string, contract: string, addr: s
         config.networks[network] = {
             "Omnic": "",
             "Bridge": "",
-            "BridgeRouter": "",
+            "Router": "",
             "FactoryPool": "",
             "USDT": "",
         };

@@ -11,7 +11,7 @@ export const swap = async function (
   ) {
   let tokenAddr = getContractAddr(chain, tokenSymbol);
   const token = await ethers.getContractAt("ERC20", tokenAddr);
-  const router = await ethers.getContractAt("BridgeRouter", getContractAddr(chain, "BridgeRouter"));
+  const router = await ethers.getContractAt("Router", getContractAddr(chain, "Router"));
   const factory = await ethers.getContractAt("FactoryPool", getContractAddr(chain, "FactoryPool"));
 
   /*

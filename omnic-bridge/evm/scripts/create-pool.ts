@@ -4,7 +4,7 @@ const hre = require("hardhat");
 
 export const createPool = async function (chain: string, tokenSymbol: string) {
   const token = await ethers.getContractAt("ERC20", getContractAddr(chain, tokenSymbol));
-  const router = await ethers.getContractAt("BridgeRouter", getContractAddr(chain, "BridgeRouter"));
+  const router = await ethers.getContractAt("Router", getContractAddr(chain, "Router"));
 
   /*
     address _token,

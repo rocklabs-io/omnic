@@ -1,8 +1,8 @@
 {
-	"OmnicCanisterId": "rrkah-fqaaa-aaaaa-aaaaq-cai",
-	"OmnicCanisterAddr": "0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
-	"BridgeCanisterId": "",
-	"BridgeCanisterAdd": "",
+	"OmnicCanisterId": "y3lks-laaaa-aaaam-aat7q-cai",
+	"OmnicCanisterAddr": "0x06fb9111d125fbb697ea39ffa585246d1e2e9143",
+	"BridgeCanisterId": "3uldh-yyaaa-aaaam-aauiq-cai",
+	"BridgeCanisterAddr": "",
 	"ChainIds": {
 		"ic": 0,
 		"goerli": 5,
@@ -10,7 +10,9 @@
 	},
 	"networks": {
 		"goerli": {
-			"Omnic": "0xF98Ea5ca4BC350739FEd5D39582774D43ae403a8"
+			"Omnic": "0xF98Ea5ca4BC350739FEd5D39582774D43ae403a8",
+			"USDT": "0x13B8BA2Bb9a86b0D48a6981B1bd6739C461e3AF5",
+			"Router": "0x40e16f6DfE1e9866F7CE2861BC3b9ED2066Bd218"
 		},
 		"mumbai": {
 			"Omnic": "0x4DCAA1f4f21333911394e83A075941474859E75E"

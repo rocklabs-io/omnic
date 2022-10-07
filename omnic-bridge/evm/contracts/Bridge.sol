@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 // imports internal
 import "./Pool.sol";
-import "./BridgeRouter.sol";
+import "./Router.sol";
 
 import "./interfaces/IBridge.sol";
 import "./interfaces/IOmnic.sol";

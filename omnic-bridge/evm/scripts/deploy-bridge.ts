@@ -2,24 +2,24 @@ import { ethers } from "hardhat";
 import { getContractAddr, updateConfig, getBridgeCanisterAddr } from "./helpers";
 const hre = require("hardhat");
 
-// BridgeRouter -> Bridge -> FactoryPool -> call BridgeRouter.setBridgeAndFactory
+// Router -> Bridge -> FactoryPool -> call Router.setBridgeAndFactory
 export const deployBridge = async function (chain: string) {
-  const BridgeRouter = await ethers.getContractFactory("BridgeRouter");
+  const Router = await ethers.getContractFactory("Router");
   const Bridge = await ethers.getContractFactory("Bridge");
   const FactoryPool = await ethers.getContractFactory("FactoryPool");
 
-  const routerAddr = getContractAddr(chain, "BridgeRouter");
+  const routerAddr = getContractAddr(chain, "Router");
   let router;
   if(routerAddr == null) {
-    console.log("deploying BridgeRouter...");
-    router = await BridgeRouter.deploy();
+    console.log("deploying Router...");
+    router = await Router.deploy();
 
     await router.deployed();
-    console.log("chain: ", chain, "BridgeRouter deployed to:", router.address);
-    updateConfig(chain, "BridgeRouter", router.address);
+    console.log("chain: ", chain, "Router deployed to:", router.address);
+    updateConfig(chain, "Router", router.address);
   } else {
-    console.log("found deployed BridgeRouter:", routerAddr);
-    router = await ethers.getContractAt("BridgeRouter", routerAddr);
+    console.log("found deployed Router:", routerAddr);
+    router = await ethers.getContractAt("Router", routerAddr);
   }
 
   const bridgeAddr = getContractAddr(chain, "Bridge");
