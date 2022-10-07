@@ -94,7 +94,7 @@ thread_local! {
 
 #[update(name = "process_message")]
 #[candid_method(update, rename = "processMessage")]
-async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: Vec<u8>) -> Result<bool> {
+async fn process_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool> {
     let t = vec![ParamType::Uint(8)];
     let d = decode(&t, &payload).map_err(|e| format!("payload decode error: {}", e))?;
     let operation_type: u8 = d[0]
@@ -194,7 +194,7 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
             .clone()
             .into_uint()
             .ok_or("can not convert dst_pool_id to U256".to_string())?;
-        let amount: U256 = d[5]
+        let amount_evm: U256 = d[5]
             .clone()
             .into_uint()
             .ok_or("can not convert amount to U256".to_string())?;
@@ -211,17 +211,37 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
             let pool_id: Nat = ROUTER.with(|router| {
                 let r = router.borrow();
                 src_pool_id.to_little_endian(&mut buffer1);
-                amount.to_little_endian(&mut buffer2);
                 r.get_pool_id(src_chain_id, Nat::from(BigUint::from_bytes_le(&buffer1)))
             }).map_err(|e| format!("get pool id failed: {:?}", e))?;
+
 
             // get wrapper token cansider address
             let wrapper_token_addr: String = WRAPPER_TOKENS.with(|wrapper_tokens| {
                 let w = wrapper_tokens.borrow();
-                w.get_wrapper_token_addr(pool_id)
+                w.get_wrapper_token_addr(pool_id.clone())
             }).map_err(|e| format!("get wrapper token address failed: {}", e))?;
 
+            // mint wrapper token on IC
             let wrapper_token_addr: Principal = Principal::from_text(&wrapper_token_addr).unwrap();
+            let transfer_res: CallResult<(u8, )> = ic_cdk::call(
+                wrapper_token_addr,
+                "decimals",
+                (),
+            ).await;
+            let wrapper_decimal: u8 = transfer_res.unwrap().0;
+            amount_evm.to_little_endian(&mut buffer2);
+            let amount_ic: Nat = ROUTER.with(|router| {
+                let r = router.borrow();
+                let pool = r.get_pool(pool_id.clone()).unwrap();
+                let native_deciaml: u8 = 
+                    pool.get_token_by_chain_id(src_chain)
+                        .map_or(
+                            Err(format!("no according wrapper token for {} chain {} pool", src_chain, src_pool_id.clone())),
+                            |token| Ok(token.token_local_decimals())
+                        ).unwrap();
+                pool.amount_evm_to_amount_ic(Nat::from(BigUint::from_bytes_le(&buffer2)), native_deciaml, wrapper_decimal)
+            });
+
             let recipient_str = String::from_utf8(recipient.clone()).unwrap();
             let properly_trimmed_string = recipient_str.trim_matches(|c: char| c.is_whitespace() || c=='\0');
                             
@@ -232,7 +252,7 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
             let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
                 wrapper_token_addr,
                 "mint",
-                (recipient_addr, Nat::from(BigUint::from_bytes_le(&buffer2))),
+                (recipient_addr, amount_ic),
             ).await;
             match transfer_res {
                 Ok((res, )) => {
@@ -256,7 +276,7 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
                 let mut buffer3 = [0u8; 32];
                 src_pool_id.to_little_endian(&mut buffer1);
                 dst_pool_id.to_little_endian(&mut buffer2);
-                amount.to_little_endian(&mut buffer3);
+                amount_evm.to_little_endian(&mut buffer3);
                 // udpate token ledger
                 r.swap(
                     src_chain_id,
@@ -272,7 +292,7 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, nonce: u32, payload: V
     
             //send_token
             let mut buffer = [0u8; 32];
-            amount.to_little_endian(&mut buffer);
+            amount_evm.to_little_endian(&mut buffer);
             send_token(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
         }
     } else if operation_type == OPERATION_CREATE_POOL {

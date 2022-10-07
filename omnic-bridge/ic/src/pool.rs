@@ -1,7 +1,6 @@
 use candid::{types::number::Nat, CandidType, Deserialize};
 use std::collections::BTreeMap;
 use std::string::String;
-
 use crate::token::{Operation, Token};
 
 // Pool errors
@@ -74,5 +73,13 @@ where
             total_liquidity += Nat::from(token.get_total_supply());
         }
         total_liquidity
+    }
+    // utils 
+    pub fn amount_evm_to_amount_ic(&self, amount_evm: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
+        amount_evm * (u128::pow(10, wrapper_token_decimal as u32)) / (u128::pow(10, native_token_decimal as u32))
+    }
+
+    pub fn amount_ic_to_amount_evm(&self, amount_ic: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
+        amount_ic * (u128::pow(10, native_token_decimal as u32)) / (u128::pow(10, wrapper_token_decimal as u32))
     }
 }
