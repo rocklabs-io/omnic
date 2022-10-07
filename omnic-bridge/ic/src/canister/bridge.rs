@@ -462,11 +462,20 @@ fn create_pool(src_chain: u32, src_pool_id: Nat, symbol: String) -> Result<Nat> 
 #[query(name = "get_pool_id")]
 #[candid_method(query, rename = "get_pool_id")]
 fn get_pool_id(src_chain: u32, src_pool_id: Nat) -> Result<Nat> {
-
     ROUTER.with(|router| {
         let r = router.borrow();
         r.get_pool_id(src_chain, src_pool_id)
             .map_err(|e| format!("failed to get pool id: {:?}", e))
+    })
+}
+
+#[query(name = "get_pool_id_by_symbol")]
+#[candid_method(query, rename = "get_pool_id_by_symbol")]
+fn get_pool_id_by_symbol(symbol: String) -> Result<Nat> {
+    ROUTER.with(|router| {
+        let r = router.borrow();
+        r.get_pool_id_by_symbol(&symbol)
+            .map_err(|e| format!("failed to get pool id by symbol {}: {:?}", symbol, e))
     })
 }
 
@@ -626,8 +635,8 @@ mod tests {
     use ic_kit::{mock_principals::{alice, bob, john}, MockContext};
     use hex_literal::hex;
 
-    fn add_new_pool(src_chain_id: u32, src_pool_id: Nat) -> bool {
-        create_pool(src_chain_id, src_pool_id.clone()).unwrap_or(false)
+    fn add_new_pool(src_chain_id: u32, src_pool_id: Nat, symbol: String) -> bool {
+        create_pool(src_chain_id, src_pool_id, symbol).is_ok()
     }
 
     fn add_wrapper_token(pool_id: Nat, wrapper_token_addr: String) -> bool {
@@ -639,10 +648,13 @@ mod tests {
     fn should_create_pool() {
         let src_chain_id: u32 = 1; //ethereum
         let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        let res: bool = add_new_pool(src_chain_id, src_pool_id.clone());
+        let symbol: String = "USDT".to_string();
+        let res: bool = add_new_pool(src_chain_id, src_pool_id.clone(), symbol.clone());
         assert!(res);
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
-        assert_eq!(pool_id, Nat::from(0))
+        assert_eq!(pool_id, Nat::from(0));
+        let pool_id = get_pool_id_by_symbol(symbol).unwrap();
+        assert_eq!(pool_id, Nat::from(0));
     }
 
     #[test]
@@ -650,7 +662,7 @@ mod tests {
     fn should_add_wrapper_token_addr() {
         let src_chain_id: u32 = 1; //ethereum
         let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        assert!(add_new_pool(src_chain_id, src_pool_id.clone()));
+        assert!(add_new_pool(src_chain_id, src_pool_id.clone(), "USDT".to_string()));
         let wrapper_token_addr: &str = "aaaaa-aa"; //wrapper usdt canister address
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
         assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
@@ -660,7 +672,7 @@ mod tests {
     async fn should_process_swap_message() {
         let src_chain_id: u32 = 1; //ethereum
         let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        assert!(add_new_pool(src_chain_id, src_pool_id.clone()));
+        assert!(add_new_pool(src_chain_id, src_pool_id.clone(), "USDT".to_string()));
         let wrapper_token_addr: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai"; //wrapper usdt canister address
         let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
         assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
@@ -693,6 +705,29 @@ mod tests {
 
         let res: bool = burn_wrapper_token(wrapper_token_addr, dst_chain_id, recipient, amount).await.unwrap();
         assert!(res);
+    }
+
+    #[async_std::test]
+    async fn should_process_create_pool_message() {
+        let src_chain_id: u32 = 5; //goerli ethereum
+        let name: String = String::from("Fake USDT");
+        let symbol: String = String::from("USDT");
+
+        let token = vec![
+            4u8.into_token(), // create_pool
+            Token::Uint(Uint::from(0)), // src pool id = 0 (fake usdt)
+            10u8.into_token(), // shared_decimals 10
+            18u8.into_token(), // local_decimals 18 (real decimal of token on evm)
+            Token::String(name), // token name
+            Token::String(symbol.clone()), // token symbol
+        ];
+        let payload: Bytes = encode(&token);
+        let sender: Vec<u8> = hex!("0000000000000000000000000000000000000000").into();
+
+        let res: bool = process_message(src_chain_id, sender, 1, payload).await.unwrap();
+        assert!(res);
+        let pool_id: Nat = get_pool_id_by_symbol(symbol).unwrap();
+        assert_eq!(pool_id, Nat::from(0));
     }
 
 

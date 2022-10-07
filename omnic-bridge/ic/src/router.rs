@@ -141,8 +141,7 @@ where
     }
 
     pub fn contain_pool_by_symbol(&self, symbol: &str) -> Result<bool> {
-        let pool_id: Nat = self.get_pool_id_by_symbol(symbol)?;
-        Ok(self.get_pool(pool_id).is_ok())
+        Ok(self.pool_symbols.contains_key(symbol))
     }
 
     pub fn get_pool(&self, pool_id: Nat) -> Result<Pool<T>> {
