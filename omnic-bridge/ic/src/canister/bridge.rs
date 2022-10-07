@@ -92,9 +92,9 @@ thread_local! {
     static WRAPPER_TOKENS: RefCell<WrapperTokenAddr> = RefCell::new(WrapperTokenAddr::new());
 }
 
-#[update(name = "process_message")]
-#[candid_method(update, rename = "processMessage")]
-async fn process_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool> {
+#[update(name = "handle_message")]
+#[candid_method(update, rename = "handle_message")]
+async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool> {
     let t = vec![ParamType::Uint(8)];
     let d = decode(&t, &payload).map_err(|e| format!("payload decode error: {}", e))?;
     let operation_type: u8 = d[0]
@@ -353,7 +353,7 @@ async fn process_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: 
 
 
 #[update(name = "burn_wrapper_token")]
-#[candid_method(update, rename = "burnWrapperToken")]
+#[candid_method(update, rename = "burn_wrapper_token")]
 async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Vec<u8>, amount: Nat) -> Result<bool> {
     let caller = ic_cdk::caller();
     // DIP20
@@ -452,7 +452,7 @@ async fn send_token(chain_id: u32, token_addr: Vec<u8>, addr: Vec<u8>, value: Ve
 }
 
 #[update(name = "create_pool")]
-#[candid_method(update, rename = "createPool")]
+#[candid_method(update, rename = "create_pool")]
 fn create_pool(src_chain: u32, src_pool_id: Nat, symbol: String) -> Result<Nat> {
     let caller: Principal = ic_cdk::caller();
     let owner: Principal = Principal::from_text(OWNER).unwrap();
@@ -500,7 +500,7 @@ fn get_pool_id_by_symbol(symbol: String) -> Result<Nat> {
 }
 
 #[update(name = "add_supported_token")]
-#[candid_method(update, rename = "addSupportedToken")]
+#[candid_method(update, rename = "add_supported_token")]
 fn add_supported_token(
     src_chain: u32,
     src_pool_id: Nat,
@@ -537,7 +537,7 @@ fn add_supported_token(
 }
 
 #[update(name = "add_bridge_addr")]
-#[candid_method(update, rename = "addBridgeAddr")]
+#[candid_method(update, rename = "add_bridge_addr")]
 fn add_bridge_addr(src_chain: u32, birdge_addr: Vec<u8>) -> Result<bool> {
     let caller: Principal = ic_cdk::caller();
     let owner: Principal = Principal::from_text(OWNER).unwrap();
@@ -551,7 +551,7 @@ fn add_bridge_addr(src_chain: u32, birdge_addr: Vec<u8>) -> Result<bool> {
 }
 
 #[update(name = "remove_bridge_addr")]
-#[candid_method(update, rename = "removeBridgeAddr")]
+#[candid_method(update, rename = "remove_bridge_addr")]
 fn remove_bridge_addr(src_chain: u32) -> Result<Vec<u8>> {
     let caller: Principal = ic_cdk::caller();
     let owner: Principal = Principal::from_text(OWNER).unwrap();
@@ -564,7 +564,7 @@ fn remove_bridge_addr(src_chain: u32) -> Result<Vec<u8>> {
 }
 
 #[query(name = "get_bridge_addr")]
-#[candid_method(query, rename = "getBridgeAddr")]
+#[candid_method(query, rename = "get_bridge_addr")]
 fn get_bridge_addr(chain_id: u32) -> Result<Vec<u8>> {
     ROUTER.with(|router| {
         let r = router.borrow();
@@ -574,7 +574,7 @@ fn get_bridge_addr(chain_id: u32) -> Result<Vec<u8>> {
 }
 
 #[query(name = "is_bridge_addr_exist")]
-#[candid_method(query, rename = "isBridgeAddrExist")]
+#[candid_method(query, rename = "is_bridge_addr_exist")]
 fn is_bridge_addr_exist(src_chain: u32) -> Result<bool> {
     ROUTER.with(|router| {
         let r = router.borrow();
