@@ -20,6 +20,7 @@ type Result_4 = variant { Ok : vec nat8; Err : text };
 service : () -> {
   add_chain : (nat32, vec text, text, nat64) -> (Result);
   add_owner : (principal) -> ();
+  fetch_root : (nat32, nat64) -> (Result_1);
   get_canister_addr : (ChainType) -> (Result_1);
   get_chains : () -> (Result_2) query;
   get_latest_root : (nat32) -> (Result_1) query;
