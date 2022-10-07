@@ -16,6 +16,7 @@ type Result = variant { Ok : bool; Err : text };
 type Result_1 = variant { Ok : text; Err : text };
 type Result_2 = variant { Ok : vec ChainState; Err : text };
 type Result_3 = variant { Ok : nat32; Err : text };
+type Result_4 = variant { Ok : vec nat8; Err : text };
 service : () -> {
   add_chain : (nat32, vec text, text, nat64) -> (Result);
   add_owner : (principal) -> ();
@@ -26,6 +27,7 @@ service : () -> {
   is_valid : (vec nat8, vec vec nat8, nat32) -> (Result) query;
   process_message : (vec nat8, vec vec nat8, nat32) -> (Result);
   remove_owner : (principal) -> ();
+  send_raw_tx : (nat32, vec nat8) -> (Result_4);
   set_canister_addrs : () -> (Result);
   set_next_index : (nat32, nat32) -> (Result);
   update_chain : (nat32, vec text, text, nat64) -> (Result);
