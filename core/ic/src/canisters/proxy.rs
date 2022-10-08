@@ -421,7 +421,7 @@ async fn fetch_roots() {
             match state.sub_state {
                 State::Init => {
                     // update rpc urls
-                    let chain_id = state.chain_ids[idx as usize];
+                    let chain_id = state.chain_ids[idx];
                     let (rpc_urls, omnic_addr) = CHAINS.with(|c| {
                         let cs = c.borrow();
                         let chain = cs.get(&chain_id).unwrap();
@@ -461,7 +461,7 @@ async fn fetch_roots() {
                         state.state = if next_idx == 0 {
                             State::Init
                         } else {
-                            State::Fetching((idx + 1) % state.chain_ids.len())
+                            State::Fetching(next_idx)
                         };
                     });
                 },
@@ -470,7 +470,12 @@ async fn fetch_roots() {
                     STATE_MACHINE.with(|s| {
                         let mut state = s.borrow_mut();
                         state.sub_state = State::Init;
-                        state.state = State::Fetching((idx + 1) % state.chain_ids.len())
+                        let next_idx = (idx + 1) % (state.chain_ids.len());
+                        state.state = if next_idx == 0 {
+                            State::Init
+                        } else {
+                            State::Fetching(next_idx)
+                        };
                     });
                 },
             }
