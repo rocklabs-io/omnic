@@ -6,6 +6,7 @@ omnic proxy canister:
 use std::cell::{RefCell};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::iter::FromIterator;
 
 use ic_cron::task_scheduler::TaskScheduler;
 use ic_web3::types::H256;
@@ -156,12 +157,17 @@ fn add_chain(
     Ok(true)
 }
 
-// TODO: delete chain, what if state_machine is in progress?
-// #[update(name = "delete_chain", guard = "is_authorized")]
-// #[candid_method(update, rename = "delete_chain")]
-// fn delete_chain() -> Result<bool, String> {
-
-// }
+#[update(name = "delete_chain", guard = "is_authorized")]
+#[candid_method(update, rename = "delete_chain")]
+fn delete_chain(chain_id: u32) -> Result<bool, String> {
+    CHAINS.with(|c| {
+        let mut chains = c.borrow_mut();
+        match chains.remove(&chain_id) {
+            Some(_) => { Ok(true) }
+            None => { Err("Chain id not exist".to_string()) }
+        }
+    })
+}
 
 // update chain settings
 #[update(guard = "is_authorized")]
@@ -533,9 +539,14 @@ async fn fetch_roots() {
 
     match state.state {
         State::Init => {
+            // get chain ids
+            let chain_ids = CHAINS.with(|c| {
+                Vec::from_iter(c.borrow().keys().cloned())
+            });
             STATE_MACHINE.with(|s| {
                 let mut state = s.borrow_mut();
-                if state.chain_ids.len() > 0 {
+                if chain_ids.len() > 0 {
+                    state.chain_ids = chain_ids;
                     state.state = State::Fetching(0);
                 }
             });
@@ -544,7 +555,7 @@ async fn fetch_roots() {
             match state.sub_state {
                 State::Init => {
                     // update rpc urls
-                    let chain_id = state.chain_ids[idx as usize];
+                    let chain_id = state.chain_ids[idx];
                     let (rpc_urls, omnic_addr) = CHAINS.with(|c| {
                         let cs = c.borrow();
                         let chain = cs.get(&chain_id).unwrap();
@@ -570,7 +581,7 @@ async fn fetch_roots() {
                     // update root
                     CHAINS.with(|c| {
                         let mut chain = c.borrow_mut();
-                        let chain_state = chain.get_mut(&state.chain_ids[idx as usize]).expect("chain id not exist");
+                        let chain_state = chain.get_mut(&state.chain_ids[idx]).expect("chain id not exist");
                         let (check_result, root) = check_roots_result(&state.roots, state.rpc_count());
                         if check_result {
                             chain_state.insert_root(root);
@@ -580,7 +591,12 @@ async fn fetch_roots() {
                     STATE_MACHINE.with(|s| {
                         let mut state = s.borrow_mut();
                         state.sub_state = State::Init;
-                        state.state = State::Fetching((idx + 1) % state.chain_ids.len())
+                        let next_idx = (idx + 1) % (state.chain_ids.len());
+                        state.state = if next_idx == 0 {
+                            State::Init
+                        } else {
+                            State::Fetching(next_idx)
+                        };
                     });
                 },
                 State::Fail => {
@@ -588,7 +604,12 @@ async fn fetch_roots() {
                     STATE_MACHINE.with(|s| {
                         let mut state = s.borrow_mut();
                         state.sub_state = State::Init;
-                        state.state = State::Fetching((idx + 1) % state.chain_ids.len())
+                        let next_idx = (idx + 1) % (state.chain_ids.len());
+                        state.state = if next_idx == 0 {
+                            State::Init
+                        } else {
+                            State::Fetching(next_idx)
+                        };
                     });
                 },
             }
