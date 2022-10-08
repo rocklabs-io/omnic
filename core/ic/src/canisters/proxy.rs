@@ -27,9 +27,6 @@ use omnic::call::{call_to_canister, call_to_chain};
 
 ic_cron::implement_cron!();
 
-const FETCH_ROOTS_PERIOID: u64 = 1_000_000_000 * 15; //60 * 5; // 5 min in nano second
-const FETCH_ROOT_PERIOID: u64 = 1_000_000_000 * 3; //60; // 1 min in nano second
-
 #[derive(CandidType, Deserialize, Clone)]
 enum Task {
     FetchRoots,
@@ -40,6 +37,14 @@ thread_local! {
     static STATE_INFO: RefCell<StateInfo> = RefCell::new(StateInfo::default());
     static CHAINS: RefCell<HashMap<u32, ChainState>>  = RefCell::new(HashMap::new());
     static STATE_MACHINE: RefCell<StateMachine> = RefCell::new(StateMachine::default());
+}
+
+fn get_fetch_root_period() -> u64 {
+    STATE_INFO.with(|s| s.borrow().fetch_root_period)
+}
+
+fn get_fetch_roots_period() -> u64 {
+    STATE_INFO.with(|s| s.borrow().fetch_roots_period)
 }
 
 #[init]
@@ -55,8 +60,8 @@ fn init() {
     cron_enqueue(
         Task::FetchRoots, 
         ic_cron::types::SchedulingOptions {
-            delay_nano: FETCH_ROOTS_PERIOID,
-            interval_nano: FETCH_ROOTS_PERIOID,
+            delay_nano: get_fetch_roots_period(),
+            interval_nano: get_fetch_roots_period(),
             iterations: Iterations::Infinite,
         },
     ).unwrap();
@@ -103,6 +108,16 @@ async fn set_canister_addrs() -> Result<bool, String> {
                 }
             }
         }
+    });
+    Ok(true)
+}
+
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "set_fetch_period")]
+async fn set_fetch_period(fetch_root_period: u64, fetch_roots_period: u64) -> Result<bool, String> {
+    STATE_INFO.with(|s| {
+        let mut s = s.borrow_mut();
+        s.set_fetch_period(fetch_root_period, fetch_roots_period);
     });
     Ok(true)
 }
@@ -502,8 +517,8 @@ async fn fetch_root() {
         cron_enqueue(
             Task::FetchRoot, 
             ic_cron::types::SchedulingOptions {
-                delay_nano: FETCH_ROOT_PERIOID,
-                interval_nano: FETCH_ROOT_PERIOID,
+                delay_nano: get_fetch_root_period(),
+                interval_nano: get_fetch_root_period(),
                 iterations: Iterations::Exact(1),
             },
         ).unwrap();
@@ -544,8 +559,8 @@ async fn fetch_roots() {
                     cron_enqueue(
                         Task::FetchRoot, 
                         ic_cron::types::SchedulingOptions {
-                            delay_nano: FETCH_ROOT_PERIOID,
-                            interval_nano: FETCH_ROOT_PERIOID,
+                            delay_nano: get_fetch_root_period(),
+                            interval_nano: get_fetch_root_period(),
                             iterations: Iterations::Exact(1),
                         },
                     ).unwrap();

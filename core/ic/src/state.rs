@@ -114,12 +114,16 @@ impl From<StateMachine> for StateMachineStable {
 #[derive(CandidType, Deserialize, Clone)]
 pub struct StateInfo {
     pub owners: HashSet<Principal>,
+    pub fetch_root_period: u64,
+    pub fetch_roots_period: u64,
 }
 
 impl StateInfo {
     pub fn default() -> StateInfo {
         StateInfo {
             owners: HashSet::default(),
+            fetch_root_period: 1_000_000_000 * 60,
+            fetch_roots_period: 1_000_000_000 * 15,
         }
     }
 
@@ -133,5 +137,10 @@ impl StateInfo {
 
     pub fn is_owner(&self, user: Principal) -> bool {
         self.owners.contains(&user)
+    }
+
+    pub fn set_fetch_period(&mut self, v1: u64, v2: u64) {
+        self.fetch_root_period = v1;
+        self.fetch_roots_period = v2;
     }
 }
