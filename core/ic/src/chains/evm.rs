@@ -114,4 +114,19 @@ impl HomeContract for EVMChainClient {
             .map(|v| v.as_u64())
             .map_err(|e| ClientError(format!("get block number error: {:?}", e)))
     }
+
+    async fn get_tx_count(&self, addr: String) -> Result<u64, OmnicError> {
+        let addr = Address::from_str(&addr).map_err(|e| ClientError(format!("address convert faild: {:?}", e)))?;
+        self.w3.eth().transaction_count(addr, None)
+            .await
+            .map(|v| v.as_u64())
+            .map_err(|e| ClientError(format!("get tx count error: {:?}", e)))
+    }
+
+    async fn get_gas_price(&self) -> Result<u64, OmnicError> {
+        self.w3.eth().gas_price()
+            .await
+            .map(|v| v.as_u64())
+            .map_err(|e| ClientError(format!("get tx count error: {:?}", e)))
+    }
 }

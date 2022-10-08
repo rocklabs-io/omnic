@@ -218,6 +218,68 @@ async fn fetch(chain_id: u32, height: u64) -> Result<String, String> {
         .map_err(|e| format!("get root err: {:?}", e))
 }
 
+#[update(name = "get_tx_count")]
+#[candid_method(update, rename = "get_tx_count")]
+async fn get_tx_count(chain_id: u32, addr: String) -> Result<u64, String> {
+    // check cycles
+    let available = ic_cdk::api::call::msg_cycles_available();
+    let need_cycles = 10u64 * CYCLES_PER_BYTE;
+    if available < need_cycles {
+        return Err(format!("Insufficient cycles: require {} cycles. Received {}.", need_cycles, available));
+    }
+    // accept cycles
+    let _accepted = ic_cdk::api::call::msg_cycles_accept(need_cycles);
+
+    // get tx count
+    let (chain_type, rpc_url, omnic_addr) = CHAINS.with(|c| {
+        let chains = c.borrow();
+        let chain = chains.get(&chain_id).expect("src chain id not exist");
+        (chain.chain_type(), chain.config.rpc_urls[0].clone(), chain.config.omnic_addr.clone())
+    });
+    match chain_type {
+        ChainType::Evm => {},
+        _ => return Err("chain type not supported yet".into()),
+    }
+
+    let client = EVMChainClient::new(rpc_url, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
+        .map_err(|e| format!("init client failed: {:?}", e))?;
+
+    client.get_tx_count(addr)
+        .await
+        .map_err(|e| format!("{:?}", e))
+}
+
+#[update(name = "get_gas_price")]
+#[candid_method(update, rename = "get_gas_price")]
+async fn get_gas_price(chain_id: u32) -> Result<u64, String> {
+    // check cycles
+    let available = ic_cdk::api::call::msg_cycles_available();
+    let need_cycles = 10u64 * CYCLES_PER_BYTE;
+    if available < need_cycles {
+        return Err(format!("Insufficient cycles: require {} cycles. Received {}.", need_cycles, available));
+    }
+    // accept cycles
+    let _accepted = ic_cdk::api::call::msg_cycles_accept(need_cycles);
+
+    // get gas price
+    let (chain_type, rpc_url, omnic_addr) = CHAINS.with(|c| {
+        let chains = c.borrow();
+        let chain = chains.get(&chain_id).expect("src chain id not exist");
+        (chain.chain_type(), chain.config.rpc_urls[0].clone(), chain.config.omnic_addr.clone())
+    });
+    match chain_type {
+        ChainType::Evm => {},
+        _ => return Err("chain type not supported yet".into()),
+    }
+
+    let client = EVMChainClient::new(rpc_url, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
+        .map_err(|e| format!("init client failed: {:?}", e))?;
+
+    client.get_gas_price()
+        .await
+        .map_err(|e| format!("{:?}", e))
+}
+
 // relayer canister call this to check if a message is valid before process_message
 #[query(name = "is_valid")]
 #[candid_method(query, rename = "is_valid")]
