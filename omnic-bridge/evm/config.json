@@ -2,7 +2,7 @@
 	"OmnicCanisterId": "y3lks-laaaa-aaaam-aat7q-cai",
 	"OmnicCanisterAddr": "0x06fb9111d125fbb697ea39ffa585246d1e2e9143",
 	"BridgeCanisterId": "3uldh-yyaaa-aaaam-aauiq-cai",
-	"BridgeCanisterAddr": "",
+	"BridgeCanisterAddr": "0x34ed7975c55f6dce062745e64f2dfe033f0db8f3",
 	"ChainIds": {
 		"ic": 0,
 		"goerli": 5,
@@ -11,11 +11,17 @@
 	"networks": {
 		"goerli": {
 			"Omnic": "0xF98Ea5ca4BC350739FEd5D39582774D43ae403a8",
-			"USDT": "0x13B8BA2Bb9a86b0D48a6981B1bd6739C461e3AF5",
-			"Router": "0x40e16f6DfE1e9866F7CE2861BC3b9ED2066Bd218"
+			"USDT": "0xf972a2E180aB1ee74161b28d173b83987dEF1Af6",
+			"Router": "0x40e16f6DfE1e9866F7CE2861BC3b9ED2066Bd218",
+			"Bridge": "0x36718969911132969A985E540085D9e7757791e5",
+			"FactoryPool": "0x6fFC891f89f5AB980F272AEDe3aF6568C442AF8D"
 		},
 		"mumbai": {
-			"Omnic": "0x4DCAA1f4f21333911394e83A075941474859E75E"
+			"Omnic": "0x4DCAA1f4f21333911394e83A075941474859E75E",
+			"USDT": "",
+			"Router": "0xeCC8530dAcd194d57C30eCea74558Fd08Ccd7F30",
+			"Bridge": "0x80BFD264A638388eBA50b173bbb2C6Ac61f5Ab02",
+			"FactoryPool": "0xD428d3D60751b51990B9C911A2c167bd488561b0"
 		}
 	}
 }

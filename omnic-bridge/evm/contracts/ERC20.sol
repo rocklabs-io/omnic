@@ -64,7 +64,6 @@ contract ERC20 is IERC20 {
      */
     function transfer(address _recipient, uint256 _amount)
         public
-        virtual
         override
         returns (bool)
     {
@@ -81,7 +80,6 @@ contract ERC20 is IERC20 {
      */
     function approve(address _spender, uint256 _amount)
         public
-        virtual
         override
         returns (bool)
     {
@@ -106,7 +104,7 @@ contract ERC20 is IERC20 {
         address _sender,
         address _recipient,
         uint256 _amount
-    ) public virtual override returns (bool) {
+    ) public override returns (bool) {
         _transfer(_sender, _recipient, _amount);
         _approve(
             _sender,
@@ -133,7 +131,6 @@ contract ERC20 is IERC20 {
      */
     function increaseAllowance(address _spender, uint256 _addedValue)
         public
-        virtual
         returns (bool)
     {
         _approve(
@@ -160,7 +157,6 @@ contract ERC20 is IERC20 {
      */
     function decreaseAllowance(address _spender, uint256 _subtractedValue)
         public
-        virtual
         returns (bool)
     {
         _approve(
@@ -187,7 +183,6 @@ contract ERC20 is IERC20 {
     function balanceOf(address _account)
         public
         view
-        virtual
         override
         returns (uint256)
     {
@@ -200,7 +195,6 @@ contract ERC20 is IERC20 {
     function allowance(address _owner, address _spender)
         public
         view
-        virtual
         override
         returns (uint256)
     {
@@ -225,7 +219,7 @@ contract ERC20 is IERC20 {
         address _sender,
         address _recipient,
         uint256 amount
-    ) internal virtual {
+    ) internal {
         require(_sender != address(0), "ERC20: transfer from the zero address");
         require(
             _recipient != address(0),
@@ -251,7 +245,7 @@ contract ERC20 is IERC20 {
      *
      * - `to` cannot be the zero address.
      */
-    function _mint(address _account, uint256 _amount) internal virtual {
+    function _mint(address _account, uint256 _amount) internal {
         require(_account != address(0), "ERC20: mint to the zero address");
 
         _beforeTokenTransfer(address(0), _account, _amount);
@@ -272,7 +266,7 @@ contract ERC20 is IERC20 {
      * - `_account` cannot be the zero address.
      * - `_account` must have at least `_amount` tokens.
      */
-    function _burn(address _account, uint256 _amount) internal virtual {
+    function _burn(address _account, uint256 _amount) internal {
         require(_account != address(0), "ERC20: burn from the zero address");
 
         _beforeTokenTransfer(_account, address(0), _amount);
@@ -302,7 +296,7 @@ contract ERC20 is IERC20 {
         address _owner,
         address _spender,
         uint256 _amount
-    ) internal virtual {
+    ) internal {
         require(_owner != address(0), "ERC20: approve from the zero address");
         require(_spender != address(0), "ERC20: approve to the zero address");
 
@@ -339,5 +333,5 @@ contract ERC20 is IERC20 {
         address _from,
         address _to,
         uint256 _amount
-    ) internal virtual {}
+    ) internal {}
 }

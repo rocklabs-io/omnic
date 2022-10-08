@@ -103,7 +103,7 @@ contract Bridge is IBridge, Ownable {
         onlyBridgeCanister
         returns (bool)
     {
-        router.handleSwap(++nonce, uint32(block.chainid), _dstPoolId, _amountLD, _to);
+        router.handleSwap(++nonce, uint16(block.chainid), _dstPoolId, _amountLD, _to);
         return true;
     }
 

@@ -1,6 +1,30 @@
+import { BigNumber } from "ethers";
 import { ethers } from "hardhat";
 import { getContractAddr, getChainId } from "./helpers";
 const hre = require("hardhat");
+
+export const approveToken = async function(
+  chain: string,
+  tokenSymbol: string,
+  spender: string,
+  amount: number
+  ) {
+  let tokenAddr = getContractAddr(chain, tokenSymbol);
+  const token = await ethers.getContractAt("ERC20", tokenAddr);
+  
+  const addrs = await ethers.getSigners();
+  let caller = addrs[0].address;
+  console.log("owner:", caller);
+  let allowance = (await token.allowance(caller, spender)).toNumber();
+  console.log("allowance:", allowance);
+  if(allowance == 0) {
+    console.log("approving...");
+    let tx = await token.approve(spender, amount);
+    console.log("approve tx:", tx.hash);
+  } else {
+    console.log("already approved, allowance:", allowance);
+  }
+}
 
 export const swap = async function (
   chain: string, 
@@ -10,9 +34,11 @@ export const swap = async function (
   recipient: string,
   ) {
   let tokenAddr = getContractAddr(chain, tokenSymbol);
-  const token = await ethers.getContractAt("ERC20", tokenAddr);
+  // const token = await ethers.getContractAt("ERC20", tokenAddr);
   const router = await ethers.getContractAt("Router", getContractAddr(chain, "Router"));
   const factory = await ethers.getContractAt("FactoryPool", getContractAddr(chain, "FactoryPool"));
+
+  await approveToken(chain, tokenSymbol, router.address, 1_000_000_000_000_000);
 
   /*
     uint16 _dstChainId,
@@ -49,7 +75,7 @@ const main = async function () {
   let destination = "ic";
   let amount = 1_000_000;
   // pid: 7bv5o-swpxq-yx3sg-eirhj-rn7tm-7fnh5-pnovl-um577-4qatm-nfesf-iae
-  let recipient = "cfbc317dc8c4444e98b7f367cad3f5ed75574677ffe4013634a4915002";
+  let recipient = "0xcfbc317dc8c4444e98b7f367cad3f5ed75574677ffe4013634a4915002";
   let recipient_pad = ethers.utils.hexZeroPad(recipient, 32);
   await swap(chain, "USDT", destination, amount, recipient_pad);
 }
