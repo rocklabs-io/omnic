@@ -50,6 +50,11 @@ export const getBridgeCanisterAddr = function() {
     return config.BridgeCanisterAddr;
 }
 
+export const getBridgeCanisterIdBytes = function() {
+    let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+    return ethers.utils.hexZeroPad(config.BridgeCanisterIdBytes, 32);
+}
+
 export const abi_encode = function(abi: Array<string>, func: string, args: Array<string>) {
     let iface = new ethers.utils.Interface(abi);
     return iface.encodeFunctionData(func, args);

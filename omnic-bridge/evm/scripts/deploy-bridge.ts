@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { getContractAddr, updateConfig, getBridgeCanisterAddr } from "./helpers";
+import { getContractAddr, updateConfig, getBridgeCanisterAddr, getBridgeCanisterIdBytes } from "./helpers";
 const hre = require("hardhat");
 
 // Router -> Bridge -> FactoryPool -> call Router.setBridgeAndFactory
@@ -27,7 +27,12 @@ export const deployBridge = async function (chain: string) {
   if(bridgeAddr == null) {
     console.log("deploying Bridge...");
     let omnicAddr = getContractAddr(chain, "Omnic");
-    bridge = await Bridge.deploy(omnicAddr, router.address, getBridgeCanisterAddr());
+    bridge = await Bridge.deploy(
+      omnicAddr, 
+      router.address,
+      getBridgeCanisterAddr(),
+      getBridgeCanisterIdBytes()
+      );
 
     await bridge.deployed();
     console.log("chain: ", chain, "Bridge deployed to:", bridge.address);

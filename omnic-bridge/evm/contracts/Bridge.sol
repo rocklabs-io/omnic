@@ -33,6 +33,7 @@ contract Bridge is IBridge, Ownable {
     Router public immutable router;
     uint16 public immutable chainIdIC = 0;
     address public bridgeCanister;
+    bytes32 public bridgeCanisterId;
 
     //---------------------------- events -----------------------------------------------
 
@@ -58,7 +59,8 @@ contract Bridge is IBridge, Ownable {
     constructor(
         address _omnic,
         address _router,
-        address _bridgeCanister
+        address _bridgeCanister,
+        bytes32 _bridgeCanisterId
     ) {
         require(_omnic != address(0x0), "_omnic cannot be 0x0");
         require(_router != address(0x0), "_router cannot be 0x0");
@@ -66,6 +68,7 @@ contract Bridge is IBridge, Ownable {
         omnic = IOmnic(_omnic);
         router = Router(_router);
         bridgeCanister = _bridgeCanister;
+        bridgeCanisterId = _bridgeCanisterId;
     }
 
     //----------------------------- brdige canister called  functions ------------------------------
@@ -201,7 +204,7 @@ contract Bridge is IBridge, Ownable {
         uint256 _nonce = nonce++;
         omnic.sendMessage(
             chainIdIC,
-            TypeCasts.addressToBytes32(bridgeCanister),
+            bridgeCanisterId,
             _payload
         );
         emit SendMsg(_t, _nonce);
