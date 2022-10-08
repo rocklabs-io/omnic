@@ -536,6 +536,15 @@ fn get_router() -> Result<Router<Vec<u8>>> {
     })
 }
 
+#[query(name = "get_state")]
+#[candid_method(query, rename = "get_state")]
+fn get_state() -> Result<(String, Router<Vec<u8>>, WrapperTokenAddr)> {
+    let addr = BRIDGE_ADDR.with(|a| a.borrow().clone());
+    let router = ROUTER.with(|router| {router.borrow().clone()});
+    let wrapper = WRAPPER_TOKENS.with(|w| {w.borrow().clone()});
+    Ok((addr, router, wrapper))
+}
+
 #[query(name = "get_pool_id")]
 #[candid_method(query, rename = "get_pool_id")]
 fn get_pool_id(src_chain: u32, src_pool_id: Nat) -> Result<Nat> {
@@ -720,17 +729,14 @@ fn post_upgrade() {
     });
 }
 
-#[cfg(not(any(target_arch = "wasm32", test)))]
+// #[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
     candid::export_service!();
     std::print!("{}", __export_service());
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
+// #[cfg(any(target_arch = "wasm32", test))]
+// fn main() {}
 
 
 // the test should be executed in one thread
