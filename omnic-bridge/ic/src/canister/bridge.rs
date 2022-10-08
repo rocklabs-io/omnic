@@ -21,9 +21,18 @@ use std::str::FromStr;
 
 ic_cron::implement_cron!();
 
-const OPERATION_ADD_LIQUIDITY: u8 = 1u8;
-const OPERATION_REMOVE_LIQUIDITY: u8 = 2u8;
-const OPERATION_SWAP: u8 = 3;
+/*
+enum OperationTypes {
+        Invalid, // 0
+        AddLiquidity, // 1
+        Swap, // 2
+        RemoveLiquidity, // 3
+        CreatePool // 4
+    }
+*/
+const OPERATION_ADD_LIQUIDITY: u8 = 1;
+const OPERATION_SWAP: u8 = 2;
+const OPERATION_REMOVE_LIQUIDITY: u8 = 3;
 const OPERATION_CREATE_POOL: u8 = 4;
 
 const OWNER: &'static str = "aaaaa-aa";
@@ -184,6 +193,15 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
             .map_err(|_| format!("remove liquidity failed"))
         })
     } else if operation_type == OPERATION_SWAP {
+        /*
+            uint8(OperationTypes.Swap),
+            uint16 _srcChainId,
+            uint256 _srcPoolId,
+            uint16 _dstChainId,
+            uint256 _dstPoolId,
+            uint256 _amountLD,
+            bytes32 _to
+        */
         let types = vec![
             ParamType::Uint(8),
             ParamType::Uint(16),
@@ -220,7 +238,6 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
             .clone()
             .into_fixed_bytes()
             .ok_or("can not convert recipient to bytes")?;
-
         // if dst chain_id == 0 means mint/lock mode for evm <=> ic
         // else means swap between evms
         if dst_chain_id == 0 {
@@ -502,9 +519,9 @@ async fn handle_burn(chain_id: u32, bridge_addr: Vec<u8>, to: Vec<u8>, value: Ve
 #[update(name = "create_pool")]
 #[candid_method(update, rename = "create_pool")]
 fn create_pool(src_chain: u32, src_pool_id: Nat, symbol: String) -> Result<Nat> {
-    let caller: Principal = ic_cdk::caller();
-    let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert!(caller == owner || caller == ic_cdk::id(), "only owner or this canister can create a new pool.");
+    // let caller: Principal = ic_cdk::caller();
+    // let owner: Principal = Principal::from_text(OWNER).unwrap();
+    // assert!(caller == owner || caller == ic_cdk::id(), "only owner or this canister can create a new pool.");
 
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
@@ -576,9 +593,9 @@ fn add_supported_token(
     local_decimals: u8,
     shared_decimals: u8,
 ) -> Result<bool> {
-    let caller: Principal = ic_cdk::caller();
-    let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert!(caller == owner || caller == ic_cdk::id(), "only owner or this canister can add a new token.");
+    // let caller: Principal = ic_cdk::caller();
+    // let owner: Principal = Principal::from_text(OWNER).unwrap();
+    // assert!(caller == owner || caller == ic_cdk::id(), "only owner or this canister can add a new token.");
 
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
@@ -597,7 +614,7 @@ fn add_supported_token(
             balances,
         );
         pool.add_token(src_chain, token);
-        r.add_pool(pool)
+        r.update_pool(pool_id, pool)
             .map_err(|e| format!("update pool failed! {}", e)) //update pool
     })
 }

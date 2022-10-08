@@ -9,7 +9,7 @@ use crate::traits::chain::HomeContract;
 pub async fn call_to_canister(recipient: Principal, m: &Message) -> Result<bool, String> {
     // call ic recipient canister
     let ret: CallResult<(Result<bool, String>,)> = 
-        call(recipient, "handle_message", (m.origin, m.nonce, m.sender.as_bytes(), m.body.clone(), )).await;
+        call(recipient, "handle_message", (m.origin, m.sender.as_bytes(), m.nonce, m.body.clone(), )).await;
     match ret {
         Ok((res, )) => {
             match res {

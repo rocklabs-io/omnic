@@ -161,6 +161,11 @@ where
         Ok(true)
     }
 
+    pub fn update_pool(&mut self, pool_id: Nat, pool: Pool<T>) -> Result<bool> {
+        self.pools.insert(pool_id, pool);
+        Ok(true)
+    }
+
     pub fn add_pool_id(&mut self, src_chain: u32, src_pool_id: Nat) -> Result<bool> {
         let pool_id: Nat = self.get_pools_length() - 1;
         self.pool_ids
