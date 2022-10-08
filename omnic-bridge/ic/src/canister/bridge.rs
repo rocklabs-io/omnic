@@ -277,11 +277,12 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
                 pool.amount_evm_to_amount_ic(Nat::from(BigUint::from_bytes_le(&buffer2)), native_deciaml, wrapper_decimal)
             });
 
-            let recipient_str = String::from_utf8(recipient.clone()).unwrap();
-            let properly_trimmed_string = recipient_str.trim_matches(|c: char| c.is_whitespace() || c=='\0');
+            // let recipient_str = String::from_utf8(recipient.clone()).unwrap();
+            // let properly_trimmed_string = recipient_str.trim_matches(|c: char| c.is_whitespace() || c=='\0');
                             
             // the length of slice only be 0, 4, 29
-            let recipient_addr: Principal = Principal::from_slice(properly_trimmed_string.as_bytes());
+            // let recipient_addr: Principal = Principal::from_slice(properly_trimmed_string.as_bytes());
+            let recipient_addr: Principal = Principal::from_slice(&recipient[3..]);
 
             // DIP20
             let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
