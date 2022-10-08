@@ -17,6 +17,7 @@ use omnic_bridge::token::Token as BridgeToken;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
+use std::str::FromStr;
 
 ic_cron::implement_cron!();
 
@@ -26,11 +27,11 @@ const OPERATION_SWAP: u8 = 3;
 const OPERATION_CREATE_POOL: u8 = 4;
 
 const OWNER: &'static str = "aaaaa-aa";
-const PROXY: &'static str = "aaaaa-aa"; // udpate when proxy canister deployed.
+const PROXY: &'static str = "y3lks-laaaa-aaaam-aat7q-cai"; // update when proxy canister deployed.
 
-const URL: &str = "https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd";
-const KEY_NAME: &str = "dfx_test_key";
-const TOKEN_ABI: &[u8] = include_bytes!("./bridge.json");
+const URL: &'static str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
+const KEY_NAME: &str = "test_key_1";
+const BRIDGE_ABI: &[u8] = include_bytes!("./bridge.json");
 
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
@@ -88,8 +89,25 @@ impl WrapperTokenAddr {
 }
 
 thread_local! {
+    static BRIDGE_ADDR: RefCell<String> = RefCell::new("".to_string());
     static ROUTER: RefCell<Router<Vec<u8>>> = RefCell::new(Router::new());
     static WRAPPER_TOKENS: RefCell<WrapperTokenAddr> = RefCell::new(WrapperTokenAddr::new());
+}
+
+#[update(name = "set_canister_addrs")]
+#[candid_method(update, rename = "set_canister_addrs")]
+async fn set_canister_addrs() -> Result<String> {
+    let cid = ic_cdk::id();
+    let derivation_path = vec![cid.clone().as_slice().to_vec()];
+    let evm_addr = get_eth_addr(Some(cid), Some(derivation_path), KEY_NAME.to_string())
+        .await
+        .map(|v| hex::encode(v))
+        .map_err(|e| format!("calc evm address failed: {:?}", e))?;
+    BRIDGE_ADDR.with(|addr| {
+        let mut addr = addr.borrow_mut();
+        *addr = evm_addr.clone();
+    });
+    Ok(evm_addr)
 }
 
 #[update(name = "handle_message")]
@@ -293,7 +311,7 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
             //send_token
             let mut buffer = [0u8; 32];
             amount_evm.to_little_endian(&mut buffer);
-            send_token(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
+            handle_burn(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
         }
     } else if operation_type == OPERATION_CREATE_POOL {
         // create accroding pool to manage tokens
@@ -357,18 +375,17 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
 async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Vec<u8>, amount: Nat) -> Result<bool> {
     let caller = ic_cdk::caller();
     // DIP20
-    let hole_address: Principal = Principal::from_text("aaaaa-aa").unwrap();
     let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
         wrapper_token_addr,
-        "transferFrom",
-        (caller, hole_address, amount.clone(), ),
+        "burn",
+        (caller, amount.clone(), ),
     ).await;
     match transfer_res {
         Ok((res, )) => {
             match res {
                 Ok(_) => {}
                 Err(err) => {
-                    return Err(format!("transferFrom error: {:?}", err));
+                    return Err(format!("burn error: {:?}", err));
                 }
             }
         }
@@ -379,13 +396,47 @@ async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Ve
 
     let amount: Vec<u8> = BigUint::from(amount).to_bytes_le();
     let bridge_addr: Vec<u8> = get_bridge_addr(chain_id).unwrap();
-    send_token(chain_id, bridge_addr, to, amount).await
+    handle_burn(chain_id, bridge_addr, to, amount).await
 }
 
-// call a contract, transfer some token to addr
-#[update(name = "send_token")]
-#[candid_method(update, rename = "send_token")]
-async fn send_token(chain_id: u32, token_addr: Vec<u8>, addr: Vec<u8>, value: Vec<u8>) -> Result<bool> {
+// call proxy.get_nonce() to get nonce
+async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
+    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
+    let call_res: CallResult<(Result<u64>, )> = ic_cdk::call(
+        proxy_canister,
+        "get_nonce",
+        (chain_id, addr,),
+    ).await;
+    match call_res {
+        Ok((res, )) => {
+            res.map(|v| U256::from(v))
+        }
+        Err((_code, msg)) => {
+            return Err(msg);
+        }
+    }
+}
+
+// call proxy.get_gas_price() to get nonce
+async fn get_gas_price(chain_id: u32) -> Result<U256> {
+    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
+    let call_res: CallResult<(Result<u64>, )> = ic_cdk::call(
+        proxy_canister,
+        "get_gas_price",
+        (chain_id,),
+    ).await;
+    match call_res {
+        Ok((res, )) => {
+            res.map(|v| U256::from(v))
+        }
+        Err((_code, msg)) => {
+            return Err(msg);
+        }
+    }
+}
+
+// call bridge.handleSwap
+async fn handle_burn(chain_id: u32, bridge_addr: Vec<u8>, to: Vec<u8>, value: Vec<u8>) -> Result<bool> {
     // ecdsa key info
     let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
     let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
@@ -394,24 +445,20 @@ async fn send_token(chain_id: u32, token_addr: Vec<u8>, addr: Vec<u8>, value: Ve
         Ok(v) => { Web3::new(v) },
         Err(e) => { return Err(e.to_string()) },
     };
-    let contract_address = Address::from_slice(&token_addr);
+    let contract_address = Address::from_slice(&bridge_addr);
     let contract = Contract::from_json(
         w3.eth(),
         contract_address,
-        TOKEN_ABI
+        BRIDGE_ABI
     ).map_err(|e| format!("init contract failed: {}", e))?;
 
-    let canister_addr = get_eth_addr(None, None, KEY_NAME.to_string())
-        .await
-        .map_err(|e| format!("get canister eth addr failed: {}", e))?;
+    let c_addr = BRIDGE_ADDR.with(|addr| addr.borrow().clone());
     // add nonce to options
-    let tx_count = w3.eth()
-        .transaction_count(canister_addr, None)
+    let tx_count = get_nonce(chain_id, c_addr.clone())
         .await
         .map_err(|e| format!("get tx count error: {}", e))?;
     // get gas_price
-    let gas_price = w3.eth()
-        .gas_price()
+    let gas_price = get_gas_price(chain_id)
         .await
         .map_err(|e| format!("get gas_price error: {}", e))?;
     // legacy transaction type is still ok
@@ -420,21 +467,22 @@ async fn send_token(chain_id: u32, token_addr: Vec<u8>, addr: Vec<u8>, value: Ve
         op.gas_price = Some(gas_price);
         op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
     });
-    let to_addr = Address::from_slice(&addr);
+    let to_addr = Address::from_slice(&to);
     let value = U256::from_little_endian(&value);
+    let pool_id: u32 = 0;
     let signed = contract
-        .sign("transfer", (to_addr, value,), options, key_info, chain_id as u64)
+        .sign("handleSwap", (pool_id, value, to_addr,), options, key_info, chain_id as u64)
         .await
-        .map_err(|e| format!("sign transfer failed: {}", e))?;
+        .map_err(|e| format!("sign handleSwap failed: {}", e))?;
 
     let raw_tx: Vec<u8> = signed.raw_transaction.0; 
     let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+    let call_res: CallResult<(TxReceipt, )> = ic_cdk::call(
         proxy_canister,
         "send_raw_tx",
         (chain_id, raw_tx),
     ).await;
-    match transfer_res {
+    match call_res {
         Ok((res, )) => {
             match res {
                 Ok(_) => {

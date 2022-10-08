@@ -95,7 +95,6 @@ contract Bridge is IBridge, Ownable {
 
     // called directly by the bridge canister, for IC->EVM swap
     function handleSwap(
-        uint16 _dstChainId,
         uint256 _dstPoolId,
         uint256 _amountLD,
         bytes32 _to
@@ -104,7 +103,7 @@ contract Bridge is IBridge, Ownable {
         onlyBridgeCanister
         returns (bool)
     {
-        router.handleSwap(++nonce, _dstChainId, _dstPoolId, _amountLD, _to);
+        router.handleSwap(++nonce, uint32(block.chainid), _dstPoolId, _amountLD, _to);
         return true;
     }
 
