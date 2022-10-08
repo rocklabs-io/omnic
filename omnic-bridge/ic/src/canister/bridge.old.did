@@ -1,0 +1,20 @@
+type Result = variant { Ok : bool; Err : text };
+type Result_1 = variant { Ok : vec nat8; Err : text };
+type Result_2 = variant { Ok : nat; Err : text };
+type Result_3 = variant { Ok : text; Err : text };
+service : {
+  addBridgeAddr : (nat32, vec nat8) -> (Result);
+  addSupportedToken : (nat32, nat, text, text, nat8, nat8) -> (Result);
+  add_wrapper_token_addr : (nat, text) -> (Result);
+  burnWrapperToken : (principal, nat32, vec nat8, nat) -> (Result);
+  createPool : (nat32, nat) -> (Result);
+  getBridgeAddr : (nat32) -> (Result_1) query;
+  get_pool_id : (nat32, nat) -> (Result_2) query;
+  get_wrapper_token_addr : (nat) -> (Result_3) query;
+  isBridgeAddrExist : (nat32) -> (Result) query;
+  is_wrapper_token_exist : (nat) -> (Result) query;
+  processMessage : (nat32, vec nat8, nat32, vec nat8) -> (Result);
+  removeBridgeAddr : (nat32) -> (Result_1);
+  remove_wrapper_token_addr : (nat) -> (Result_3);
+  send_token : (nat32, vec nat8, vec nat8, vec nat8) -> (Result);
+}

@@ -1,5 +1,5 @@
 use ic_cdk::export::candid::{candid_method, Deserialize, CandidType, Nat, Principal};
-use ic_cdk_macros::{query, update};
+use ic_cdk_macros::{query, update, pre_upgrade, post_upgrade};
 use ic_cdk::api::call::CallResult;
 use ic_web3::ethabi::{decode, ParamType};
 use ic_web3::transports::ICHttp;
@@ -404,7 +404,7 @@ async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
     let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
     let call_res: CallResult<(Result<u64>, )> = ic_cdk::call(
         proxy_canister,
-        "get_nonce",
+        "get_tx_count",
         (chain_id, addr,),
     ).await;
     match call_res {
@@ -524,6 +524,15 @@ fn create_pool(src_chain: u32, src_pool_id: Nat, symbol: String) -> Result<Nat> 
         r.add_pool_symbol(symbol)
             .map_err(|e| format!("add pool symbol failed: {}", e))?;
         Ok(pool_id)
+    })
+}
+
+#[query(name = "get_router")]
+#[candid_method(query, rename = "get_router")]
+fn get_router() -> Result<Router<Vec<u8>>> {
+    ROUTER.with(|router| {
+        let r = router.borrow();
+        Ok(r.clone())
     })
 }
 
@@ -674,6 +683,41 @@ fn is_wrapper_token_exist(pool_id: Nat) -> Result<bool> {
         let w = wrapper.borrow();
         Ok(w.is_wrapper_token_exist(pool_id))
     })
+}
+
+#[pre_upgrade]
+fn pre_upgrade() {
+    let bridge_addr = BRIDGE_ADDR.with(|c| {
+        c.replace("".to_string())
+    });
+    let router = ROUTER.with(|s| {
+        s.replace(Router::new())
+    });
+    let wrapper = WRAPPER_TOKENS.with(|s| {
+        s.replace(WrapperTokenAddr::new())
+    });
+    ic_cdk::storage::stable_save((bridge_addr, router, wrapper)).expect("pre upgrade error");
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    let (bridge_addr, 
+        router, 
+        wrapper
+    ): (String, 
+        Router<Vec<u8>>, 
+        WrapperTokenAddr
+    ) = ic_cdk::storage::stable_restore().expect("post upgrade error");
+    
+    BRIDGE_ADDR.with(|c| {
+        c.replace(bridge_addr);
+    });
+    ROUTER.with(|s| {
+        s.replace(router);
+    });
+    WRAPPER_TOKENS.with(|s| {
+        s.replace(wrapper);
+    });
 }
 
 #[cfg(not(any(target_arch = "wasm32", test)))]
