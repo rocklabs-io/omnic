@@ -427,9 +427,30 @@ async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Ve
         }
     }
 
-    let amount: Vec<u8> = BigUint::from(amount).to_bytes_le();
+    // burn wrapper token on IC
+    let wrapper_token_addr: Principal = Principal::from_text(&wrapper_token_addr).unwrap();
+    let transfer_res: CallResult<(u8, )> = ic_cdk::call(
+        wrapper_token_addr,
+        "decimals",
+        (),
+    ).await;
+    let wrapper_decimal: u8 = transfer_res.unwrap().0;
+
+    let amount_evm: Nat = ROUTER.with(|router| {
+        let r = router.borrow();
+        let pool = r.get_pool(pool_id.clone()).unwrap();
+        let native_deciaml: u8 = 
+            pool.get_token_by_chain_id(src_chain)
+                .map_or(
+                    Err(format!("no according wrapper token for {} chain {} pool", src_chain, src_pool_id.clone())),
+                    |token| Ok(token.token_local_decimals())
+                ).unwrap();
+        pool.amount_ic_to_amount_evm(amount, native_deciaml, wrapper_decimal)
+    });
+
+    let amount_evm: Vec<u8> = BigUint::from(amount_evm).to_bytes_le();
     let bridge_addr: Vec<u8> = get_bridge_addr(chain_id).unwrap();
-    handle_burn(chain_id, bridge_addr, to, amount).await
+    handle_burn(chain_id, bridge_addr, to, amount_evm).await
 }
 
 // call proxy.get_nonce() to get nonce
