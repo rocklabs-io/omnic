@@ -30,17 +30,26 @@ module.exports = {
   networks: {
     localhost: {
       url: "http://localhost:8545",
+      accounts: [testPrivKey],
     },
     kovan: {
       url: `https://kovan.infura.io/v3/${infuraKey}`,
+      accounts: [testPrivKey]
     },
     rinkeby: {
       url: `https://rinkeby.infura.io/v3/${infuraKey}`,
+      accounts: [testPrivKey]
     },
     goerli: {
       url: `https://goerli.infura.io/v3/${infuraKey}`,
       // url: `https://eth-goerli.g.alchemy.com/v2/${alchemyKey}`,
       accounts: [testPrivKey]
+    },
+	mumbai: { // polygon mumbai testnet
+      url: `https://polygon-mumbai.g.alchemy.com/v2/${alchemyKey}`,
+      accounts: [testPrivKey],
+      // gas: 100000,
+      // gasPrice: 10,
     },
     mainnet: {
       url: `https://mainnet.infura.io/v3/${infuraKey}`,

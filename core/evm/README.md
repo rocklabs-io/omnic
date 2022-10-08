@@ -24,3 +24,10 @@ deploy to goerli:
 ```
 npx hardhat run --network goerli scripts/deploy.ts
 ```
+
+deployment process:
+1. deploy-impl.ts
+2. deploy-proxy.ts
+
+upgrade process:
+1. upgrade-impl.ts
