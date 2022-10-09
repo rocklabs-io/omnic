@@ -59,6 +59,10 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         uint256 amountSD,
         uint256 fee
     );
+    event SwapRemote(
+        address to,
+        uint256 amountLD
+    );
     event FeesUpdated(uint256 mintFee);
 
     //----------------------------- modifiers ----------------------------------------------
@@ -139,6 +143,15 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         require(amountSD >= minAmountSD, "slippage too high");
 
         emit Swap(_dstChainId, _dstPoolId, _from, amountSD, fee);
+    }
+
+    function swapRemote(
+        address _to,
+        uint256 _amountLD
+    ) external nonReentrant onlyRouter onlyNotPause {
+        _safeTransfer(token, _to, _amountLD);
+
+        emit SwapRemote(_to, _amountLD);
     }
 
     function setFee(uint256 _mintFee) external onlyRouter {
