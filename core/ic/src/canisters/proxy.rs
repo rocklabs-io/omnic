@@ -4,7 +4,7 @@ omnic proxy canister:
 */
 
 use std::cell::{RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::iter::FromIterator;
 
@@ -25,6 +25,7 @@ use omnic::HomeContract;
 use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::{State, StateMachine, StateMachineStable, StateInfo};
 use omnic::call::{call_to_canister, call_to_chain};
+use omnic::utils::check_roots_result;
 
 ic_cron::implement_cron!();
 
@@ -38,6 +39,15 @@ thread_local! {
     static STATE_INFO: RefCell<StateInfo> = RefCell::new(StateInfo::default());
     static CHAINS: RefCell<HashMap<u32, ChainState>>  = RefCell::new(HashMap::new());
     static STATE_MACHINE: RefCell<StateMachine> = RefCell::new(StateMachine::default());
+    static LOGS: RefCell<VecDeque<String>> = RefCell::new(VecDeque::default());
+}
+
+#[query]
+#[candid_method(query)]
+fn get_logs() -> Vec<String> {
+    LOGS.with(|l| {
+        l.borrow().clone().into()
+    })
 }
 
 fn get_fetch_root_period() -> u64 {
@@ -105,7 +115,7 @@ async fn set_canister_addrs() -> Result<bool, String> {
             match chain.chain_type() {
                 ChainType::Evm => chain.set_canister_addr(evm_addr.clone()),
                 _ => {
-                    ic_cdk::println!("chain type not supported yet!");
+                    add_log("chain type not supported yet!".to_string());
                 }
             }
         }
@@ -384,7 +394,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
     // if invalid, return error
     let valid = is_valid(message.clone(), proof, leaf_index)?;
     if !valid {
-        ic_cdk::println!("message does not pass verification!");
+        add_log("message does not pass verification!".to_string());
         return Err("message does not pass verification!".into());
     }
     let m = Message::from_raw(message.clone()).map_err(|e| {
@@ -397,7 +407,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         c.next_index()
     });
     if next_index != leaf_index {
-        ic_cdk::println!("next_index: {} != leaf_index: {}, ", next_index, leaf_index);
+        add_log(format!("next_index: {} != leaf_index: {}, ", next_index, leaf_index));
         return Err(format!("next_index: {} != leaf_index: {}, ", next_index, leaf_index));
     }
     CHAINS.with(|chains| {
@@ -409,7 +419,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
     if m.destination == 0 {
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
-        ic_cdk::println!("recipient: {:?}", Principal::to_text(&recipient));
+        add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
         call_to_canister(recipient, &m).await
     } else {
         // send tx to dst chain
@@ -464,7 +474,7 @@ async fn fetch_root() {
                             State::Fetching(0)
                         },
                         Err(e) => {
-                            ic_cdk::println!("init contract failed: {}", e);
+                            add_log(format!("init contract failed: {}", e));
                             State::Fail
                         },
                     }
@@ -479,32 +489,24 @@ async fn fetch_root() {
             match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
                 Ok(client) => {
                     let root = client.get_latest_root(Some(state.block_height)).await;
-                    ic_cdk::println!("root from {:?}: {:?}", state.rpc_urls[idx], root);
+                    add_log(format!("root from {:?}: {:?}", state.rpc_urls[idx], root));
                     match root {
                         Ok(r) => {
                             incr_state_root(r);
                         },
                         Err(e) => {
-                            ic_cdk::println!("query root failed: {}", e);
+                            add_log(format!("query root failed: {}", e));
                             incr_state_root(H256::zero());
                         },
                     };
                     STATE_MACHINE.with(|s| {
                         let s = s.borrow();
                         let (check_result, _) = check_roots_result(&s.roots, s.rpc_count());
-                        if !check_result {
-                            State::Fail
-                        } else {
-                            if idx + 1 == state.rpc_count() {
-                                State::End
-                            } else {
-                                State::Fetching(idx + 1)
-                            }
-                        }
+                        s.get_fetching_next_sub_state(check_result)
                     })
                 },
                 Err(e) => {
-                    ic_cdk::println!("init evm chain client failed: {}", e);
+                    add_log(format!("init evm chain client failed: {}", e));
                     State::Fail
                 }
             }
@@ -516,7 +518,7 @@ async fn fetch_root() {
 
     // update sub state
     STATE_MACHINE.with(|s| {
-        s.borrow_mut().sub_state = next_state.clone();
+        s.borrow_mut().sub_state = next_state;
     });
 
     if next_state != State::End && next_state != State::Fail {
@@ -566,7 +568,7 @@ async fn fetch_roots() {
                         state.rpc_urls = rpc_urls;
                         state.omnic_addr = omnic_addr;
                     });
-                    ic_cdk::println!("fetching for chain {:?}...", chain_id);
+                    add_log(format!("fetching for chain {:?}...", chain_id));
                     cron_enqueue(
                         Task::FetchRoot, 
                         ic_cron::types::SchedulingOptions {
@@ -585,31 +587,21 @@ async fn fetch_roots() {
                         let (check_result, root) = check_roots_result(&state.roots, state.rpc_count());
                         if check_result {
                             chain_state.insert_root(root);
+                        } else {
+                            add_log(format!("invalid roots: {:?}", state.roots))
                         }
                     });
                     // update state
                     STATE_MACHINE.with(|s| {
                         let mut state = s.borrow_mut();
-                        state.sub_state = State::Init;
-                        let next_idx = (idx + 1) % (state.chain_ids.len());
-                        state.state = if next_idx == 0 {
-                            State::Init
-                        } else {
-                            State::Fetching(next_idx)
-                        };
+                        (state.state, state.sub_state) = state.get_fetching_next_state();
                     });
                 },
                 State::Fail => {
                     // update state
                     STATE_MACHINE.with(|s| {
                         let mut state = s.borrow_mut();
-                        state.sub_state = State::Init;
-                        let next_idx = (idx + 1) % (state.chain_ids.len());
-                        state.state = if next_idx == 0 {
-                            State::Init
-                        } else {
-                            State::Fetching(next_idx)
-                        };
+                        (state.state, state.sub_state) = state.get_fetching_next_state();
                     });
                 },
             }
@@ -699,51 +691,16 @@ fn incr_state_root(root: H256) {
     })
 }
 
-/// check if the roots match the criteria so far, return the check result and root
-fn check_roots_result(roots: &HashMap<H256, usize>, total_result: usize) -> (bool, H256) {
-    // when rpc fail, the root is vec![0; 32]
-    if total_result <= 2 {
-        // rpc len <= 2, all roots must match
-        if roots.len() != 1 {
-            return (false, H256::zero());
-        } else {
-            let r = roots.keys().next().unwrap().clone();
-            return (r != H256::zero(), r);
-        }
-    } else {
-        // rpc len > 2, half of the rpc result should be the same
-        let limit = total_result / 2;
-        // if contains > n/2 root, def fail
-        let root_count = roots.keys().len();
-        if root_count > limit {
-            return (false, H256::zero());
-        }
-
-        // if #ZERO_HASH > n/2, def fail
-        let error_count = roots.get(&H256::zero()).unwrap_or(&0);
-        if error_count > &limit {
-            return (false, H256::zero());
-        }
-
-        // if the #(root of most count) + #(rest rpc result) <= n / 2, def fail
-        let mut possible_root = H256::zero();
-        let mut possible_count: usize = 0;
-        let mut current_count = 0;
-        for (k ,v ) in roots {
-            if v > &possible_count {
-                possible_count = *v;
-                possible_root = k.clone();
-            }
-            current_count += *v;
-        }
-        if possible_count + (total_result - current_count) <= limit {
-            return (false, H256::zero());
-        }
-
-        // otherwise return true and root of most count
-        return (true, possible_root.clone())
-    }
+fn add_log(log: String) {
+    LOGS.with(|l| {
+        let mut logs = l.borrow_mut();
+        if logs.len() == 1000 {
+            logs.pop_front();
+        } 
+        logs.push_back(log);
+    });
 }
+
 
 fn main() {
     candid::export_service!();
