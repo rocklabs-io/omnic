@@ -41,8 +41,8 @@ module.exports = {
       accounts: [testPrivKey]
     },
     goerli: {
-      url: `https://goerli.infura.io/v3/${infuraKey}`,
-      // url: `https://eth-goerli.g.alchemy.com/v2/${alchemyKey}`,
+      // url: `https://goerli.infura.io/v3/${infuraKey}`,
+      url: `https://eth-goerli.g.alchemy.com/v2/${alchemyKey}`,
       accounts: [testPrivKey],
       // gas: 1000000,
       // gasPrice: 1,
