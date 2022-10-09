@@ -3,7 +3,7 @@ use std::collections::{HashSet, HashMap};
 use ic_web3::types::H256;
 use std::iter::FromIterator;
 
-#[derive(CandidType, Deserialize, Clone, PartialEq, Eq)]
+#[derive(CandidType, Deserialize, Copy, Clone, PartialEq, Eq)]
 pub enum State {
     Init,
     Fetching(usize),
@@ -33,10 +33,10 @@ impl Default for State {
 /// Main State transition:
 /// Init => Move to Fetching(0)
 /// Fetching(idx) => 
-///     Sub state: Init => init rpc urls into state machine for this round, issue a sub task for fetch root of current chain id
+///     Sub state: Init => init rpc urls, chain_ids into state machine for this round, issue a sub task for fetch root of current chain id
 ///     Sub state: Fetching => fetching, do nothing
-///     Sub state: Fail => Move sub state to Init, move state to fetching((idx + 1) % chains_num)
-///     Sub state: End => Update the root, move sub state to Init, move state to fetching((idx + 1) % chains_num)
+///     Sub state: Fail => Move sub state and state to Init
+///     Sub state: End => Update the root, move sub state and state to Init
 /// End, Fail => can't reach this 2 state in main state
 /// 
 /// Sub state transition:
@@ -80,6 +80,35 @@ impl StateMachine {
 
     pub fn rpc_count(&self) -> usize {
         self.rpc_urls.len()
+    }
+
+
+    pub fn get_fetching_next_state(&self) -> (State, State) {
+        if let State::Fetching(idx) = self.state {
+            let next_idx = (idx + 1) % (self.chain_ids.len());
+            // sub state always move to init
+            if next_idx == 0 {
+                (State::Init, State::Init)
+            } else {
+                (State::Fetching(next_idx), State::Init)
+            }
+        } else {
+            panic!("state not in fetching")
+        }
+    }
+
+    pub fn get_fetching_next_sub_state(&self, check_result: bool) -> State {
+        if let State::Fetching(idx) = self.sub_state {
+            if!check_result {
+                State::Fail
+            } else if idx + 1 == self.rpc_count() {
+                State::End
+            } else {
+                State::Fetching(idx + 1)
+            }
+        } else {
+            panic!("sub state not in fetching")
+        }
     }
 }
 

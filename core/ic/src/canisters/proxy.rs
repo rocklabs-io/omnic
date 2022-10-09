@@ -358,15 +358,7 @@ async fn fetch_root() {
                     STATE_MACHINE.with(|s| {
                         let s = s.borrow();
                         let (check_result, _) = check_roots_result(&s.roots, s.rpc_count());
-                        if !check_result {
-                            State::Fail
-                        } else {
-                            if idx + 1 == state.rpc_count() {
-                                State::End
-                            } else {
-                                State::Fetching(idx + 1)
-                            }
-                        }
+                        s.get_fetching_next_sub_state(check_result)
                     })
                 },
                 Err(e) => {
@@ -382,7 +374,7 @@ async fn fetch_root() {
 
     // update sub state
     STATE_MACHINE.with(|s| {
-        s.borrow_mut().sub_state = next_state.clone();
+        s.borrow_mut().sub_state = next_state;
     });
 
     if next_state != State::End && next_state != State::Fail {
@@ -451,31 +443,21 @@ async fn fetch_roots() {
                         let (check_result, root) = check_roots_result(&state.roots, state.rpc_count());
                         if check_result {
                             chain_state.insert_root(root);
+                        } else {
+                            ic_cdk::println!("invalid roots: {:?}", state.roots)
                         }
                     });
                     // update state
                     STATE_MACHINE.with(|s| {
                         let mut state = s.borrow_mut();
-                        state.sub_state = State::Init;
-                        let next_idx = (idx + 1) % (state.chain_ids.len());
-                        state.state = if next_idx == 0 {
-                            State::Init
-                        } else {
-                            State::Fetching(next_idx)
-                        };
+                        (state.state, state.sub_state) = state.get_fetching_next_state();
                     });
                 },
                 State::Fail => {
                     // update state
                     STATE_MACHINE.with(|s| {
                         let mut state = s.borrow_mut();
-                        state.sub_state = State::Init;
-                        let next_idx = (idx + 1) % (state.chain_ids.len());
-                        state.state = if next_idx == 0 {
-                            State::Init
-                        } else {
-                            State::Fetching(next_idx)
-                        };
+                        (state.state, state.sub_state) = state.get_fetching_next_state();
                     });
                 },
             }
