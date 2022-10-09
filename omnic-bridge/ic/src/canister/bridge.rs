@@ -550,7 +550,7 @@ async fn handle_burn(chain_id: u32, symbol: String, bridge_addr: Vec<u8>, to: Ve
     //     let r = r.borrow();
     //     r.get_pool_id_by_symbol(&symbol).unwrap()
     // });
-    let pool_id = U256::from(3);
+    let pool_id = U256::from(0);
     // return Err(format!("{:?}, {:?}, {:?}", pool_id, value, temp));
 
     let signed = contract
