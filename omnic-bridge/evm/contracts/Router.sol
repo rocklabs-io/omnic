@@ -141,12 +141,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
             uint256 convertRate = pool.convertRate();
             _amountLD = _amountLD.div(convertRate).mul(convertRate);
         }
-        _safeTransferFrom(
-            pool.token(),
-            address(pool),
-            TypeCasts.bytes32ToAddress(_to),
-            _amountLD
-        );
+        pool.swapRemote(TypeCasts.bytes32ToAddress(_to), _amountLD);
         //event
         emit HandleSwap(_nonce, _dstChainId, _dstPoolId, _amountLD, _to);
     }

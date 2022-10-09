@@ -1,6 +1,8 @@
 use ic_cdk::export::candid::{candid_method, Deserialize, CandidType, Nat, Principal};
 use ic_cdk_macros::{query, update, pre_upgrade, post_upgrade};
 use ic_cdk::api::call::CallResult;
+use ic_cdk::api::call::call_with_payment;
+
 use ic_web3::ethabi::{decode, ParamType};
 use ic_web3::transports::ICHttp;
 use ic_web3::Web3;
@@ -8,7 +10,7 @@ use ic_web3::ic::{get_eth_addr, KeyInfo};
 use ic_web3::{
     contract::{Contract, Options},
     ethabi::ethereum_types::{U64, U256},
-    types::{Address,},
+    types::{Address, H256},
 };
 use num_bigint::BigUint;
 use omnic_bridge::pool::Pool;
@@ -131,274 +133,290 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
         .try_into()
         .map_err(|_| format!("convert U256 to u8 failed"))?;
     if operation_type == OPERATION_ADD_LIQUIDITY {
-        let types = vec![
-            ParamType::Uint(8),
-            ParamType::Uint(16),
-            ParamType::Uint(256),
-            ParamType::Uint(256),
-        ];
-        let d = decode(&types, &payload).map_err(|e| format!("payload decode error: {} ", e))?;
-        let src_pool_id: U256 = d[2]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert src_chain to U256".to_string())?;
-        let amount: U256 = d[3]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert src_chain to U256".to_string())?;
-
-        ROUTER.with(|router| {
-            let mut r = router.borrow_mut();
-            let mut buffer1 = [0u8; 32];
-            let mut buffer2 = [0u8; 32];
-            src_pool_id.to_little_endian(&mut buffer1);
-            amount.to_little_endian(&mut buffer2);
-            r.add_liquidity(
-                src_chain,
-                Nat::from(BigUint::from_bytes_le(&buffer1)),
-                sender,
-                Nat::from(BigUint::from_bytes_le(&buffer2)),
-            )
-            .map_err(|_| format!("add liquidity failed"))
-        })
+        _handle_operation_add_liquidity(src_chain, sender.clone(), &payload)
     } else if operation_type == OPERATION_REMOVE_LIQUIDITY {
-        let types = vec![
-            ParamType::Uint(8),
-            ParamType::Uint(16),
-            ParamType::Uint(256),
-            ParamType::Uint(256),
-        ];
-        let d = decode(&types, &payload).map_err(|e| format!("payload decode error: {}", e))?;
-        let src_pool_id: U256 = d[2]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert src_chain to U256".to_string())?;
-        let amount: U256 = d[3]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert src_chain to U256".to_string())?;
-
-        ROUTER.with(|router| {
-            let mut r = router.borrow_mut();
-            let mut buffer1 = [0u8; 32];
-            let mut buffer2 = [0u8; 32];
-            src_pool_id.to_little_endian(&mut buffer1);
-            amount.to_little_endian(&mut buffer2);
-            r.remove_liquidity(
-                src_chain,
-                Nat::from(BigUint::from_bytes_le(&buffer1)),
-                sender,
-                Nat::from(BigUint::from_bytes_le(&buffer2)),
-            )
-            .map_err(|_| format!("remove liquidity failed"))
-        })
+        _handle_operation_remove_liquidity(src_chain, sender.clone(), &payload)
     } else if operation_type == OPERATION_SWAP {
-        /*
-            uint8(OperationTypes.Swap),
-            uint16 _srcChainId,
-            uint256 _srcPoolId,
-            uint16 _dstChainId,
-            uint256 _dstPoolId,
-            uint256 _amountLD,
-            bytes32 _to
-        */
-        let types = vec![
-            ParamType::Uint(8),
-            ParamType::Uint(16),
-            ParamType::Uint(256),
-            ParamType::Uint(16),
-            ParamType::Uint(256),
-            ParamType::Uint(256),
-            ParamType::FixedBytes(32), 
-        ];
-        let d = decode(&types, &payload).map_err(|e| format!("payload decode error: {}", e))?;
-        let src_chain_id: u32 = d[1]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert src_chain to U256".to_string())?
-            .try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
-        let src_pool_id: U256 = d[2]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert src_pool_id to U256".to_string())?;
-        let dst_chain_id: u32 = d[3]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert dst_chain to U256".to_string())?
-            .try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
-        let dst_pool_id: U256 = d[4]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert dst_pool_id to U256".to_string())?;
-        let amount_evm: U256 = d[5]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert amount to U256".to_string())?;
-        let recipient: Vec<u8> = d[6]
-            .clone()
-            .into_fixed_bytes()
-            .ok_or("can not convert recipient to bytes")?;
-        // if dst chain_id == 0 means mint/lock mode for evm <=> ic
-        // else means swap between evms
-        if dst_chain_id == 0 {
-            let mut buffer1 = [0u8; 32];
-            let mut buffer2 = [0u8; 32];
-            let pool_id: Nat = ROUTER.with(|router| {
-                let r = router.borrow();
-                src_pool_id.to_little_endian(&mut buffer1);
-                r.get_pool_id(src_chain_id, Nat::from(BigUint::from_bytes_le(&buffer1)))
-            }).map_err(|e| format!("get pool id failed: {:?}", e))?;
-
-
-            // get wrapper token cansider address
-            let wrapper_token_addr: String = WRAPPER_TOKENS.with(|wrapper_tokens| {
-                let w = wrapper_tokens.borrow();
-                w.get_wrapper_token_addr(pool_id.clone())
-            }).map_err(|e| format!("get wrapper token address failed: {}", e))?;
-
-            // mint wrapper token on IC
-            let wrapper_token_addr: Principal = Principal::from_text(&wrapper_token_addr).unwrap();
-            let transfer_res: CallResult<(u8, )> = ic_cdk::call(
-                wrapper_token_addr,
-                "decimals",
-                (),
-            ).await;
-            let wrapper_decimal: u8 = transfer_res.unwrap().0;
-            amount_evm.to_little_endian(&mut buffer2);
-            let amount_ic: Nat = ROUTER.with(|router| {
-                let r = router.borrow();
-                let pool = r.get_pool(pool_id.clone()).unwrap();
-                let native_deciaml: u8 = 
-                    pool.get_token_by_chain_id(src_chain)
-                        .map_or(
-                            Err(format!("no according wrapper token for {} chain {} pool", src_chain, src_pool_id.clone())),
-                            |token| Ok(token.token_local_decimals())
-                        ).unwrap();
-                pool.amount_evm_to_amount_ic(Nat::from(BigUint::from_bytes_le(&buffer2)), native_deciaml, wrapper_decimal)
-            });
-
-            // let recipient_str = String::from_utf8(recipient.clone()).unwrap();
-            // let properly_trimmed_string = recipient_str.trim_matches(|c: char| c.is_whitespace() || c=='\0');
-                            
-            // the length of slice only be 0, 4, 29
-            // let recipient_addr: Principal = Principal::from_slice(properly_trimmed_string.as_bytes());
-            let recipient_addr: Principal = Principal::from_slice(&recipient[3..]);
-
-            // DIP20
-            let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
-                wrapper_token_addr,
-                "mint",
-                (recipient_addr, amount_ic),
-            ).await;
-            match transfer_res {
-                Ok((res, )) => {
-                    match res {
-                        Ok(_) => {}
-                        Err(err) => {
-                            return Err(format!("mint error: {:?}", err));
-                        }
-                    }
-                }
-                Err((_code, msg)) => {
-                    return Err(msg);
-                }
-            }
-            Ok(true)
-        } else {
-            ROUTER.with(|router| {
-                let mut r = router.borrow_mut();
-                let mut buffer1 = [0u8; 32];
-                let mut buffer2 = [0u8; 32];
-                let mut buffer3 = [0u8; 32];
-                src_pool_id.to_little_endian(&mut buffer1);
-                dst_pool_id.to_little_endian(&mut buffer2);
-                amount_evm.to_little_endian(&mut buffer3);
-                // udpate token ledger
-                r.swap(
-                    src_chain_id,
-                    Nat::from(BigUint::from_bytes_le(&buffer1)),
-                    dst_chain_id,
-                    Nat::from(BigUint::from_bytes_le(&buffer2)),
-                    Nat::from(BigUint::from_bytes_le(&buffer3)),
-                )
-            }).map_err(|_| format!("remove liquidity failed"))?;
-    
-            // call send_token method to transfer token to recipient
-            let dst_bridge_addr: Vec<u8> = get_bridge_addr(dst_chain_id).unwrap();
-    
-            //send_token
-            let mut buffer = [0u8; 32];
-            amount_evm.to_little_endian(&mut buffer);
-            handle_burn(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
-        }
+        _handle_operation_swap(src_chain, &payload).await
     } else if operation_type == OPERATION_CREATE_POOL {
-        // create accroding pool to manage tokens
-        let types = vec![
-            ParamType::Uint(8),
-            ParamType::Uint(256),
-            ParamType::Uint(8), // shared_decimals
-            ParamType::Uint(8), // local_decimals
-            ParamType::String,
-            ParamType::String, 
-        ];
-        let d = decode(&types, &payload).map_err(|e| format!("payload decode error: {}", e))?;
-
-        let src_pool_id: U256 = d[1]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert src_pool_id to U256".to_string())?;
-        let shared_decimal: u8 = d[2]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert shared_decimals to U256".to_string())?
-            .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
-        let local_decimal: u8 = d[3]
-            .clone()
-            .into_uint()
-            .ok_or("can not convert local_decimals U256".to_string())?
-            .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
-        let token_name: String = d[4]
-            .clone()
-            .into_string()
-            .ok_or("can not convert token_name to String".to_string())?;
-        let token_symbol: String = d[5]
-            .clone()
-            .into_string()
-            .ok_or("can not convert token_symbol to String".to_string())?;
-        
-        let mut buffer = [0u8; 32];
-        src_pool_id.to_little_endian(&mut buffer);
-        let pool_id : Nat = create_pool(
-            src_chain, 
-            Nat::from(BigUint::from_bytes_le(&buffer)), 
-            token_symbol.clone()
-        )?;
-        add_supported_token(
-            src_chain, 
-            Nat::from(BigUint::from_bytes_le(&buffer)), 
-            pool_id, 
-            token_name, 
-            token_symbol, 
-            local_decimal, 
-            shared_decimal
-        )
+        _handle_operation_create_pool(src_chain, &payload)
     } else {
         Err("unsupported!".to_string())
     }
 }
 
+fn _handle_operation_add_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u8]) -> Result<bool> {
+    let types = vec![
+        ParamType::Uint(8),
+        ParamType::Uint(16),
+        ParamType::Uint(256),
+        ParamType::Uint(256),
+    ];
+    let d = decode(&types, payload).map_err(|e| format!("payload decode error: {} ", e))?;
+    let src_pool_id: U256 = d[2]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert src_chain to U256".to_string())?;
+    let amount: U256 = d[3]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert src_chain to U256".to_string())?;
+
+    ROUTER.with(|router| {
+        let mut r = router.borrow_mut();
+        let mut buffer1 = [0u8; 32];
+        let mut buffer2 = [0u8; 32];
+        src_pool_id.to_little_endian(&mut buffer1);
+        amount.to_little_endian(&mut buffer2);
+        r.add_liquidity(
+            src_chain,
+            Nat::from(BigUint::from_bytes_le(&buffer1)),
+            sender,
+            Nat::from(BigUint::from_bytes_le(&buffer2)),
+        )
+        .map_err(|_| format!("add liquidity failed"))
+    })
+}
+
+fn _handle_operation_remove_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u8]) -> Result<bool> {
+    let types = vec![
+        ParamType::Uint(8),
+        ParamType::Uint(16),
+        ParamType::Uint(256),
+        ParamType::Uint(256),
+    ];
+    let d = decode(&types, payload).map_err(|e| format!("payload decode error: {}", e))?;
+    let src_pool_id: U256 = d[2]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert src_chain to U256".to_string())?;
+    let amount: U256 = d[3]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert src_chain to U256".to_string())?;
+
+    ROUTER.with(|router| {
+        let mut r = router.borrow_mut();
+        let mut buffer1 = [0u8; 32];
+        let mut buffer2 = [0u8; 32];
+        src_pool_id.to_little_endian(&mut buffer1);
+        amount.to_little_endian(&mut buffer2);
+        r.remove_liquidity(
+            src_chain,
+            Nat::from(BigUint::from_bytes_le(&buffer1)),
+            sender,
+            Nat::from(BigUint::from_bytes_le(&buffer2)),
+        )
+        .map_err(|_| format!("remove liquidity failed"))
+    })
+}
+
+async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> {
+    /*
+        uint8(OperationTypes.Swap),
+        uint16 _srcChainId,
+        uint256 _srcPoolId,
+        uint16 _dstChainId,
+        uint256 _dstPoolId,
+        uint256 _amountLD,
+        bytes32 _to
+    */
+    let types = vec![
+        ParamType::Uint(8),
+        ParamType::Uint(16),
+        ParamType::Uint(256),
+        ParamType::Uint(16),
+        ParamType::Uint(256),
+        ParamType::Uint(256),
+        ParamType::FixedBytes(32), 
+    ];
+    let d = decode(&types, payload).map_err(|e| format!("payload decode error: {}", e))?;
+    let src_chain_id: u32 = d[1]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert src_chain to U256".to_string())?
+        .try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
+    let src_pool_id: U256 = d[2]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert src_pool_id to U256".to_string())?;
+    let dst_chain_id: u32 = d[3]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert dst_chain to U256".to_string())?
+        .try_into().map_err(|_| format!("convert U256 to u32 failed"))?;
+    let dst_pool_id: U256 = d[4]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert dst_pool_id to U256".to_string())?;
+    let amount_evm: U256 = d[5]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert amount to U256".to_string())?;
+    let recipient: Vec<u8> = d[6]
+        .clone()
+        .into_fixed_bytes()
+        .ok_or("can not convert recipient to bytes")?;
+    // if dst chain_id == 0 means mint/lock mode for evm <=> ic
+    // else means swap between evms
+    if dst_chain_id == 0 {
+        let mut buffer1 = [0u8; 32];
+        let mut buffer2 = [0u8; 32];
+        let pool_id: Nat = ROUTER.with(|router| {
+            let r = router.borrow();
+            src_pool_id.to_little_endian(&mut buffer1);
+            r.get_pool_id(src_chain_id, Nat::from(BigUint::from_bytes_le(&buffer1)))
+        }).map_err(|e| format!("get pool id failed: {:?}", e))?;
+
+
+        // get wrapper token cansider address
+        let wrapper_token_addr: String = WRAPPER_TOKENS.with(|wrapper_tokens| {
+            let w = wrapper_tokens.borrow();
+            w.get_wrapper_token_addr(pool_id.clone())
+        }).map_err(|e| format!("get wrapper token address failed: {}", e))?;
+
+        // mint wrapper token on IC
+        let wrapper_token_addr: Principal = Principal::from_text(&wrapper_token_addr).unwrap();
+        let transfer_res: CallResult<(u8, )> = ic_cdk::call(
+            wrapper_token_addr,
+            "decimals",
+            (),
+        ).await;
+        let wrapper_decimal: u8 = transfer_res.unwrap().0;
+        amount_evm.to_little_endian(&mut buffer2);
+        let amount_ic: Nat = ROUTER.with(|router| {
+            let r = router.borrow();
+            let pool = r.get_pool(pool_id.clone()).unwrap();
+            let native_deciaml: u8 = 
+                pool.get_token_by_chain_id(src_chain)
+                    .map_or(
+                        Err(format!("no according wrapper token for {} chain {} pool", src_chain, src_pool_id.clone())),
+                        |token| Ok(token.token_local_decimals())
+                    ).unwrap();
+            pool.amount_evm_to_amount_ic(Nat::from(BigUint::from_bytes_le(&buffer2)), native_deciaml, wrapper_decimal)
+        });
+
+        // let recipient_str = String::from_utf8(recipient.clone()).unwrap();
+        // let properly_trimmed_string = recipient_str.trim_matches(|c: char| c.is_whitespace() || c=='\0');
+                        
+        // the length of slice only be 0, 4, 29
+        // let recipient_addr: Principal = Principal::from_slice(properly_trimmed_string.as_bytes());
+        let recipient_addr: Principal = Principal::from_slice(&recipient[3..]);
+
+        // DIP20
+        let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+            wrapper_token_addr,
+            "mint",
+            (recipient_addr, amount_ic),
+        ).await;
+        match transfer_res {
+            Ok((res, )) => {
+                match res {
+                    Ok(_) => {}
+                    Err(err) => {
+                        return Err(format!("mint error: {:?}", err));
+                    }
+                }
+            }
+            Err((_code, msg)) => {
+                return Err(msg);
+            }
+        }
+        Ok(true)
+    } else {
+        ROUTER.with(|router| {
+            let mut r = router.borrow_mut();
+            let mut buffer1 = [0u8; 32];
+            let mut buffer2 = [0u8; 32];
+            let mut buffer3 = [0u8; 32];
+            src_pool_id.to_little_endian(&mut buffer1);
+            dst_pool_id.to_little_endian(&mut buffer2);
+            amount_evm.to_little_endian(&mut buffer3);
+            // udpate token ledger
+            r.swap(
+                src_chain_id,
+                Nat::from(BigUint::from_bytes_le(&buffer1)),
+                dst_chain_id,
+                Nat::from(BigUint::from_bytes_le(&buffer2)),
+                Nat::from(BigUint::from_bytes_le(&buffer3)),
+            )
+        }).map_err(|_| format!("remove liquidity failed"))?;
+
+        // call send_token method to transfer token to recipient
+        let dst_bridge_addr: Vec<u8> = get_bridge_addr(dst_chain_id).unwrap();
+
+        //send_token
+        let mut buffer = [0u8; 32];
+        amount_evm.to_little_endian(&mut buffer);
+        handle_burn(dst_chain_id, "USDT".to_string(), dst_bridge_addr, recipient, buffer.to_vec()).await; // how to handle failed transfer?
+        Ok(true)
+    }
+}
+
+fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool> {
+    // create accroding pool to manage tokens
+    let types = vec![
+        ParamType::Uint(8),
+        ParamType::Uint(256),
+        ParamType::Uint(8), // shared_decimals
+        ParamType::Uint(8), // local_decimals
+        ParamType::String,
+        ParamType::String, 
+    ];
+    let d = decode(&types, payload).map_err(|e| format!("payload decode error: {}", e))?;
+
+    let src_pool_id: U256 = d[1]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert src_pool_id to U256".to_string())?;
+    let shared_decimal: u8 = d[2]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert shared_decimals to U256".to_string())?
+        .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
+    let local_decimal: u8 = d[3]
+        .clone()
+        .into_uint()
+        .ok_or("can not convert local_decimals U256".to_string())?
+        .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
+    let token_name: String = d[4]
+        .clone()
+        .into_string()
+        .ok_or("can not convert token_name to String".to_string())?;
+    let token_symbol: String = d[5]
+        .clone()
+        .into_string()
+        .ok_or("can not convert token_symbol to String".to_string())?;
+    
+    let mut buffer = [0u8; 32];
+    src_pool_id.to_little_endian(&mut buffer);
+    let pool_id : Nat = create_pool(
+        src_chain, 
+        Nat::from(BigUint::from_bytes_le(&buffer)), 
+        token_symbol.clone()
+    )?;
+    add_supported_token(
+        src_chain, 
+        Nat::from(BigUint::from_bytes_le(&buffer)), 
+        pool_id, 
+        token_name, 
+        token_symbol, 
+        local_decimal, 
+        shared_decimal
+    )
+}
 
 #[update(name = "burn_wrapper_token")]
 #[candid_method(update, rename = "burn_wrapper_token")]
-async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Vec<u8>, amount: Nat) -> Result<bool> {
+async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: String, amount: Nat) -> Result<String> {
     let caller = ic_cdk::caller();
     // DIP20
-    let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+    let burn_res: CallResult<(TxReceipt, )> = ic_cdk::call(
         wrapper_token_addr,
-        "burn",
+        "burnFrom",
         (caller, amount.clone(), ),
     ).await;
-    match transfer_res {
+    match burn_res {
         Ok((res, )) => {
             match res {
                 Ok(_) => {}
@@ -412,18 +430,51 @@ async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Ve
         }
     }
 
-    let amount: Vec<u8> = BigUint::from(amount).to_bytes_le();
+    // burn wrapper token on IC
+    let res: CallResult<(u8, )> = ic_cdk::call(
+        wrapper_token_addr,
+        "decimals",
+        (),
+    ).await;
+    let wrapper_decimal: u8 = res.unwrap().0;
+
+    let res: CallResult<(String, )> = ic_cdk::call(
+        wrapper_token_addr,
+        "symbol",
+        (),
+    ).await;
+    let symbol: String = res.unwrap().0;
+
+    // TODO: fix compile error
+    // let amount_evm: Nat = ROUTER.with(|router| {
+    //     let r = router.borrow();
+    //     let pool = r.get_pool(pool_id.clone()).unwrap();
+    //     let native_deciaml: u8 = 
+    //         pool.get_token_by_chain_id(chain_id)
+    //             .map_or(
+    //                 Err(format!("no according wrapper token for {} chain {} pool", src_chain, src_pool_id.clone())),
+    //                 |token| Ok(token.token_local_decimals())
+    //             ).unwrap();
+    //     pool.amount_ic_to_amount_evm(amount, native_deciaml, wrapper_decimal)
+    // });
+    let amount_evm = amount;
+
+    let to = hex::decode(&to).expect("to address decode error");
+    let to = to.to_vec();
+    let amount_evm: Vec<u8> = BigUint::from(amount_evm).to_bytes_le();
     let bridge_addr: Vec<u8> = get_bridge_addr(chain_id).unwrap();
-    handle_burn(chain_id, bridge_addr, to, amount).await
+    handle_burn(chain_id, symbol, bridge_addr, to, amount_evm).await
 }
 
 // call proxy.get_nonce() to get nonce
 async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
     let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let call_res: CallResult<(Result<u64>, )> = ic_cdk::call(
+    let cycles: u64 = 100000;
+    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
         proxy_canister,
         "get_tx_count",
         (chain_id, addr,),
+        cycles
     ).await;
     match call_res {
         Ok((res, )) => {
@@ -438,10 +489,12 @@ async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
 // call proxy.get_gas_price() to get nonce
 async fn get_gas_price(chain_id: u32) -> Result<U256> {
     let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let call_res: CallResult<(Result<u64>, )> = ic_cdk::call(
+    let cycles: u64 = 100000;
+    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
         proxy_canister,
         "get_gas_price",
         (chain_id,),
+        cycles
     ).await;
     match call_res {
         Ok((res, )) => {
@@ -454,7 +507,7 @@ async fn get_gas_price(chain_id: u32) -> Result<U256> {
 }
 
 // call bridge.handleSwap
-async fn handle_burn(chain_id: u32, bridge_addr: Vec<u8>, to: Vec<u8>, value: Vec<u8>) -> Result<bool> {
+async fn handle_burn(chain_id: u32, symbol: String, bridge_addr: Vec<u8>, to: Vec<u8>, value: Vec<u8>) -> Result<String> {
     // ecdsa key info
     let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
     let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
@@ -485,9 +538,21 @@ async fn handle_burn(chain_id: u32, bridge_addr: Vec<u8>, to: Vec<u8>, value: Ve
         op.gas_price = Some(gas_price);
         op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
     });
-    let to_addr = Address::from_slice(&to);
+    // params: u256, u256, bytes32
+    let mut temp = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut to_addr = to.clone();
+    temp.append(&mut to_addr);
+    let to_addr = H256::from_slice(&temp);
+
     let value = U256::from_little_endian(&value);
-    let pool_id: u32 = 0;
+    // TODO: get pool_id from state
+    // let pool_id: u32 = ROUTER.with(|r| {
+    //     let r = r.borrow();
+    //     r.get_pool_id_by_symbol(&symbol).unwrap()
+    // });
+    let pool_id = U256::from(0);
+    // return Err(format!("{:?}, {:?}, {:?}", pool_id, value, temp));
+
     let signed = contract
         .sign("handleSwap", (pool_id, value, to_addr,), options, key_info, chain_id as u64)
         .await
@@ -495,19 +560,21 @@ async fn handle_burn(chain_id: u32, bridge_addr: Vec<u8>, to: Vec<u8>, value: Ve
 
     let raw_tx: Vec<u8> = signed.raw_transaction.0; 
     let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let call_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+    let cycles = raw_tx.len() as u64 * 10000u64;
+    let call_res: CallResult<(Result<Vec<u8>>, )> = call_with_payment(
         proxy_canister,
         "send_raw_tx",
         (chain_id, raw_tx),
+        cycles,
     ).await;
     match call_res {
         Ok((res, )) => {
             match res {
-                Ok(_) => {
-                    Ok(true)
+                Ok(txhash) => {
+                    Ok(hex::encode(txhash))
                 }
                 Err(err) => {
-                    return Err(format!("mint error: {:?}", err));
+                    return Err(format!("send_raw_tx error: {:?}", err));
                 }
             }
         }
@@ -622,14 +689,16 @@ fn add_supported_token(
 
 #[update(name = "add_bridge_addr")]
 #[candid_method(update, rename = "add_bridge_addr")]
-fn add_bridge_addr(src_chain: u32, birdge_addr: Vec<u8>) -> Result<bool> {
-    let caller: Principal = ic_cdk::caller();
-    let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert_eq!(caller, owner);
+fn add_bridge_addr(src_chain: u32, birdge_addr: String) -> Result<bool> {
+    // let caller: Principal = ic_cdk::caller();
+    // let owner: Principal = Principal::from_text(OWNER).unwrap();
+    // assert_eq!(caller, owner);
 
+    let bridge_addr = hex::decode(&birdge_addr).expect("addr decode error");
+    let bridge_addr = bridge_addr.to_vec();
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
-        r.add_bridge_addr(src_chain, birdge_addr);
+        r.add_bridge_addr(src_chain, bridge_addr);
         Ok(true)
     })
 }

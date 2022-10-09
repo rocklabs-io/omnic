@@ -4,14 +4,14 @@ type Pool = record {
   pool_id : nat;
 };
 type Result = variant { Ok : bool; Err : text };
-type Result_1 = variant { Ok : nat; Err : text };
-type Result_2 = variant { Ok : vec nat8; Err : text };
-type Result_3 = variant { Ok : Router; Err : text };
-type Result_4 = variant {
+type Result_1 = variant { Ok : text; Err : text };
+type Result_2 = variant { Ok : nat; Err : text };
+type Result_3 = variant { Ok : vec nat8; Err : text };
+type Result_4 = variant { Ok : Router; Err : text };
+type Result_5 = variant {
   Ok : record { text; Router; WrapperTokenAddr };
   Err : text;
 };
-type Result_5 = variant { Ok : text; Err : text };
 type Router = record {
   pool_symbols : vec record { text; nat };
   weights : vec record { nat; float32 };
@@ -31,21 +31,21 @@ type Token = record {
 };
 type WrapperTokenAddr = record { wrapper_tokens : vec record { nat; text } };
 service : {
-  add_bridge_addr : (nat32, vec nat8) -> (Result);
+  add_bridge_addr : (nat32, text) -> (Result);
   add_supported_token : (nat32, nat, nat, text, text, nat8, nat8) -> (Result);
   add_wrapper_token_addr : (nat, text) -> (Result);
-  burn_wrapper_token : (principal, nat32, vec nat8, nat) -> (Result);
-  create_pool : (nat32, nat, text) -> (Result_1);
-  get_bridge_addr : (nat32) -> (Result_2) query;
-  get_pool_id : (nat32, nat) -> (Result_1) query;
-  get_pool_id_by_symbol : (text) -> (Result_1) query;
-  get_router : () -> (Result_3) query;
-  get_state : () -> (Result_4) query;
-  get_wrapper_token_addr : (nat) -> (Result_5) query;
+  burn_wrapper_token : (principal, nat32, text, nat) -> (Result_1);
+  create_pool : (nat32, nat, text) -> (Result_2);
+  get_bridge_addr : (nat32) -> (Result_3) query;
+  get_pool_id : (nat32, nat) -> (Result_2) query;
+  get_pool_id_by_symbol : (text) -> (Result_2) query;
+  get_router : () -> (Result_4) query;
+  get_state : () -> (Result_5) query;
+  get_wrapper_token_addr : (nat) -> (Result_1) query;
   handle_message : (nat32, vec nat8, nat32, vec nat8) -> (Result);
   is_bridge_addr_exist : (nat32) -> (Result) query;
   is_wrapper_token_exist : (nat) -> (Result) query;
-  remove_bridge_addr : (nat32) -> (Result_2);
-  remove_wrapper_token_addr : (nat) -> (Result_5);
-  set_canister_addrs : () -> (Result_5);
+  remove_bridge_addr : (nat32) -> (Result_3);
+  remove_wrapper_token_addr : (nat) -> (Result_1);
+  set_canister_addrs : () -> (Result_1);
 }
