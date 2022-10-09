@@ -1,6 +1,8 @@
 use ic_cdk::export::candid::{candid_method, Deserialize, CandidType, Nat, Principal};
 use ic_cdk_macros::{query, update, pre_upgrade, post_upgrade};
 use ic_cdk::api::call::CallResult;
+use ic_cdk::api::call::call_with_payment;
+
 use ic_web3::ethabi::{decode, ParamType};
 use ic_web3::transports::ICHttp;
 use ic_web3::Web3;
@@ -8,7 +10,7 @@ use ic_web3::ic::{get_eth_addr, KeyInfo};
 use ic_web3::{
     contract::{Contract, Options},
     ethabi::ethereum_types::{U64, U256},
-    types::{Address,},
+    types::{Address, H256},
 };
 use num_bigint::BigUint;
 use omnic_bridge::pool::Pool;
@@ -346,7 +348,8 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
         //send_token
         let mut buffer = [0u8; 32];
         amount_evm.to_little_endian(&mut buffer);
-        handle_burn(dst_chain_id, dst_bridge_addr, recipient, buffer.to_vec()).await // how to handle failed transfer?
+        handle_burn(dst_chain_id, "USDT".to_string(), dst_bridge_addr, recipient, buffer.to_vec()).await; // how to handle failed transfer?
+        Ok(true)
     }
 }
 
@@ -405,15 +408,15 @@ fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool>
 
 #[update(name = "burn_wrapper_token")]
 #[candid_method(update, rename = "burn_wrapper_token")]
-async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Vec<u8>, amount: Nat) -> Result<bool> {
+async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: String, amount: Nat) -> Result<String> {
     let caller = ic_cdk::caller();
     // DIP20
-    let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+    let burn_res: CallResult<(TxReceipt, )> = ic_cdk::call(
         wrapper_token_addr,
-        "burn",
+        "burnFrom",
         (caller, amount.clone(), ),
     ).await;
-    match transfer_res {
+    match burn_res {
         Ok((res, )) => {
             match res {
                 Ok(_) => {}
@@ -428,38 +431,50 @@ async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: Ve
     }
 
     // burn wrapper token on IC
-    let wrapper_token_addr: Principal = Principal::from_text(&wrapper_token_addr).unwrap();
-    let transfer_res: CallResult<(u8, )> = ic_cdk::call(
+    let res: CallResult<(u8, )> = ic_cdk::call(
         wrapper_token_addr,
         "decimals",
         (),
     ).await;
-    let wrapper_decimal: u8 = transfer_res.unwrap().0;
+    let wrapper_decimal: u8 = res.unwrap().0;
 
-    let amount_evm: Nat = ROUTER.with(|router| {
-        let r = router.borrow();
-        let pool = r.get_pool(pool_id.clone()).unwrap();
-        let native_deciaml: u8 = 
-            pool.get_token_by_chain_id(src_chain)
-                .map_or(
-                    Err(format!("no according wrapper token for {} chain {} pool", src_chain, src_pool_id.clone())),
-                    |token| Ok(token.token_local_decimals())
-                ).unwrap();
-        pool.amount_ic_to_amount_evm(amount, native_deciaml, wrapper_decimal)
-    });
+    let res: CallResult<(String, )> = ic_cdk::call(
+        wrapper_token_addr,
+        "symbol",
+        (),
+    ).await;
+    let symbol: String = res.unwrap().0;
 
+    // TODO: fix compile error
+    // let amount_evm: Nat = ROUTER.with(|router| {
+    //     let r = router.borrow();
+    //     let pool = r.get_pool(pool_id.clone()).unwrap();
+    //     let native_deciaml: u8 = 
+    //         pool.get_token_by_chain_id(chain_id)
+    //             .map_or(
+    //                 Err(format!("no according wrapper token for {} chain {} pool", src_chain, src_pool_id.clone())),
+    //                 |token| Ok(token.token_local_decimals())
+    //             ).unwrap();
+    //     pool.amount_ic_to_amount_evm(amount, native_deciaml, wrapper_decimal)
+    // });
+    let amount_evm = amount;
+
+    let to = hex::decode(&to).expect("to address decode error");
+    let to = to.to_vec();
     let amount_evm: Vec<u8> = BigUint::from(amount_evm).to_bytes_le();
     let bridge_addr: Vec<u8> = get_bridge_addr(chain_id).unwrap();
-    handle_burn(chain_id, bridge_addr, to, amount_evm).await
+    handle_burn(chain_id, symbol, bridge_addr, to, amount_evm).await
 }
 
 // call proxy.get_nonce() to get nonce
 async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
     let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let call_res: CallResult<(Result<u64>, )> = ic_cdk::call(
+    let cycles: u64 = 100000;
+    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
         proxy_canister,
         "get_tx_count",
         (chain_id, addr,),
+        cycles
     ).await;
     match call_res {
         Ok((res, )) => {
@@ -474,10 +489,12 @@ async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
 // call proxy.get_gas_price() to get nonce
 async fn get_gas_price(chain_id: u32) -> Result<U256> {
     let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let call_res: CallResult<(Result<u64>, )> = ic_cdk::call(
+    let cycles: u64 = 100000;
+    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
         proxy_canister,
         "get_gas_price",
         (chain_id,),
+        cycles
     ).await;
     match call_res {
         Ok((res, )) => {
@@ -490,7 +507,7 @@ async fn get_gas_price(chain_id: u32) -> Result<U256> {
 }
 
 // call bridge.handleSwap
-async fn handle_burn(chain_id: u32, bridge_addr: Vec<u8>, to: Vec<u8>, value: Vec<u8>) -> Result<bool> {
+async fn handle_burn(chain_id: u32, symbol: String, bridge_addr: Vec<u8>, to: Vec<u8>, value: Vec<u8>) -> Result<String> {
     // ecdsa key info
     let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
     let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
@@ -521,9 +538,21 @@ async fn handle_burn(chain_id: u32, bridge_addr: Vec<u8>, to: Vec<u8>, value: Ve
         op.gas_price = Some(gas_price);
         op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
     });
-    let to_addr = Address::from_slice(&to);
+    // params: u256, u256, bytes32
+    let mut temp = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut to_addr = to.clone();
+    temp.append(&mut to_addr);
+    let to_addr = H256::from_slice(&temp);
+
     let value = U256::from_little_endian(&value);
-    let pool_id: u32 = 0;
+    // TODO: get pool_id from state
+    // let pool_id: u32 = ROUTER.with(|r| {
+    //     let r = r.borrow();
+    //     r.get_pool_id_by_symbol(&symbol).unwrap()
+    // });
+    let pool_id = U256::from(3);
+    // return Err(format!("{:?}, {:?}, {:?}", pool_id, value, temp));
+
     let signed = contract
         .sign("handleSwap", (pool_id, value, to_addr,), options, key_info, chain_id as u64)
         .await
@@ -531,19 +560,21 @@ async fn handle_burn(chain_id: u32, bridge_addr: Vec<u8>, to: Vec<u8>, value: Ve
 
     let raw_tx: Vec<u8> = signed.raw_transaction.0; 
     let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let call_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+    let cycles = raw_tx.len() as u64 * 10000u64;
+    let call_res: CallResult<(Result<Vec<u8>>, )> = call_with_payment(
         proxy_canister,
         "send_raw_tx",
         (chain_id, raw_tx),
+        cycles,
     ).await;
     match call_res {
         Ok((res, )) => {
             match res {
-                Ok(_) => {
-                    Ok(true)
+                Ok(txhash) => {
+                    Ok(hex::encode(txhash))
                 }
                 Err(err) => {
-                    return Err(format!("mint error: {:?}", err));
+                    return Err(format!("send_raw_tx error: {:?}", err));
                 }
             }
         }
@@ -658,14 +689,16 @@ fn add_supported_token(
 
 #[update(name = "add_bridge_addr")]
 #[candid_method(update, rename = "add_bridge_addr")]
-fn add_bridge_addr(src_chain: u32, birdge_addr: Vec<u8>) -> Result<bool> {
-    let caller: Principal = ic_cdk::caller();
-    let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert_eq!(caller, owner);
+fn add_bridge_addr(src_chain: u32, birdge_addr: String) -> Result<bool> {
+    // let caller: Principal = ic_cdk::caller();
+    // let owner: Principal = Principal::from_text(OWNER).unwrap();
+    // assert_eq!(caller, owner);
 
+    let bridge_addr = hex::decode(&birdge_addr).expect("addr decode error");
+    let bridge_addr = bridge_addr.to_vec();
     ROUTER.with(|router| {
         let mut r = router.borrow_mut();
-        r.add_bridge_addr(src_chain, birdge_addr);
+        r.add_bridge_addr(src_chain, bridge_addr);
         Ok(true)
     })
 }

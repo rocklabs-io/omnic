@@ -31,10 +31,10 @@ type Token = record {
 };
 type WrapperTokenAddr = record { wrapper_tokens : vec record { nat; text } };
 service : {
-  add_bridge_addr : (nat32, vec nat8) -> (Result);
+  add_bridge_addr : (nat32, text) -> (Result);
   add_supported_token : (nat32, nat, nat, text, text, nat8, nat8) -> (Result);
   add_wrapper_token_addr : (nat, text) -> (Result);
-  burn_wrapper_token : (principal, nat32, vec nat8, nat) -> (Result);
+  burn_wrapper_token : (principal, nat32, text, nat) -> (Result);
   create_pool : (nat32, nat, text) -> (Result_1);
   get_bridge_addr : (nat32) -> (Result_2) query;
   get_pool_id : (nat32, nat) -> (Result_1) query;

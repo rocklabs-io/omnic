@@ -141,6 +141,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
             uint256 convertRate = pool.convertRate();
             _amountLD = _amountLD.div(convertRate).mul(convertRate);
         }
+        // TODO: pool need to approve router first!
         _safeTransferFrom(
             pool.token(),
             address(pool),
