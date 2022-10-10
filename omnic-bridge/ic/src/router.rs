@@ -48,7 +48,8 @@ pub trait RouterInterfaces {
     ) -> Result<bool>;
 }
 
-// routers: BTreeMap<u32, Router>; // chain_id -> Router
+
+pub BridgeRouters = BTreeMap<u32, Router>; 
 
 pub struct Router {
     pub src_chain: u32;

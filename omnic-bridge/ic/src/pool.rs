@@ -12,59 +12,45 @@ pub enum Error {
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Pool {
-    pub pool_id: u32,
-    pub tokens: BTreeMap<u32, Token>, // chain_id -> token
+    pub src_chain: u32,
+    pub src_pool_id: u32,
+    pub pool_address: String,
+    pub shared_decimals: u8,
+    pub local_decimals: u8,
+    pub convert_rate: u128,
+    pub token: Token,
+    pub liquidity: u128, // liquidity left in that pool
+    // pub lps: BTreeMap<String, u128>, // liquidity providers
 }
 
 impl Pool {
-    pub fn new(pool_id: u32, tokens: BTreeMap<u32, Token>) -> Self {
+    pub fn new(
+        src_chain: u32,
+        src_pool_id: u32,
+        pool_address: String,
+        shared_decimals: u8,
+        local_decimals: u8,
+        convert_rate: u128,
+        token: Token
+    ) -> Self {
         Pool {
-            pool_id,
-            tokens
+            src_chain,
+            src_pool_id,
+            pool_address,
+            shared_decimals,
+            local_decimals,
+            convert_rate,
+            token,
+            liquidity: 0u128,
         }
-    }
-
-    pub fn tokens_count(&self) -> u32 {
-        self.tokens.len() as u32
-    }
-
-    pub fn add_token(&mut self, chain_id: u32, token: Token) {
-        self.tokens.entry(chain_id).or_insert(token);
-    }
-
-    pub fn remove_token(&mut self, chain_id: u32) {
-        self.tokens.remove(&chain_id);
-    }
-
-    pub fn token_by_chain_id(&self, chain_id: u32) -> Token {
-        match self.tokens.get(&chain_id) {
-            Some(t) => t.cloned(),
-            None => unreachable!(),
-        }
-    }
-
-    pub fn has_token(&self, chain_id: u32) -> bool {
-        self.tokens.contains_key(&chain_id)
-    }
-
-    pub fn token_supply_by_chain_id(&self, chain_id: u32) -> u128 {
-        self.token_by_chain_id(chain_id).total_supply()
-    }
-
-    pub fn total_liquidity(&self) -> u128 {
-        let mut total_liquidity: u128 = 0;
-        for token in self.tokens.values() {
-            total_liquidity += token.total_supply();
-        }
-        total_liquidity
     }
 
     // utils 
-    pub fn amount_evm_to_amount_ic(&self, amount_evm: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
-        amount_evm * (u128::pow(10, wrapper_token_decimal as u32)) / (u128::pow(10, native_token_decimal as u32))
-    }
+    // pub fn amount_evm_to_amount_ic(&self, amount_evm: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
+    //     amount_evm * (u128::pow(10, wrapper_token_decimal as u32)) / (u128::pow(10, native_token_decimal as u32))
+    // }
 
-    pub fn amount_ic_to_amount_evm(&self, amount_ic: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
-        amount_ic * (u128::pow(10, native_token_decimal as u32)) / (u128::pow(10, wrapper_token_decimal as u32))
-    }
+    // pub fn amount_ic_to_amount_evm(&self, amount_ic: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
+    //     amount_ic * (u128::pow(10, native_token_decimal as u32)) / (u128::pow(10, wrapper_token_decimal as u32))
+    // }
 }
