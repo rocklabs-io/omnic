@@ -545,12 +545,17 @@ async fn handle_burn(chain_id: u32, symbol: String, bridge_addr: Vec<u8>, to: Ve
     let to_addr = H256::from_slice(&temp);
 
     let value = U256::from_little_endian(&value);
-    // TODO: get pool_id from state
-    // let pool_id: u32 = ROUTER.with(|r| {
-    //     let r = r.borrow();
-    //     r.get_pool_id_by_symbol(&symbol).unwrap()
-    // });
-    let pool_id = U256::from(0);
+    // TODO: get pool_id from state, fix unwrap
+    let pool_id: u32 = ROUTER.with(|r| {
+        let r = r.borrow();
+        let ic_pool_id = r.get_pool_id_by_symbol(&symbol).unwrap();
+        let pool = r.get_pool(ic_pool_id).unwrap();
+        let token = pool.get_token_by_chain_id(chain_id).unwrap();
+        let src_pool_id = token.src_chain_pool_id();
+        let temp = src_pool_id.0.to_bytes_be().try_into().unwrap();
+        u32::from_be_bytes(temp)
+    });
+    // let pool_id = U256::from(0);
     // return Err(format!("{:?}, {:?}, {:?}", pool_id, value, temp));
 
     let signed = contract
@@ -568,15 +573,8 @@ async fn handle_burn(chain_id: u32, symbol: String, bridge_addr: Vec<u8>, to: Ve
         cycles,
     ).await;
     match call_res {
-        Ok((res, )) => {
-            match res {
-                Ok(txhash) => {
-                    Ok(hex::encode(txhash))
-                }
-                Err(err) => {
-                    return Err(format!("send_raw_tx error: {:?}", err));
-                }
-            }
+        Ok((_res, )) => {
+            Ok(hex::encode(signed.message_hash.as_bytes()))
         }
         Err((_code, msg)) => {
             return Err(msg);
