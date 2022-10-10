@@ -27,33 +27,37 @@ pub trait RouterInterfaces {
     fn add_liquidity(
         &mut self,
         src_chain_id: u32,
-        src_pool_id: Nat,
+        src_pool_id: u32,
         to: Self::AccountItem,
-        amount: Nat,
+        amount: u128,
     ) -> Result<bool>;
     fn remove_liquidity(
         &mut self,
         src_chain_id: u32,
-        src_pool_id: Nat,
+        src_pool_id: u32,
         from: Self::AccountItem,
-        amount: Nat,
+        amount: u128,
     ) -> Result<bool>;
     fn swap(
         &mut self,
         src_chain_id: u32,
-        src_pool_id: Nat,
+        src_pool_id: u32,
         dst_chain_id: u32,
-        dst_pool_id: Nat,
-        amount: Nat,
+        dst_pool_id: u32,
+        amount: u128,
     ) -> Result<bool>;
 }
 
+// routers: BTreeMap<u32, Router>; // chain_id -> Router
+
+pub struct Router {
+    pub src_chain: u32;
+    pub bridge_addr: String; // bridge address on src chain
+    pub pools: BTreeMap<u32, Pool>; // src_pool_id -> Pool
+}
+
 #[derive(Deserialize, CandidType, Clone, Debug)]
-pub struct Router<T>
-where
-    T: std::fmt::Debug + Clone,
-    T: CandidType + std::cmp::Ord,
-{
+pub struct Router {
     bridge_addr: BTreeMap<u32, T>,
     pool_ids: BTreeMap<u32, BTreeMap<Nat, Nat>>, // src_chain_id -> src_pool_id -> pool_id
     pools: BTreeMap<Nat, Pool<T>>,               // pool_id -> Pool

@@ -22,34 +22,32 @@ pub trait Operation: std::fmt::Debug + Clone {
     fn mint(&mut self, to: Self::AccountItem, value: Self::ValueItem) -> bool;
 
     fn balance_of(&self, from: &Self::AccountItem) -> Self::OutputItem;
-    fn get_total_supply(&self) -> Self::OutputItem;
+    fn total_supply(&self) -> Self::OutputItem;
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
-pub struct Token<T: CandidType + std::cmp::Ord> {
-    src_chain: u32,
-    src_pool_id: Nat,
-    name: String,
-    symbol: String,
-    local_decimals: u8,
-    shared_decimals: u8,
-    total_supply: Nat,
-    balances: BTreeMap<T, Nat>, // shared_decimals token
+pub struct Token {
+    pub src_chain: u32,
+    pub src_pool_id: u32,
+    pub src_addr: String,
+    pub name: String,
+    pub symbol: String,
+    pub local_decimals: u8,
+    pub shared_decimals: u8,
+    pub total_supply: u128,
+    pub balances: BTreeMap<String, u128>, // shared_decimals token
 }
 
 // external common interface
-impl<T> Token<T>
-where
-    T: std::fmt::Debug + Clone + candid::CandidType + std::cmp::Ord,
-{
+impl Token {
     pub fn new(
         src_chain: u32,
-        src_pool_id: Nat,
+        src_pool_id: u32,
         name: String,
         symbol: String,
         local_decimals: u8,
         shared_decimals: u8,
-        balances: BTreeMap<T, Nat>,
+        balances: BTreeMap<String, u128>,
     ) -> Self {
         Token {
             src_chain,
@@ -58,44 +56,17 @@ where
             symbol,
             local_decimals,
             shared_decimals,
-            total_supply: Nat::from(0),
+            total_supply: 0u128,
             balances,
         }
-    }
-
-    pub fn src_chain_id(&self) -> u32 {
-        self.src_chain.clone()
-    }
-
-    pub fn src_chain_pool_id(&self) -> Nat {
-        self.src_pool_id.clone()
-    }
-
-    pub fn token_name(&self) -> String {
-        self.name.to_string()
-    }
-
-    pub fn token_sumbol(&self) -> String {
-        self.symbol.to_string()
-    }
-
-    pub fn token_local_decimals(&self) -> u8 {
-        self.local_decimals.clone()
-    }
-    
-    pub fn token_shared_decimals(&self) -> u8 {
-        self.shared_decimals.clone()
     }
 }
 
 //
-impl<T> Operation for Token<T>
-where
-    T: std::fmt::Debug + Clone + candid::CandidType + std::cmp::Ord,
-{
-    type AccountItem = T;
-    type ValueItem = Nat;
-    type OutputItem = Nat;
+impl Operation for Token {
+    type AccountItem = String;
+    type ValueItem = u128;
+    type OutputItem = u128;
 
     fn mint(&mut self, to: Self::AccountItem, value: Self::ValueItem) -> bool {
         let amount = self.balance_of(&to) + value.clone();

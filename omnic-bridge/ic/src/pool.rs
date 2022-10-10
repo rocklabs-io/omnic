@@ -11,69 +11,54 @@ pub enum Error {
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
-pub struct Pool<T>
-where
-    T: std::fmt::Debug + Clone,
-    T: CandidType + std::cmp::Ord,
-{
-    pool_id: Nat,
-    tokens: BTreeMap<u32, Token<T>>, // chain_id -> token
-    total_liquidity: Nat,            // sum of tokens supply
+pub struct Pool {
+    pub pool_id: u32,
+    pub tokens: BTreeMap<u32, Token>, // chain_id -> token
 }
 
-impl<T> Pool<T>
-where
-    T: std::fmt::Debug + Clone,
-    T: CandidType + std::cmp::Ord,
-{
-    pub fn new(pool_id: Nat, tokens: BTreeMap<u32, Token<T>>) -> Self {
+impl Pool {
+    pub fn new(pool_id: u32, tokens: BTreeMap<u32, Token>) -> Self {
         Pool {
             pool_id,
-            tokens,
-            total_liquidity: Nat::from(0),
+            tokens
         }
     }
-    pub fn get_pool_id(&self) -> Nat {
-        self.pool_id.clone()
+
+    pub fn tokens_count(&self) -> u32 {
+        self.tokens.len() as u32
     }
 
-    pub fn get_tokens_len(&self) -> Nat {
-        Nat::from(self.tokens.len())
-    }
-
-    pub fn add_token(&mut self, chain_id: u32, token: Token<T>) -> bool {
+    pub fn add_token(&mut self, chain_id: u32, token: Token) {
         self.tokens.entry(chain_id).or_insert(token);
-        true
     }
 
-    pub fn remove_token(&mut self, chain_id: u32) -> Token<T> {
-        //
-        self.tokens.remove(&chain_id).unwrap()
+    pub fn remove_token(&mut self, chain_id: u32) {
+        self.tokens.remove(&chain_id);
     }
 
-    pub fn get_token_by_chain_id(&self, chain_id: u32) -> Option<Token<T>> {
-        //
-        self.tokens.get(&chain_id).cloned()
+    pub fn token_by_chain_id(&self, chain_id: u32) -> Token {
+        match self.tokens.get(&chain_id) {
+            Some(t) => t.cloned(),
+            None => unreachable!(),
+        }
     }
 
-    pub fn contain_token(&self, chain_id: u32) -> bool {
-        //
+    pub fn has_token(&self, chain_id: u32) -> bool {
         self.tokens.contains_key(&chain_id)
     }
 
-    pub fn get_sub_token_supply_by_chain_id(&self, chain_id: u32) -> Nat {
-        // TODO: handle unwrap
-        let token = self.get_token_by_chain_id(chain_id).unwrap();
-        Nat::from(token.get_total_supply())
+    pub fn token_supply_by_chain_id(&self, chain_id: u32) -> u128 {
+        self.token_by_chain_id(chain_id).total_supply()
     }
 
-    pub fn total_liquidity(&self) -> Nat {
-        let mut total_liquidity: Nat = Nat::from(0);
+    pub fn total_liquidity(&self) -> u128 {
+        let mut total_liquidity: u128 = 0;
         for token in self.tokens.values() {
-            total_liquidity += Nat::from(token.get_total_supply());
+            total_liquidity += token.total_supply();
         }
         total_liquidity
     }
+
     // utils 
     pub fn amount_evm_to_amount_ic(&self, amount_evm: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
         amount_evm * (u128::pow(10, wrapper_token_decimal as u32)) / (u128::pow(10, native_token_decimal as u32))
