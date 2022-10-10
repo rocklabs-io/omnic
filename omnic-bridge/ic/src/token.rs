@@ -49,34 +49,3 @@ impl Token {
         }
     }
 }
-
-// impl Operation for Token {
-//     type AccountItem = String;
-//     type ValueItem = u128;
-//     type OutputItem = u128;
-
-//     fn mint(&mut self, to: Self::AccountItem, value: Self::ValueItem) -> bool {
-//         let amount = self.balance_of(&to) + value.clone();
-//         self.balances.insert(to, amount);
-//         self.total_supply += value;
-//         true
-//     }
-
-//     fn burn(&mut self, from: Self::AccountItem, value: Self::ValueItem) -> bool {
-//         if self.balance_of(&from) < value.clone() {
-//             return false;
-//         }
-//         let amount = self.balance_of(&from) - value.clone();
-//         self.balances.insert(from, amount);
-//         self.total_supply -= value;
-//         true
-//     }
-
-//     fn balance_of(&self, from: &Self::AccountItem) -> Self::OutputItem {
-//         self.balances.get(from).cloned().unwrap_or(Self::OutputItem::from(0))
-//     }
-
-//     fn get_total_supply(&self) -> Self::OutputItem {
-//         self.total_supply.clone()
-//     }
-// }

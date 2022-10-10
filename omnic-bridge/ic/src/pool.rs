@@ -20,7 +20,7 @@ pub struct Pool {
     pub convert_rate: u128,
     pub token: Token,
     pub liquidity: u128, // liquidity left in that pool
-    // pub lps: BTreeMap<String, u128>, // liquidity providers
+    // pub lps: BTreeMap<String, u128>, // liquidity providers, ignore for now
 }
 
 impl Pool {
@@ -45,7 +45,7 @@ impl Pool {
         }
     }
 
-    // utils 
+    // utils, TODO: move to utils.rs
     // pub fn amount_evm_to_amount_ic(&self, amount_evm: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
     //     amount_evm * (u128::pow(10, wrapper_token_decimal as u32)) / (u128::pow(10, native_token_decimal as u32))
     // }

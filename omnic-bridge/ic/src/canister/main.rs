@@ -60,53 +60,56 @@ pub enum TxError {
 pub type TxReceipt = std::result::Result<Nat, TxError>;
 
 type Result<T> = std::result::Result<T, String>;
-#[derive(Deserialize, CandidType, Clone, Debug)]
-pub struct WrapperTokenAddr
-{
-    wrapper_tokens: BTreeMap<Nat, String>, // pool_id -> canister address
+
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
+pub type State {
+    pub omnic: Principal, // omnic proxy canister
+    pub owners: HashSet<Principal>;
+    pub bridge_canister_addr: String; // evm address of this canister
 }
 
-impl WrapperTokenAddr {
+impl State {
     pub fn new() -> Self {
-        WrapperTokenAddr {
-            wrapper_tokens: BTreeMap::new(),
-        }
+
     }
 
-    pub fn get_wrapper_token_addr(&self, pool_id: Nat) -> Result<String> {
-        self.wrapper_tokens.get(&pool_id)
-            .ok_or(format!(
-                "chain id is not found: {}",
-                pool_id
-            ))
-            .cloned()
-    }
+    pub fn is_authorized(&self, user: Principal) -> bool {
 
-    pub fn is_wrapper_token_exist(&self, pool_id: Nat) -> bool {
-        self.wrapper_tokens.contains_key(&pool_id)
-    }
-
-    pub fn add_wrapper_token_addr(&mut self, pool_id: Nat, wrapper_canister_token: String) {
-        self.wrapper_tokens.entry(pool_id).or_insert(wrapper_canister_token);
-    }
-
-    pub fn remove_wrapper_token_addr(&mut self, pool_id: Nat) -> Result<String> {
-        self.wrapper_tokens.remove(&pool_id)
-                .ok_or(format!(
-                    "pool id is not found: {}",
-                    pool_id
-                ))
     }
 }
 
 thread_local! {
-    static BRIDGE_ADDR: RefCell<String> = RefCell::new("".to_string());
-    static ROUTERS: RefCell<BTreeMap<u32, Router>> = RefCell::new(BTreeMap::new());
+    static STATE: RefCell<State> = RefCell::new(State::new());
+    static BRIDGE: RefCell<BridgeRouters> = RefCell::new(BridgeRouters::new());
 }
 
-#[update(name = "set_canister_addrs")]
-#[candid_method(update, rename = "set_canister_addrs")]
-async fn set_canister_addrs() -> Result<String> {
+#[update(name = "set_omnic")]
+#[candid_method(update, rename = "set_omnic")]
+async fn set_omnic() -> Result<String>
+
+#[update(name = "add_owner")]
+#[candid_method(update, rename = "add_owner")]
+async fn add_owner() -> Result<String>
+
+#[update(name = "remove_owner")]
+#[candid_method(update, rename = "remove_owner")]
+async fn remove_owner() -> Result<String>
+
+fn is_authorized() -> bool {
+
+}
+
+// add supported chain, add to BRIDGE state
+// ic: chain_id = 0, bridge_addr = ""
+// goerli: chain_id = 5, bridge_addr = "xxxx"
+#[update(name = "add_chain")]
+#[candid_method(update, rename = "add_chain")]
+fn add_chain(chain_id: u32, bridge_addr: String) -> Result<String>
+
+// calc bridge canister's evm address and store to state, only owners can call
+#[update(name = "set_canister_addr")]
+#[candid_method(update, rename = "set_canister_addr")]
+async fn set_canister_addr() -> Result<String> {
     let cid = ic_cdk::id();
     let derivation_path = vec![cid.clone().as_slice().to_vec()];
     let evm_addr = get_eth_addr(Some(cid), Some(derivation_path), KEY_NAME.to_string())
@@ -120,6 +123,7 @@ async fn set_canister_addrs() -> Result<String> {
     Ok(evm_addr)
 }
 
+// handle message, only omnic proxy canister can call
 #[update(name = "handle_message")]
 #[candid_method(update, rename = "handle_message")]
 async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool> {
@@ -575,99 +579,6 @@ fn add_supported_token(
     })
 }
 
-#[update(name = "add_bridge_addr")]
-#[candid_method(update, rename = "add_bridge_addr")]
-fn add_bridge_addr(src_chain: u32, birdge_addr: String) -> Result<bool> {
-    // let caller: Principal = ic_cdk::caller();
-    // let owner: Principal = Principal::from_text(OWNER).unwrap();
-    // assert_eq!(caller, owner);
-
-    let bridge_addr = hex::decode(&birdge_addr).expect("addr decode error");
-    let bridge_addr = bridge_addr.to_vec();
-    ROUTER.with(|router| {
-        let mut r = router.borrow_mut();
-        r.add_bridge_addr(src_chain, bridge_addr);
-        Ok(true)
-    })
-}
-
-#[update(name = "remove_bridge_addr")]
-#[candid_method(update, rename = "remove_bridge_addr")]
-fn remove_bridge_addr(src_chain: u32) -> Result<Vec<u8>> {
-    let caller: Principal = ic_cdk::caller();
-    let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert_eq!(caller, owner);
-
-    ROUTER.with(|router| {
-        let mut r = router.borrow_mut();
-        r.remove_bridge_addr(src_chain).map_err(|e| format!("remove bridge addr failed: {}", e))
-    })
-}
-
-#[query(name = "get_bridge_addr")]
-#[candid_method(query, rename = "get_bridge_addr")]
-fn get_bridge_addr(chain_id: u32) -> Result<Vec<u8>> {
-    ROUTER.with(|router| {
-        let r = router.borrow();
-        r.get_bridge_addr(chain_id)
-            .map_err(|_| format!("not bridge address in {} chain", chain_id))
-    })
-}
-
-#[query(name = "is_bridge_addr_exist")]
-#[candid_method(query, rename = "is_bridge_addr_exist")]
-fn is_bridge_addr_exist(src_chain: u32) -> Result<bool> {
-    ROUTER.with(|router| {
-        let r = router.borrow();
-        Ok(r.is_bridge_exist(src_chain))
-    })
-}
-
-#[update(name = "add_wrapper_token_addr")]
-#[candid_method(update, rename = "add_wrapper_token_addr")]
-fn add_wrapper_token_addr(pool_id: Nat, wrapper_token_addr: String) -> Result<bool> {
-    // let caller: Principal = ic_cdk::caller();
-    // let owner: Principal = Principal::from_text(OWNER).unwrap();
-    // assert_eq!(caller, owner);
-
-    WRAPPER_TOKENS.with(|wrapper| {
-        let mut w = wrapper.borrow_mut();
-        w.add_wrapper_token_addr(pool_id, wrapper_token_addr);
-        Ok(true)
-    })
-}
-
-#[update(name = "remove_wrapper_token_addr")]
-#[candid_method(update, rename = "remove_wrapper_token_addr")]
-fn remove_wrapper_token_addr(pool_id: Nat) -> Result<String> {
-    let caller: Principal = ic_cdk::caller();
-    let owner: Principal = Principal::from_text(OWNER).unwrap();
-    assert_eq!(caller, owner);
-
-    WRAPPER_TOKENS.with(|wrapper| {
-        let mut w = wrapper.borrow_mut();
-        w.remove_wrapper_token_addr(pool_id).map_err(|e| format!("remove wrapper token addr failed: {}", e))
-    })
-}
-
-#[query(name = "get_wrapper_token_addr")]
-#[candid_method(query, rename = "get_wrapper_token_addr")]
-fn get_wrapper_token_addr(pool_id: Nat) -> Result<String> {
-    WRAPPER_TOKENS.with(|wrapper| {
-        let w = wrapper.borrow();
-        w.get_wrapper_token_addr(pool_id.clone())
-            .map_err(|_| format!("not wrapper token address in {} chain", pool_id))
-    })
-}
-
-#[query(name = "is_wrapper_token_exist")]
-#[candid_method(query, rename = "is_wrapper_token_exist")]
-fn is_wrapper_token_exist(pool_id: Nat) -> Result<bool> {
-    WRAPPER_TOKENS.with(|wrapper| {
-        let w = wrapper.borrow();
-        Ok(w.is_wrapper_token_exist(pool_id))
-    })
-}
 
 #[pre_upgrade]
 fn pre_upgrade() {
