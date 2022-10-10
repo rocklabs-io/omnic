@@ -380,9 +380,13 @@ async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String>
     let client = EVMChainClient::new(rpc_url, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
         .map_err(|e| format!("init client failed: {:?}", e))?;
 
+    // client.send_raw_tx will always end up with error because the same tx will be submitted multiple times 
+    // by the node in the subnet, first submission response ok, the rest will response error,
+    // so we should ignore return value of send_raw_tx, then query by the txhash to make sure the tx is correctly sent
     client.send_raw_tx(raw_tx)
         .await
         .map_err(|e| format!("{:?}", e))
+    // TODO: fetch via client.get_tx_by_hash to make sure the tx is included
 }
 
 #[update(name = "process_message")]
