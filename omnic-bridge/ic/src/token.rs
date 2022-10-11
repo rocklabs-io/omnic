@@ -1,29 +1,8 @@
-use candid::{types::number::Nat, CandidType, Deserialize};
-use std::collections::BTreeMap;
-use std::convert::From;
-use std::string::String;
+/**
+ * @brief The basic Metadata of Token
+ */
 
-// Token errors
-#[derive(derive_more::Display, Debug, Clone, PartialEq)]
-pub enum Error {
-    #[display(fmt = "Invalid: {}", _0)]
-    Invalid(String),
-
-    #[display(fmt = "operation: {} failed!", _0)]
-    Operation(String),
-}
-
-pub trait Operation: std::fmt::Debug + Clone {
-    type AccountItem;
-    type ValueItem;
-    type OutputItem;
-
-    fn burn(&mut self, from: Self::AccountItem, value: Self::ValueItem) -> bool;
-    fn mint(&mut self, to: Self::AccountItem, value: Self::ValueItem) -> bool;
-
-    fn balance_of(&self, from: &Self::AccountItem) -> Self::OutputItem;
-    fn total_supply(&self) -> Self::OutputItem;
-}
+use candid::{CandidType, Deserialize};
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Token {
@@ -33,7 +12,6 @@ pub struct Token {
     pub address: String,
 }
 
-// external common interface
 impl Token {
     pub fn new(
         name: String,
@@ -47,5 +25,21 @@ impl Token {
             decimals,
             address,
         }
+    }
+
+    pub fn name(&self) -> String {
+        self.name.to_string()
+    }
+
+    pub fn symbol(&self) -> String {
+        self.symbol.to_string()
+    }
+
+    pub fn decimals(&self) -> u8 {
+        self.decimals.clone()
+    }
+    
+    pub fn address(&self) -> String {
+        self.address.clone()
     }
 }

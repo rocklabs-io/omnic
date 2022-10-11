@@ -1,10 +1,10 @@
 
 use ic_web3::ethabi::{decode, ParamType};
 
-use ic_web3::{
-    ethabi::ethereum_types::{U64, U256},
-    types::{Address, H256},
-};
+// use ic_web3::{
+//     ethabi::ethereum_types::{U64, U256},
+//     types::{Address, H256},
+// };
 use std::convert::TryInto;
 
 type Result<T> = std::result::Result<T, String>;
