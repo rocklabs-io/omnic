@@ -163,47 +163,26 @@ fn _handle_operation_remove_liquidity(src_chain: u32, sender: Vec<u8>, payload: 
 }
 
 async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> {
-    let (src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount, recipient) = decode_operation_swap(payload)?;
+    let (src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_sd, recipient) = decode_operation_swap(payload)?;
 
     // if dst chain_id == 0 means mint/lock mode for evm <=> ic
     // else means swap between evms
     if dst_chain_id == 0 {
-        let mut buffer1 = [0u8; 32];
-        let mut buffer2 = [0u8; 32];
-        let pool_id: Nat = ROUTER.with(|router| {
-            let r = router.borrow();
-            src_pool_id.to_little_endian(&mut buffer1);
-            r.get_pool_id(src_chain_id, Nat::from(BigUint::from_bytes_le(&buffer1)))
-        }).map_err(|e| format!("get pool id failed: {:?}", e))?;
-
-
         // get wrapper token cansider address
-        let wrapper_token_addr: String = WRAPPER_TOKENS.with(|wrapper_tokens| {
-            let w = wrapper_tokens.borrow();
-            w.get_wrapper_token_addr(pool_id.clone())
-        }).map_err(|e| format!("get wrapper token address failed: {}", e))?;
-
-        // mint wrapper token on IC
-        let wrapper_token_addr: Principal = Principal::from_text(&wrapper_token_addr).unwrap();
-        let transfer_res: CallResult<(u8, )> = ic_cdk::call(
-            wrapper_token_addr,
-            "decimals",
-            (),
-        ).await;
-        let wrapper_decimal: u8 = transfer_res.unwrap().0;
-        amount_evm.to_little_endian(&mut buffer2);
-        let amount_ic: Nat = ROUTER.with(|router| {
-            let r = router.borrow();
-            let pool = r.get_pool(pool_id.clone()).unwrap();
-            let native_deciaml: u8 = 
-                pool.get_token_by_chain_id(src_chain)
-                    .map_or(
-                        Err(format!("no according wrapper token for {} chain {} pool", src_chain, src_pool_id.clone())),
-                        |token| Ok(token.token_local_decimals())
-                    ).unwrap();
-            pool.amount_evm_to_amount_ic(Nat::from(BigUint::from_bytes_le(&buffer2)), native_deciaml, wrapper_decimal)
+        let token: String = ROUTERS.with(|routers| {
+            let routers = routers.borrow();
+            let token = routers.get_pool_token(dst_chain_id, dst_pool_id);
+            token.address
         });
 
+        // mint wrapper token on IC
+        let amount_ld: u128 = ROUTERS.with(|routers| {
+            let routers = routers.borrow();
+            routers.amount_ld(dst_chain_id, dst_pool_id, amount_sd);
+        });
+        let amount_ic = Nat::from(amount_ld);
+        
+        // TODO: recipient pid process
         // let recipient_str = String::from_utf8(recipient.clone()).unwrap();
         // let properly_trimmed_string = recipient_str.trim_matches(|c: char| c.is_whitespace() || c=='\0');
                         
@@ -212,12 +191,13 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
         let recipient_addr: Principal = Principal::from_slice(&recipient[3..]);
 
         // DIP20
-        let transfer_res: CallResult<(TxReceipt, )> = ic_cdk::call(
-            wrapper_token_addr,
+        let token_canister_id: Principal = Principal::from_text(&token.address).unwrap();
+        let mint_res: CallResult<(TxReceipt, )> = ic_cdk::call(
+            token_canister_id,
             "mint",
             (recipient_addr, amount_ic),
         ).await;
-        match transfer_res {
+        match mint_res {
             Ok((res, )) => {
                 match res {
                     Ok(_) => {}
@@ -230,33 +210,27 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
                 return Err(msg);
             }
         }
+        // update liquidity info
+        ROUTERS.with(|routers| {
+            let mut routers = routers.borrow_mut();
+            let amount_ld = routers.amount_ld(src_chain_id, src_pool_id, amount_sd);
+            routers.add_liquidity(src_chain_id, src_pool_id, amount_ld);
+        });
         Ok(true)
     } else {
-        ROUTER.with(|router| {
-            let mut r = router.borrow_mut();
-            let mut buffer1 = [0u8; 32];
-            let mut buffer2 = [0u8; 32];
-            let mut buffer3 = [0u8; 32];
-            src_pool_id.to_little_endian(&mut buffer1);
-            dst_pool_id.to_little_endian(&mut buffer2);
-            amount_evm.to_little_endian(&mut buffer3);
-            // udpate token ledger
-            r.swap(
-                src_chain_id,
-                Nat::from(BigUint::from_bytes_le(&buffer1)),
-                dst_chain_id,
-                Nat::from(BigUint::from_bytes_le(&buffer2)),
-                Nat::from(BigUint::from_bytes_le(&buffer3)),
-            )
-        }).map_err(|_| format!("remove liquidity failed"))?;
+        ROUTERS.with(|routers| {
+            let routers = routers.borrow();
+            if !routers.check_swap(src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_sd) {
+                return Err("Not enough liquidity on destination chain for this swap!");
+            }
+        });
+        // TODO: handle_swap(dst_chain_id, "USDT".to_string(), dst_bridge_addr, recipient, buffer.to_vec()).await; // how to handle failed transfer?
 
-        // call send_token method to transfer token to recipient
-        let dst_bridge_addr: Vec<u8> = get_bridge_addr(dst_chain_id).unwrap();
-
-        //send_token
-        let mut buffer = [0u8; 32];
-        amount_evm.to_little_endian(&mut buffer);
-        handle_burn(dst_chain_id, "USDT".to_string(), dst_bridge_addr, recipient, buffer.to_vec()).await; // how to handle failed transfer?
+        // update state
+        ROUTERS.with(|routers| {
+            let mut routers = routers.borrow_mut();
+            routers.swap(src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_sd);
+        });
         Ok(true)
     }
 }
@@ -275,6 +249,10 @@ fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool>
         routers.create_pool(src_chain, src_pool_id, pool_addr, shared_decimals, local_decimals, token);
     });
     Ok(true)
+}
+
+async fn handle_swap() -> Result<String> {
+    
 }
 
 #[update(name = "bridge_to_evm")]

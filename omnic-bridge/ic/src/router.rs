@@ -45,6 +45,14 @@ impl Router {
         self.pools.entry(pool_id).or_insert(pool);
     }
 
+    pub fn get_pool_token(&self, pool_id: u32) -> Token {
+        let pool = self.pools.get(&pool_id) {
+            Some(p) => p,
+            None => unreachable!(),
+        };
+        pool.token.clone()
+    }
+
     pub fn add_liquidity(&mut self, pool_id: u32, amount_ld: u128) {
         let mut pool = self.pools.get_mut(&pool_id) {
             Some(p) => p,
@@ -91,6 +99,22 @@ impl Router {
 impl BridgeRouters {
     pub fn new() -> Self {
         BTreeMap::new()
+    }
+
+    pub fn get_pool_token(&self, chain_id: u32, pool_id: u32) -> Token {
+        let router = match self.get(&src_chain_id) {
+            Some(p) => p,
+            None => unreachable!(),
+        };
+        router.get_pool_token(pool_id)
+    }
+
+    pub fn amount_ld(&self, chain_id: u32, pool_id: u32, amount_sd: u128) -> u128 {
+        let router = match self.get(&src_chain_id) {
+            Some(p) => p,
+            None => unreachable!(),
+        };
+        router.amount_ld(pool_id, amount_sd)
     }
 
     pub fn create_pool(
