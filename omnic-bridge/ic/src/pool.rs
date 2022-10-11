@@ -39,7 +39,7 @@ impl Pool {
             pool_address,
             shared_decimals,
             local_decimals,
-            convert_rate: u128::pow(10, local_decimal) / u128::pow(10, shared_decimal),
+            convert_rate: u128::pow(10, local_decimals.into()) / u128::pow(10, shared_decimals.into()),
             token,
             liquidity: 0u128,
         }

@@ -5,10 +5,11 @@ use ic_web3::{
     ethabi::ethereum_types::{U64, U256},
     types::{Address, H256},
 };
+use std::convert::TryInto;
 
 type Result<T> = std::result::Result<T, String>;
 
-pub fn get_operation_type(payload: Vec<u8>) -> Result<u8> {
+pub fn get_operation_type(payload: &[u8]) -> Result<u8> {
     let t = vec![ParamType::Uint(8)];
     let d = decode(&t, &payload).map_err(|e| format!("payload decode error: {}", e))?;
     d[0]
@@ -20,7 +21,7 @@ pub fn get_operation_type(payload: Vec<u8>) -> Result<u8> {
 }
 
 // return (src_chain_id, src_pool_id, amount)
-pub fn decode_operation_liquidity(payload: Vec<u8>) -> Result<(u32, u32, u128)> {
+pub fn decode_operation_liquidity(payload: &[u8]) -> Result<(u32, u32, u128)> {
     /*
     uint8(OperationTypes.AddLiquidity), u8
     _srcChainId, u16
@@ -53,7 +54,7 @@ pub fn decode_operation_liquidity(payload: Vec<u8>) -> Result<(u32, u32, u128)> 
 }
 
 // return (src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_ld, to)
-pub fn decode_operation_swap(payload: Vec<u8>) -> Result<(u32, u32, u32, u32, u128, Vec<u8>)> {
+pub fn decode_operation_swap(payload: &[u8]) -> Result<(u32, u32, u32, u32, u128, Vec<u8>)> {
     /*
         uint8(OperationTypes.Swap),
         uint16 _srcChainId,
@@ -93,7 +94,7 @@ pub fn decode_operation_swap(payload: Vec<u8>) -> Result<(u32, u32, u32, u32, u1
         .into_uint()
         .ok_or("can not convert dst_pool_id to U256".to_string())?
         .as_u32();
-    let amount: U256 = d[5]
+    let amount: u128 = d[5]
         .clone()
         .into_uint()
         .ok_or("can not convert amount to U256".to_string())?
@@ -106,7 +107,7 @@ pub fn decode_operation_swap(payload: Vec<u8>) -> Result<(u32, u32, u32, u32, u1
 }
 
 // return (pool_id, shared_decimals, local_decimals, name, symbol)
-pub fn decode_operation_create_pool(payload: Vec<u8>) -> Result<(u32, String, String, u8, u8, String, String)> {
+pub fn decode_operation_create_pool(payload: &[u8]) -> Result<(u32, String, String, u8, u8, String, String)> {
     /*
         uint8(OperationTypes.CreatePool), u8
         _poolId, u256

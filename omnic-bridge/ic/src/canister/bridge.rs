@@ -62,65 +62,65 @@ pub type TxReceipt = std::result::Result<Nat, TxError>;
 type Result<T> = std::result::Result<T, String>;
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub type State {
+pub struct State {
     pub omnic: Principal, // omnic proxy canister
-    pub owners: HashSet<Principal>;
-    pub bridge_canister_addr: String; // evm address of this canister
+    pub owners: HashSet<Principal>,
+    pub bridge_canister_addr: String, // evm address of this canister
 }
 
-impl State {
-    pub fn new() -> Self {
+// impl State {
+//     pub fn new() -> Self {
 
-    }
+//     }
 
-    pub fn set_omnic() {
+//     pub fn set_omnic() {
 
-    }
+//     }
 
-    pub fn set_bridge_canister_addr() {
+//     pub fn set_bridge_canister_addr() {
 
-    }
+//     }
 
-    pub fn is_authorized(&self, user: Principal) -> bool {
+//     pub fn is_authorized(&self, user: Principal) -> bool {
 
-    }
-}
+//     }
+// }
 
 thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::new());
     static ROUTERS: RefCell<BridgeRouters> = RefCell::new(BridgeRouters::new());
 }
 
-#[update(name = "set_omnic")]
-#[candid_method(update, rename = "set_omnic")]
-async fn set_omnic() -> Result<String>
+// #[update(name = "set_omnic")]
+// #[candid_method(update, rename = "set_omnic")]
+// async fn set_omnic() -> Result<String>
 
-#[update(name = "add_owner")]
-#[candid_method(update, rename = "add_owner")]
-async fn add_owner() -> Result<String>
+// #[update(name = "add_owner")]
+// #[candid_method(update, rename = "add_owner")]
+// async fn add_owner() -> Result<String>
 
-#[update(name = "remove_owner")]
-#[candid_method(update, rename = "remove_owner")]
-async fn remove_owner() -> Result<String>
+// #[update(name = "remove_owner")]
+// #[candid_method(update, rename = "remove_owner")]
+// async fn remove_owner() -> Result<String>
 
-fn is_authorized() -> bool {
+// fn is_authorized() -> bool {
 
-}
+// }
 
-// add supported chain, add to BRIDGE state
-// ic: chain_id = 0, bridge_addr = ""
-// goerli: chain_id = 5, bridge_addr = "xxxx"
-#[update(name = "add_chain")]
-#[candid_method(update, rename = "add_chain")]
-fn add_chain(chain_id: u32, bridge_addr: String) -> Result<String>
+// // add supported chain, add to BRIDGE state
+// // ic: chain_id = 0, bridge_addr = ""
+// // goerli: chain_id = 5, bridge_addr = "xxxx"
+// #[update(name = "add_chain")]
+// #[candid_method(update, rename = "add_chain")]
+// fn add_chain(chain_id: u32, bridge_addr: String) -> Result<String>
 
 
-// add wrapper token pool to chain ic
-#[update(name = "create_pool")]
-#[candid_method(update, rename = "create_pool")]
-fn create_pool(token_id: Principal) -> Result<bool> {
+// // add wrapper token pool to chain ic
+// #[update(name = "create_pool")]
+// #[candid_method(update, rename = "create_pool")]
+// fn create_pool(token_id: Principal) -> Result<bool> {
 
-}
+// }
 
 // calc bridge canister's evm address and store to state, only owners can call
 #[update(name = "set_canister_addr")]

@@ -1,19 +1,15 @@
 use crate::error::{Error, Result};
 use crate::pool::{Error as PoolError, Pool};
-use crate::token::{Error as TokenError, Operation};
-use ic_cdk::export::candid::{CandidType, Deserialize, Nat};
+use crate::token::{Error as TokenError, Operation, Token};
+use candid::{types::number::Nat, CandidType, Deserialize};
 use std::collections::BTreeMap;
-
-// chain_id -> Router
-#[derive(Deserialize, CandidType, Clone, Debug)]
-pub type BridgeRouters = BTreeMap<u32, Router>; 
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Router {
-    pub src_chain: u32;
-    pub bridge_addr: String; // bridge address on src chain
-    pub pools: BTreeMap<u32, Pool>; // src_pool_id -> Pool
-    pub token_pool: BTreeMap<String, u32>; // token_address -> pool_id
+    pub src_chain: u32,
+    pub bridge_addr: String, // bridge address on src chain
+    pub pools: BTreeMap<u32, Pool>, // src_pool_id -> Pool
+    pub token_pool: BTreeMap<String, u32>, // token_address -> pool_id
 }
 
 impl Router {
@@ -41,9 +37,9 @@ impl Router {
     }
 
     pub fn pool_by_token_address(&self, token_addr: String) -> Pool {
-        let pool_id = match self.token_pool.get(token_addr) {
+        let pool_id = match self.token_pool.get(&token_addr) {
             Some(id) => {
-                id
+                id.clone()
             },
             None => {
                 unreachable!();
@@ -52,7 +48,7 @@ impl Router {
         self.get_pool(pool_id)
     }
 
-    pub fn create_pool(&mut, 
+    pub fn create_pool(&mut self, 
         pool_id: u32,
         pool_address: String,
         shared_decimals: u8,
@@ -63,7 +59,7 @@ impl Router {
             return;
         }
         let pool = Pool::new(
-            src_chain,
+            self.src_chain,
             pool_id,
             pool_address,
             shared_decimals,
@@ -74,14 +70,14 @@ impl Router {
     }
 
     pub fn get_pool(&self, pool_id: u32) -> Pool {
-        self.pools.get(&pool_id) {
+        match self.pools.get(&pool_id) {
             Some(p) => p.clone(),
             None => unreachable!(),
         }
     }
 
     pub fn get_pool_token(&self, pool_id: u32) -> Token {
-        let pool = self.pools.get(&pool_id) {
+        let pool = match self.pools.get(&pool_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -89,7 +85,7 @@ impl Router {
     }
 
     pub fn add_liquidity(&mut self, pool_id: u32, amount_ld: u128) {
-        let mut pool = self.pools.get_mut(&pool_id) {
+        let mut pool = match self.pools.get_mut(&pool_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -97,7 +93,7 @@ impl Router {
     }
 
     pub fn remove_liquidity(&mut self, pool_id: u32, amount_ld: u128) {
-        let mut pool = self.pools.get_mut(&pool_id) {
+        let mut pool = match self.pools.get_mut(&pool_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -107,7 +103,7 @@ impl Router {
     }
 
     pub fn enough_liquidity(&self, pool_id: u32, amount_ld: u128) -> bool {
-        let pool = self.pools.get(&pool_id) {
+        let pool = match self.pools.get(&pool_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -115,7 +111,7 @@ impl Router {
     }
 
     pub fn amount_ld(&self, pool_id: u32, amount_sd: u128) -> u128 {
-        let pool = self.pools.get(&pool_id) {
+        let pool = match self.pools.get(&pool_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -123,7 +119,7 @@ impl Router {
     }
 
     pub fn amount_sd(&self, pool_id: u32, amount_ld: u128) -> u128 {
-        let pool = self.pools.get(&pool_id) {
+        let pool = match self.pools.get(&pool_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -131,13 +127,17 @@ impl Router {
     }
 }
 
+// chain_id -> Router
+#[derive(Deserialize, CandidType, Clone, Debug)]
+pub struct BridgeRouters(BTreeMap<u32, Router>); 
+
 impl BridgeRouters {
     pub fn new() -> Self {
-        BTreeMap::new()
+        BridgeRouters(BTreeMap::new())
     }
 
     pub fn pool_exists(&self, chain_id: u32, token_addr: String) -> bool {
-        let router = match self.get(&chain_id) {
+        let router = match self.0.get(&chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -145,7 +145,7 @@ impl BridgeRouters {
     }
 
     pub fn pool_by_token_address(&self, chain_id: u32, token_addr: String) -> Pool {
-        let router = match self.get(&chain_id) {
+        let router = match self.0.get(&chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -153,7 +153,7 @@ impl BridgeRouters {
     }
 
     pub fn get_pool(&self, chain_id: u32, pool_id: u32) -> Pool {
-        let router = match self.get(&chain_id) {
+        let router = match self.0.get(&chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -161,7 +161,7 @@ impl BridgeRouters {
     }
 
     pub fn get_pool_token(&self, chain_id: u32, pool_id: u32) -> Token {
-        let router = match self.get(&chain_id) {
+        let router = match self.0.get(&chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -169,7 +169,7 @@ impl BridgeRouters {
     }
 
     pub fn amount_ld(&self, chain_id: u32, pool_id: u32, amount_sd: u128) -> u128 {
-        let router = match self.get(&chain_id) {
+        let router = match self.0.get(&chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -185,7 +185,7 @@ impl BridgeRouters {
         local_decimals: u8,
         token: Token
     ) {
-        let mut router = match self.get_mut(&src_chain) {
+        let mut router = match self.0.get_mut(&src_chain) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -199,7 +199,7 @@ impl BridgeRouters {
         _to: String,
         amount_ld: u128,
     ) {
-        let mut router = match self.get_mut(&src_chain_id) {
+        let mut router = match self.0.get_mut(&src_chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -211,9 +211,9 @@ impl BridgeRouters {
         src_chain_id: u32,
         src_pool_id: u32,
         _from: String,
-        amount_ld: u32,
+        amount_ld: u128,
     ) {
-        let mut router = match self.get_mut(&src_chain_id) {
+        let mut router = match self.0.get_mut(&src_chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -228,11 +228,12 @@ impl BridgeRouters {
         dst_pool_id: u32,
         amount_sd: u128,
     ) {
-        let mut src_router = match self.get_mut(&src_chain_id) {
+        let mut binding = self.0.clone();
+        let mut src_router = match binding.get_mut(&src_chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
-        let mut dst_router = match self.get_mut(&src_chain_id) {
+        let mut dst_router = match self.0.get_mut(&dst_chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -252,11 +253,11 @@ impl BridgeRouters {
         dst_pool_id: u32,
         amount_sd: u128,
     ) -> bool {
-        let mut src_router = match self.get_mut(&src_chain_id) {
+        let src_router = match self.0.get(&src_chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
-        let mut dst_router = match self.get_mut(&src_chain_id) {
+        let dst_router = match self.0.get(&src_chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
