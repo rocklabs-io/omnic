@@ -13,13 +13,14 @@ use ic_web3::{
 };
 use num_bigint::BigUint;
 use omnic_bridge::pool::Pool;
-use omnic_bridge::router::{Router, RouterInterfaces};
-use omnic_bridge::token::Token as BridgeToken;
+use omnic_bridge::router::{Router, BridgeRouters};
+use omnic_bridge::token::Token;
 use omnic_bridge::utils::*;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::str::FromStr;
+use std::collections::HashSet;
 
 ic_cron::implement_cron!();
 
@@ -147,10 +148,10 @@ async fn set_canister_addr() -> Result<String> {
 // check if there's enough liquidity for a swap
 #[query(name = "check_swap")]
 #[candid_method(query, rename = "check_swap")]
-fn check_swap(src_chain: u32, src_pool: Principal, dst_chain: u32, dst_pool: u32, amount: u64) -> Result<bool> {
+fn check_swap(dst_chain: u32, dst_pool: u32, amount: u64) -> Result<bool> {
     ROUTERS.with(|r| {
-        let routers = routers.borrow();
-        routers.check_swap(src_chain, src_pool, dst_chain, dst_pool, amount)
+        let routers = r.borrow();
+        Ok(routers.check_swap(dst_chain, dst_pool, amount.into()))
     })
 }
 
@@ -158,10 +159,7 @@ fn check_swap(src_chain: u32, src_pool: Principal, dst_chain: u32, dst_pool: u32
 #[candid_method(query, rename = "get_router")]
 fn get_router(chain_id: u32) -> Result<Router> {
     ROUTERS.with(|r| {
-        match r.borrow().get(&chain_id) {
-            Some(router) => Ok(router),
-            None => Err("chain not exist!".to_string()),
-        }
+        Ok(r.borrow().get_router(chain_id))
     })
 }
 
@@ -171,10 +169,10 @@ fn get_router(chain_id: u32) -> Result<Router> {
 fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool> {
     ROUTERS.with(|r| {
         let routers = r.borrow();
-        if !routers.pool_exists(chain_id, token_addr.clone()) {
-            return Err("pool for this token not exist!");
+        if !routers.pool_exists(chain_id, &token_addr) {
+            return Err("pool for this token not exist!".into());
         }
-        routers.pool_by_token_address(token_addr)
+        Ok(routers.pool_by_token_address(chain_id, &token_addr))
     })
 }
 
@@ -182,7 +180,7 @@ fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool> {
 #[update(name = "handle_message")]
 #[candid_method(update, rename = "handle_message")]
 async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool> {
-    let operation_type = get_operation_type(payload.clone())?;
+    let operation_type = get_operation_type(&payload)?;
 
     if operation_type == OPERATION_ADD_LIQUIDITY {
         _handle_operation_add_liquidity(src_chain, sender.clone(), &payload)
@@ -208,7 +206,7 @@ fn _handle_operation_add_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u
 }
 
 fn _handle_operation_remove_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u8]) -> Result<bool> {
-    let (_src_chain_id, src_pool_id, amount) = decode_operation_liquidity(payload)?;
+    let (_src_chain_id, src_pool_id, amount_ld) = decode_operation_liquidity(payload)?;
 
     ROUTERS.with(|routers| {
         let mut routers = routers.borrow_mut();
@@ -226,13 +224,13 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
         // get wrapper token cansider address
         let token = ROUTERS.with(|routers| {
             let routers = routers.borrow();
-            routers.get_pool_token(dst_chain_id, dst_pool_id)
+            routers.pool_token(dst_chain_id, dst_pool_id)
         });
 
         // mint wrapper token on IC
         let amount_ld: u128 = ROUTERS.with(|routers| {
             let routers = routers.borrow();
-            routers.amount_ld(dst_chain_id, dst_pool_id, amount_sd);
+            routers.amount_ld(dst_chain_id, dst_pool_id, amount_sd)
         });
         let amount_ic = Nat::from(amount_ld);
         
@@ -272,16 +270,17 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
         });
         Ok(true)
     } else {
-        let dst_pool = ROUTERS.with(|routers| {
+        let (dst_pool, dst_bridge_addr) = ROUTERS.with(|routers| {
             let routers = routers.borrow();
-            if !routers.check_swap(src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_sd) {
+            if !routers.check_swap(dst_chain_id, dst_pool_id, amount_sd) {
                 return Err("Not enough liquidity on destination chain for this swap!");
             }
-            routers.get_pool(dst_chain_id, dst_pool_id)
-        });
+            let router = routers.get_router(dst_chain_id);
+            Ok((routers.pool_by_id(dst_chain_id, dst_pool_id), router.bridge_addr()))
+        })?;
         // send tx to destination chain
         let amount_ld = dst_pool.amount_ld(amount_sd);
-        let txhash = handle_swap(dst_chain_id, dst_pool.bridge_addr.clone(), dst_pool_id, amount_ld, recipient).await?;
+        let txhash = handle_swap(dst_chain_id, dst_bridge_addr, dst_pool_id, amount_ld, recipient).await?;
         // update state
         ROUTERS.with(|routers| {
             let mut routers = routers.borrow_mut();
@@ -312,11 +311,11 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
     let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
     let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
 
-    let w3 = match ICHttp::new(URL, None, None) {
+    let w3 = match ICHttp::new("".into(), None, None) {
         Ok(v) => { Web3::new(v) },
         Err(e) => { return Err(e.to_string()) },
     };
-    let contract_address = Address::from_slice(&dst_bridge);
+    let contract_address = Address::from_str(&dst_bridge).unwrap();
     let contract = Contract::from_json(
         w3.eth(),
         contract_address,
@@ -325,11 +324,11 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
 
     let c_addr = STATE.with(|state| state.borrow().bridge_canister_addr.clone());
     // add nonce to options
-    let tx_count = get_nonce(chain_id, c_addr.clone())
+    let tx_count = get_nonce(dst_chain, c_addr.clone())
         .await
         .map_err(|e| format!("get tx count error: {}", e))?;
     // get gas_price
-    let gas_price = get_gas_price(chain_id)
+    let gas_price = get_gas_price(dst_chain)
         .await
         .map_err(|e| format!("get gas_price error: {}", e))?;
     // legacy transaction type is still ok
@@ -357,7 +356,7 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
     let call_res: CallResult<(Result<Vec<u8>>, )> = call_with_payment(
         proxy_canister,
         "send_raw_tx",
-        (chain_id, raw_tx),
+        (dst_chain, raw_tx),
         cycles,
     ).await;
     match call_res {
@@ -373,14 +372,14 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
 // swap from ic to evm
 #[update(name = "swap")]
 #[candid_method(update, rename = "swap")]
-async fn swap(pool_id: Principal, dst_chain: u32, dst_pool: u32, to: String, amount_ld: u64) -> Result<String> {
+async fn swap(pool_id: u32, dst_chain: u32, dst_pool: u32, to: String, amount_ld: u64) -> Result<String> {
     let caller = ic_cdk::caller();
     let pool = ROUTERS.with(|routers| {
         let routers = routers.borrow();
-        routers.get_pool(0, pool_id)
+        routers.pool_by_id(0, pool_id)
     });
     // DIP20
-    let token_canister = Principal::from_text(&pool.token.address).unwrap();
+    let token_canister = Principal::from_text(&pool.token().address).unwrap();
     let amount = Nat::from(amount_ld);
     let burn_res: CallResult<(TxReceipt, )> = ic_cdk::call(
         token_canister,
@@ -401,20 +400,20 @@ async fn swap(pool_id: Principal, dst_chain: u32, dst_pool: u32, to: String, amo
         }
     }
 
-    let amount_sd = pool.amount_sd(pool_id, amount_ld);
+    let amount_sd = pool.amount_sd(amount_ld.into());
     let amount_evm_ld = ROUTERS.with(|routers| {
         let routers = routers.borrow();
         routers.amount_ld(dst_chain, dst_pool, amount_sd)
     });
     let dst_bridge_addr = ROUTERS.with(|routers| {
         let routers = routers.borrow();
-        let pool = routers.get_pool(dst_chain, dst_pool);
-        pool.bridge_addr.clone()
+        let router = routers.get_router(dst_chain);
+        router.bridge_addr()
     });
 
     let to = hex::decode(&to).expect("to address decode error");
     let to = to.to_vec();
-    handle_swap(dst_chain, dst_bridge_addr, dst_pool_id, amount_evm_ld, to).await
+    handle_swap(dst_chain, dst_bridge_addr, dst_pool, amount_evm_ld, to).await
 }
 
 
@@ -424,7 +423,7 @@ fn pre_upgrade() {
         c.replace(State::new())
     });
     let routers = ROUTERS.with(|s| {
-        s.replace(Router::new())
+        s.replace(BridgeRouters::new())
     });
     ic_cdk::storage::stable_save((state, routers)).expect("pre upgrade error");
 }
@@ -447,7 +446,7 @@ fn post_upgrade() {
 
 // call proxy.get_nonce() to get nonce
 async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
-    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
+    let proxy_canister: Principal = STATE.with(|s| s.borrow().omnic.clone());
     let cycles: u64 = 100000;
     let call_res: CallResult<(Result<u64>, )> = call_with_payment(
         proxy_canister,
@@ -467,7 +466,7 @@ async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
 
 // call proxy.get_gas_price() to get nonce
 async fn get_gas_price(chain_id: u32) -> Result<U256> {
-    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
+    let proxy_canister: Principal = STATE.with(|s| s.borrow().omnic.clone());
     let cycles: u64 = 100000;
     let call_res: CallResult<(Result<u64>, )> = call_with_payment(
         proxy_canister,

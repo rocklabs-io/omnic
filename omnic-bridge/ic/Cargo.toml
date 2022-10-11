@@ -11,9 +11,9 @@ readme = "README.md"
 edition = "2018"
 
 
-# [[bin]]
-# name = "bridge"
-# path = "src/canister/bridge.rs"
+[[bin]]
+name = "bridge"
+path = "src/canister/bridge.rs"
 
 [dependencies]
 num-bigint = "0.4.3"

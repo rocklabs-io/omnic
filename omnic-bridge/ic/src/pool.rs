@@ -22,7 +22,7 @@ pub struct Pool {
     convert_rate: u128,
     token: Token,
     liquidity: u128, // liquidity left in that pool
-                     // pub lps: BTreeMap<String, u128>, // liquidity providers, ignore for now
+    // pub lps: BTreeMap<String, u128>, // liquidity providers, ignore for now
 }
 
 // local_decimals >= shared_decimals
@@ -83,18 +83,15 @@ impl Pool {
 
 impl Pool {
     pub fn add_liquidity(&mut self, amount_ld: u128) {
-        let amount_sd = self.amount_sd(amount_ld);
-        self.liquidity += amount_sd;
+        self.liquidity += amount_ld;
     }
 
     pub fn enough_liquidity(&self, amount_ld: u128) -> bool{
-        let amount_sd = self.amount_sd(amount_ld);
-        self.liquidity >= amount_sd
+        self.liquidity >= amount_ld
     }
 
     pub fn remove_liquidity(&mut self, amount_ld: u128) {
-        let amount_sd = self.amount_sd(amount_ld);
-        self.liquidity -= amount_sd;
+        self.liquidity -= amount_ld;
     }
 
     pub fn amount_ld(&self, amount_sd: u128) -> u128 {
