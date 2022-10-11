@@ -27,6 +27,24 @@ impl Router {
         }
     }
 
+    pub fn create_pool(&mut, 
+        pool_id: u32,
+        pool_address: String,
+        shared_decimals: u8,
+        local_decimals: u8,
+        token: Token
+    ) {
+        let pool = Pool::new(
+            src_chain,
+            pool_id,
+            pool_address,
+            shared_decimals,
+            local_decimals,
+            token
+        );
+        self.pools.entry(pool_id).or_insert(pool);
+    }
+
     pub fn add_liquidity(&mut self, pool_id: u32, amount_ld: u128) {
         let mut pool = self.pools.get_mut(&pool_id) {
             Some(p) => p,
@@ -71,7 +89,27 @@ impl Router {
 }
 
 impl BridgeRouters {
-    fn add_liquidity(
+    pub fn new() -> Self {
+        BTreeMap::new()
+    }
+
+    pub fn create_pool(
+        &mut self, 
+        src_chain: u32, 
+        pool_id: u32, 
+        pool_address: String,
+        shared_decimals: u8,
+        local_decimals: u8,
+        token: Token
+    ) {
+        let mut router = match self.get_mut(&src_chain_id) {
+            Some(p) => p,
+            None => unreachable!(),
+        };
+        router.create_pool(pool_id, pool_address, shared_decimals, local_decimals, token);
+    }
+
+    pub fn add_liquidity(
         &mut self,
         src_chain_id: u32,
         src_pool_id: u32,
@@ -85,7 +123,7 @@ impl BridgeRouters {
         router.add_liquidity(src_pool_id, amount_ld);
     }
 
-    fn remove_liquidity(
+    pub fn remove_liquidity(
         &mut self,
         src_chain_id: u32,
         src_pool_id: u32,
@@ -99,7 +137,7 @@ impl BridgeRouters {
         router.remove_liquidity(src_pool_id, amount_ld);
     }
 
-    fn swap(
+    pub fn swap(
         &mut self,
         src_chain_id: u32,
         src_pool_id: u32,
@@ -123,7 +161,7 @@ impl BridgeRouters {
         }
     }
 
-    fn check_swap(
+    pub fn check_swap(
         &mut self,
         src_chain_id: u32,
         src_pool_id: u32,

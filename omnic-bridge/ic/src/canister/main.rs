@@ -80,7 +80,7 @@ impl State {
 
 thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::new());
-    static BRIDGE: RefCell<BridgeRouters> = RefCell::new(BridgeRouters::new());
+    static ROUTERS: RefCell<BridgeRouters> = RefCell::new(BridgeRouters::new());
 }
 
 #[update(name = "set_omnic")]
@@ -143,41 +143,23 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
 }
 
 fn _handle_operation_add_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u8]) -> Result<bool> {
-    let (_src_chain_id, src_pool_id, amount) = decode_operation_liquidity(payload)?;
+    let (_src_chain_id, src_pool_id, amount_ld) = decode_operation_liquidity(payload)?;
 
-    ROUTER.with(|router| {
-        let mut r = router.borrow_mut();
-        let mut buffer1 = [0u8; 32];
-        let mut buffer2 = [0u8; 32];
-        src_pool_id.to_little_endian(&mut buffer1);
-        amount.to_little_endian(&mut buffer2);
-        r.add_liquidity(
-            src_chain,
-            Nat::from(BigUint::from_bytes_le(&buffer1)),
-            sender,
-            Nat::from(BigUint::from_bytes_le(&buffer2)),
-        )
-        .map_err(|_| format!("add liquidity failed"))
-    })
+    ROUTERS.with(|routers| {
+        let mut routers = routers.borrow_mut();
+        routers.add_liquidity(src_chain, src_pool_id, amount_ld);
+    });
+    Ok(true)
 }
 
 fn _handle_operation_remove_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u8]) -> Result<bool> {
     let (_src_chain_id, src_pool_id, amount) = decode_operation_liquidity(payload)?;
 
-    ROUTER.with(|router| {
-        let mut r = router.borrow_mut();
-        let mut buffer1 = [0u8; 32];
-        let mut buffer2 = [0u8; 32];
-        src_pool_id.to_little_endian(&mut buffer1);
-        amount.to_little_endian(&mut buffer2);
-        r.remove_liquidity(
-            src_chain,
-            Nat::from(BigUint::from_bytes_le(&buffer1)),
-            sender,
-            Nat::from(BigUint::from_bytes_le(&buffer2)),
-        )
-        .map_err(|_| format!("remove liquidity failed"))
-    })
+    ROUTERS.with(|routers| {
+        let mut routers = routers.borrow_mut();
+        routers.remove_liquidity(src_chain, src_pool_id, amount_ld);
+    });
+    Ok(true)
 }
 
 async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> {
@@ -280,29 +262,24 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
 }
 
 fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool> {
-    let (src_pool_id, pool_addr, token_addr, shared_decimal, local_decimal, token_name, token_symbol) = decode_operation_create_pool(payload)?;
+    let (src_pool_id, pool_addr, token_addr, shared_decimals, local_decimals, token_name, token_symbol) = decode_operation_create_pool(payload)?;
     
-    let mut buffer = [0u8; 32];
-    src_pool_id.to_little_endian(&mut buffer);
-    let pool_id : Nat = create_pool(
-        src_chain, 
-        Nat::from(BigUint::from_bytes_le(&buffer)), 
-        token_symbol.clone()
-    )?;
-    add_supported_token(
-        src_chain, 
-        Nat::from(BigUint::from_bytes_le(&buffer)), 
-        pool_id, 
-        token_name, 
-        token_symbol, 
-        local_decimal, 
-        shared_decimal
-    )
+    let token = Token::new(
+        token_name,
+        token_symbol,
+        local_decimals,
+        token_addr,
+    );
+    ROUTERS.with(|routers| {
+        let mut routers = routers.borrow_mut();
+        routers.create_pool(src_chain, src_pool_id, pool_addr, shared_decimals, local_decimals, token);
+    });
+    Ok(true)
 }
 
-#[update(name = "burn_wrapper_token")]
-#[candid_method(update, rename = "burn_wrapper_token")]
-async fn burn_wrapper_token(wrapper_token_addr: Principal, chain_id: u32, to: String, amount: Nat) -> Result<String> {
+#[update(name = "bridge_to_evm")]
+#[candid_method(update, rename = "bridge_to_evm")]
+async fn bridge_to_evm(wrapper_token_addr: Principal, chain_id: u32, to: String, amount: Nat) -> Result<String> {
     let caller = ic_cdk::caller();
     // DIP20
     let burn_res: CallResult<(TxReceipt, )> = ic_cdk::call(
