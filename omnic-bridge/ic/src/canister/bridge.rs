@@ -140,6 +140,16 @@ async fn set_canister_addr() -> Result<String> {
     Ok(evm_addr)
 }
 
+// check if there's enough liquidity for a swap
+#[query(name = "check_swap")]
+#[candid_method(query, rename = "check_swap")]
+fn check_swap(src_chain: u32, src_pool: Principal, dst_chain: u32, dst_pool: u32, amount: u64) -> Result<bool> {
+    ROUTERS.with(|r| {
+        let routers = routers.borrow();
+        routers.check_swap(src_chain, src_pool, dst_chain, dst_pool, amount)
+    })
+}
+
 #[query(name = "get_router")]
 #[candid_method(query, rename = "get_router")]
 fn get_router(chain_id: u32) -> Result<Router> {
