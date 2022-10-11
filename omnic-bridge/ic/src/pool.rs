@@ -23,6 +23,7 @@ pub struct Pool {
     // pub lps: BTreeMap<String, u128>, // liquidity providers, ignore for now
 }
 
+// local_decimals >= shared_decimals
 impl Pool {
     pub fn new(
         src_chain: u32,
@@ -30,7 +31,6 @@ impl Pool {
         pool_address: String,
         shared_decimals: u8,
         local_decimals: u8,
-        convert_rate: u128,
         token: Token
     ) -> Self {
         Pool {
@@ -39,18 +39,29 @@ impl Pool {
             pool_address,
             shared_decimals,
             local_decimals,
-            convert_rate,
+            convert_rate: u128::pow(10, local_decimal) / u128::pow(10, shared_decimal),
             token,
             liquidity: 0u128,
         }
     }
 
-    // utils, TODO: move to utils.rs
-    // pub fn amount_evm_to_amount_ic(&self, amount_evm: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
-    //     amount_evm * (u128::pow(10, wrapper_token_decimal as u32)) / (u128::pow(10, native_token_decimal as u32))
-    // }
+    pub fn add_liquidity(&mut self, amount_ld: u128) {
+        self.liquidity += amount_ld;
+    }
 
-    // pub fn amount_ic_to_amount_evm(&self, amount_ic: Nat, native_token_decimal: u8, wrapper_token_decimal: u8) -> Nat {
-    //     amount_ic * (u128::pow(10, native_token_decimal as u32)) / (u128::pow(10, wrapper_token_decimal as u32))
-    // }
+    pub fn enough_liquidity(&self, amount_ld: u128) -> bool {
+        self.liquidity >= amount_ld
+    }
+
+    pub fn remove_liquidity(&mut self, amount_ld: u128) {
+        self.liquidity -= amount_ld;
+    }
+
+    pub fn amount_ld(&self, amount_sd: u128) -> u128 {
+        amount_sd * self.convert_rate
+    }
+
+    pub fn amount_sd(&self, amount_ld: u128) -> u128 {
+        amount_ld / self.convert_rate
+    }
 }

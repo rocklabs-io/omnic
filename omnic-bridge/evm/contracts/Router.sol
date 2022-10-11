@@ -112,14 +112,14 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         }
         _safeTransferFrom(pool.token(), msg.sender, address(pool), _amountLD);
         //event
-        pool.swap(_dstChainId, _dstPoolId, msg.sender, _amountLD, _minAmountLD);
+        uint256 amountSD = pool.swap(_dstChainId, _dstPoolId, msg.sender, _amountLD, _minAmountLD);
 
         localBridge.swap(
             chainId,
             _srcPoolId,
             _dstChainId,
             _dstPoolId,
-            _amountLD,
+            amountSD,
             _to
         );
     }
@@ -191,7 +191,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
                 _symbol
             );
         // send message to bridge on ic to create according pool automatically
-        localBridge.createPool(poolId, _sharedDecimals, _localDecimals, _name, _symbol);
+        localBridge.createPool(poolId, pool, _token, _sharedDecimals, _localDecimals, _name, _symbol);
         return pool;
     }
 

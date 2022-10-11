@@ -126,7 +126,7 @@ contract Bridge is IBridge, Ownable {
         uint256 _srcPoolId,
         uint16 _dstChainId,
         uint256 _dstPoolId,
-        uint256 _amountLD,
+        uint256 _amountSD,
         bytes32 _to
     ) external override onlyRouter {
         bytes memory _payload = abi.encode(
@@ -135,7 +135,7 @@ contract Bridge is IBridge, Ownable {
             _srcPoolId,
             _dstChainId,
             _dstPoolId,
-            _amountLD,
+            _amountSD,
             _to
         );
         _send(OperationTypes.Swap, _payload);
@@ -144,13 +144,13 @@ contract Bridge is IBridge, Ownable {
     function addLiquidity(
         uint16 _srcChainId,
         uint256 _srcPoolId,
-        uint256 _amount
+        uint256 _amountLD
     ) external override onlyRouter {
         bytes memory _payload = abi.encode(
             uint8(OperationTypes.AddLiquidity),
             _srcChainId,
             _srcPoolId,
-            _amount
+            _amountLD
         );
         _send(OperationTypes.AddLiquidity, _payload);
     }
@@ -158,19 +158,21 @@ contract Bridge is IBridge, Ownable {
     function removeLiquidity(
         uint16 _srcChainId,
         uint256 _srcPoolId,
-        uint256 _amount
+        uint256 _amountLD
     ) external override onlyRouter {
         bytes memory _payload = abi.encode(
             uint8(OperationTypes.RemoveLiquidity),
             _srcChainId,
             _srcPoolId,
-            _amount
+            _amountLD
         );
         _send(OperationTypes.RemoveLiquidity, _payload);
     }
 
     function createPool (
         uint256 _poolId,
+        address _poolAddr,
+        address _tokenAddr,
         uint8 _sharedDecimals,
         uint8 _localDecimals,
         string memory _name,
@@ -179,6 +181,8 @@ contract Bridge is IBridge, Ownable {
         bytes memory _payload = abi.encode(
             uint8(OperationTypes.CreatePool),
             _poolId,
+            _poolAddr,
+            _tokenAddr,
             _sharedDecimals,
             _localDecimals,
             _name,

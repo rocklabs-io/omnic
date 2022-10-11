@@ -280,7 +280,7 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
 }
 
 fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool> {
-    let (src_pool_id, shared_decimal, local_decimal, token_name, token_symbol) = decode_operation_create_pool(payload)?;
+    let (src_pool_id, pool_addr, token_addr, shared_decimal, local_decimal, token_name, token_symbol) = decode_operation_create_pool(payload)?;
     
     let mut buffer = [0u8; 32];
     src_pool_id.to_little_endian(&mut buffer);

@@ -106,10 +106,12 @@ pub fn decode_operation_swap(payload: Vec<u8>) -> Result<(u32, u32, u32, u32, u1
 }
 
 // return (pool_id, shared_decimals, local_decimals, name, symbol)
-pub fn decode_operation_create_pool(payload: Vec<u8>) -> Result<(u32, u8, u8, String, String)> {
+pub fn decode_operation_create_pool(payload: Vec<u8>) -> Result<(u32, String, String, u8, u8, String, String)> {
     /*
         uint8(OperationTypes.CreatePool), u8
         _poolId, u256
+        _poolAddr, address
+        _tokenAddr, address
         _sharedDecimals, u8
         _localDecimals, u8
         _name, string
@@ -118,6 +120,8 @@ pub fn decode_operation_create_pool(payload: Vec<u8>) -> Result<(u32, u8, u8, St
     let types = vec![
         ParamType::Uint(8),
         ParamType::Uint(256),
+        ParamType::Address,
+        ParamType::Address,
         ParamType::Uint(8), // shared_decimals
         ParamType::Uint(8), // local_decimals
         ParamType::String,
@@ -128,25 +132,35 @@ pub fn decode_operation_create_pool(payload: Vec<u8>) -> Result<(u32, u8, u8, St
     let src_pool_id: u32 = d[1]
         .clone()
         .into_uint()
-        .ok_or("can not convert src_pool_id to U256".to_string())?
+        .ok_or("cannot convert src_pool_id to U256".to_string())?
         .as_u32();
     let shared_decimal: u8 = d[2]
         .clone()
         .into_uint()
-        .ok_or("can not convert shared_decimals to U256".to_string())?
+        .ok_or("cannot convert shared_decimals to U256".to_string())?
         .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
-    let local_decimal: u8 = d[3]
+    let pool_addr: String = d[3]
+        .clone()
+        .into_address()
+        .ok_or("cannot convert pool_address".to_string())?
+        .to_string();
+    let token_addr: String = d[4]
+        .clone()
+        .into_address()
+        .ok_or("cannot convert token_address".to_string())?
+        .to_string();
+    let local_decimal: u8 = d[5]
         .clone()
         .into_uint()
         .ok_or("can not convert local_decimals U256".to_string())?
         .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
-    let name: String = d[4]
+    let name: String = d[6]
         .clone()
         .into_string()
         .ok_or("can not convert name to String".to_string())?;
-    let symbol: String = d[5]
+    let symbol: String = d[7]
         .clone()
         .into_string()
         .ok_or("can not convert symbol to String".to_string())?;
-    Ok((src_pool_id, shared_decimal, local_decimal, name, symbol))
+    Ok((src_pool_id, pool_addr, token_addr, shared_decimal, local_decimal, name, symbol))
 }
