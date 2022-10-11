@@ -37,10 +37,10 @@ const OPERATION_SWAP: u8 = 2;
 const OPERATION_REMOVE_LIQUIDITY: u8 = 3;
 const OPERATION_CREATE_POOL: u8 = 4;
 
-const OWNER: &'static str = "aaaaa-aa";
-const PROXY: &'static str = "y3lks-laaaa-aaaam-aat7q-cai"; // update when proxy canister deployed.
+// const OWNER: &'static str = "aaaaa-aa";
+// const PROXY: &'static str = "y3lks-laaaa-aaaam-aat7q-cai"; // update when proxy canister deployed.
 
-const URL: &'static str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
+// const URL: &'static str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
 const KEY_NAME: &str = "test_key_1";
 const BRIDGE_ABI: &[u8] = include_bytes!("./bridge.json");
 
@@ -70,6 +70,14 @@ pub type State {
 
 impl State {
     pub fn new() -> Self {
+
+    }
+
+    pub fn set_omnic() {
+
+    }
+
+    pub fn set_bridge_canister_addr() {
 
     }
 
@@ -124,10 +132,11 @@ async fn set_canister_addr() -> Result<String> {
         .await
         .map(|v| hex::encode(v))
         .map_err(|e| format!("calc evm address failed: {:?}", e))?;
-    BRIDGE_ADDR.with(|addr| {
-        let mut addr = addr.borrow_mut();
-        *addr = evm_addr.clone();
-    });
+    // TODO: add addr to state
+    // BRIDGE_ADDR.with(|addr| {
+    //     let mut addr = addr.borrow_mut();
+    //     *addr = evm_addr.clone();
+    // });
     Ok(evm_addr)
 }
 
@@ -139,6 +148,19 @@ fn get_router(chain_id: u32) -> Result<Router> {
             Some(router) => Ok(router),
             None => Err("chain not exist!".to_string()),
         }
+    })
+}
+
+// chain id -> token address -> pool_id
+#[query(name = "pool_by_token_address")]
+#[candid_method(query, rename = "pool_by_token_address")]
+fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool> {
+    ROUTERS.with(|r| {
+        let routers = r.borrow();
+        if !routers.pool_exists(chain_id, token_addr.clone()) {
+            return Err("pool for this token not exist!");
+        }
+        routers.pool_by_token_address(token_addr)
     })
 }
 
@@ -380,7 +402,6 @@ async fn swap(pool_id: Principal, dst_chain: u32, dst_pool: u32, to: String, amo
     let to = to.to_vec();
     handle_swap(dst_chain, dst_bridge_addr, dst_pool_id, amount_evm_ld, to).await
 }
-
 
 
 #[pre_upgrade]

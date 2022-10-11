@@ -13,6 +13,7 @@ pub struct Router {
     pub src_chain: u32;
     pub bridge_addr: String; // bridge address on src chain
     pub pools: BTreeMap<u32, Pool>; // src_pool_id -> Pool
+    pub token_pool: BTreeMap<String, u32>; // token_address -> pool_id
 }
 
 impl Router {
@@ -24,7 +25,31 @@ impl Router {
             src_chain,
             bridge_addr,
             pools: BTreeMap::new(),
+            token_pool: BTreeMap::new(),
         }
+    }
+
+    pub fn pool_exists(&self, token_addr: &str) -> bool {
+        match self.token_pool.get(token_addr) {
+            Some(_) => {
+                true
+            },
+            None => {
+                false
+            },
+        }
+    }
+
+    pub fn pool_by_token_address(&self, token_addr: String) -> Pool {
+        let pool_id = match self.token_pool.get(token_addr) {
+            Some(id) => {
+                id
+            },
+            None => {
+                unreachable!();
+            },
+        };
+        self.get_pool(pool_id)
     }
 
     pub fn create_pool(&mut, 
@@ -34,6 +59,9 @@ impl Router {
         local_decimals: u8,
         token: Token
     ) {
+        if self.pool_exists(&token.address) {
+            return;
+        }
         let pool = Pool::new(
             src_chain,
             pool_id,
@@ -108,8 +136,24 @@ impl BridgeRouters {
         BTreeMap::new()
     }
 
+    pub fn pool_exists(&self, chain_id: u32, token_addr: String) -> bool {
+        let router = match self.get(&chain_id) {
+            Some(p) => p,
+            None => unreachable!(),
+        };
+        router.pool_exists(&token_addr)
+    }
+
+    pub fn pool_by_token_address(&self, chain_id: u32, token_addr: String) -> Pool {
+        let router = match self.get(&chain_id) {
+            Some(p) => p,
+            None => unreachable!(),
+        };
+        router.pool_by_token_address(token_addr)
+    }
+
     pub fn get_pool(&self, chain_id: u32, pool_id: u32) -> Pool {
-        let router = match self.get(&src_chain_id) {
+        let router = match self.get(&chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -117,7 +161,7 @@ impl BridgeRouters {
     }
 
     pub fn get_pool_token(&self, chain_id: u32, pool_id: u32) -> Token {
-        let router = match self.get(&src_chain_id) {
+        let router = match self.get(&chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -125,7 +169,7 @@ impl BridgeRouters {
     }
 
     pub fn amount_ld(&self, chain_id: u32, pool_id: u32, amount_sd: u128) -> u128 {
-        let router = match self.get(&src_chain_id) {
+        let router = match self.get(&chain_id) {
             Some(p) => p,
             None => unreachable!(),
         };
@@ -141,7 +185,7 @@ impl BridgeRouters {
         local_decimals: u8,
         token: Token
     ) {
-        let mut router = match self.get_mut(&src_chain_id) {
+        let mut router = match self.get_mut(&src_chain) {
             Some(p) => p,
             None => unreachable!(),
         };
