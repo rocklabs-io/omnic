@@ -68,23 +68,27 @@ pub struct State {
     pub bridge_canister_addr: String, // evm address of this canister
 }
 
-// impl State {
-//     pub fn new() -> Self {
+impl State {
+    pub fn new() -> Self {
+        State {
+            omnic: Principal::management_canister(),
+            owners: HashSet::new(),
+            bridge_canister_addr: "".into(),
+        }
+    }
 
-//     }
+    pub fn set_omnic(mut self, omnic_proxy: Principal) {
+        self.omnic = omnic_proxy;
+    }
 
-//     pub fn set_omnic() {
+    // pub fn set_bridge_canister_addr() {
 
-//     }
+    // }
 
-//     pub fn set_bridge_canister_addr() {
+    // pub fn is_authorized(&self, user: Principal) -> bool {
 
-//     }
-
-//     pub fn is_authorized(&self, user: Principal) -> bool {
-
-//     }
-// }
+    // }
+}
 
 thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::new());
