@@ -45,6 +45,13 @@ impl Router {
         self.pools.entry(pool_id).or_insert(pool);
     }
 
+    pub fn get_pool(&self, pool_id: u32) -> Pool {
+        self.pools.get(&pool_id) {
+            Some(p) => p.clone(),
+            None => unreachable!(),
+        }
+    }
+
     pub fn get_pool_token(&self, pool_id: u32) -> Token {
         let pool = self.pools.get(&pool_id) {
             Some(p) => p,
@@ -99,6 +106,14 @@ impl Router {
 impl BridgeRouters {
     pub fn new() -> Self {
         BTreeMap::new()
+    }
+
+    pub fn get_pool(&self, chain_id: u32, pool_id: u32) -> Pool {
+        let router = match self.get(&src_chain_id) {
+            Some(p) => p,
+            None => unreachable!(),
+        };
+        router.get_pool(pool_id)
     }
 
     pub fn get_pool_token(&self, chain_id: u32, pool_id: u32) -> Token {

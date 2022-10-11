@@ -218,14 +218,16 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
         });
         Ok(true)
     } else {
-        ROUTERS.with(|routers| {
+        let dst_pool = ROUTERS.with(|routers| {
             let routers = routers.borrow();
             if !routers.check_swap(src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_sd) {
                 return Err("Not enough liquidity on destination chain for this swap!");
             }
+            routers.get_pool(dst_chain_id, dst_pool_id)
         });
-        // TODO: handle_swap(dst_chain_id, "USDT".to_string(), dst_bridge_addr, recipient, buffer.to_vec()).await; // how to handle failed transfer?
-
+        // send tx to destination chain
+        let amount_ld = dst_pool.amount_ld(amount_sd);
+        let txhash = handle_swap(dst_chain_id, dst_pool.bridge_addr.clone(), dst_pool_id, amount_ld, recipient).await?;
         // update state
         ROUTERS.with(|routers| {
             let mut routers = routers.borrow_mut();
@@ -251,8 +253,67 @@ fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool>
     Ok(true)
 }
 
-async fn handle_swap() -> Result<String> {
-    
+async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_ld: u128, to: Vec<u8>) -> Result<String> {
+    // ecdsa key info
+    let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
+    let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
+
+    let w3 = match ICHttp::new(URL, None, None) {
+        Ok(v) => { Web3::new(v) },
+        Err(e) => { return Err(e.to_string()) },
+    };
+    let contract_address = Address::from_slice(&dst_bridge);
+    let contract = Contract::from_json(
+        w3.eth(),
+        contract_address,
+        BRIDGE_ABI
+    ).map_err(|e| format!("init contract failed: {}", e))?;
+
+    let c_addr = STATE.with(|state| state.borrow().bridge_canister_addr.clone());
+    // add nonce to options
+    let tx_count = get_nonce(chain_id, c_addr.clone())
+        .await
+        .map_err(|e| format!("get tx count error: {}", e))?;
+    // get gas_price
+    let gas_price = get_gas_price(chain_id)
+        .await
+        .map_err(|e| format!("get gas_price error: {}", e))?;
+    // legacy transaction type is still ok
+    let options = Options::with(|op| { 
+        op.nonce = Some(tx_count);
+        op.gas_price = Some(gas_price);
+        op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
+    });
+    // params: u256, u256, bytes32
+    let mut temp = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut to_addr = to.clone();
+    temp.append(&mut to_addr);
+    let to_addr = H256::from_slice(&temp);
+
+    let value = U256::from(amount_ld);
+
+    let signed = contract
+        .sign("handleSwap", (dst_pool, value, to_addr,), options, key_info, dst_chain as u64)
+        .await
+        .map_err(|e| format!("sign handleSwap failed: {}", e))?;
+
+    let raw_tx: Vec<u8> = signed.raw_transaction.0; 
+    let proxy_canister: Principal = STATE.with(|s| s.borrow().omnic.clone());
+    let cycles = raw_tx.len() as u64 * 10000u64;
+    let call_res: CallResult<(Result<Vec<u8>>, )> = call_with_payment(
+        proxy_canister,
+        "send_raw_tx",
+        (chain_id, raw_tx),
+        cycles,
+    ).await;
+    match call_res {
+        Ok((_res, )) => {
+            Ok(hex::encode(signed.message_hash.as_bytes()))
+        }
+        Err((_code, msg)) => {
+            return Err(msg);
+        }
+    }
 }
 
 #[update(name = "bridge_to_evm")]
@@ -313,122 +374,6 @@ async fn bridge_to_evm(wrapper_token_addr: Principal, chain_id: u32, to: String,
     let amount_evm: Vec<u8> = BigUint::from(amount_evm).to_bytes_le();
     let bridge_addr: Vec<u8> = get_bridge_addr(chain_id).unwrap();
     handle_burn(chain_id, symbol, bridge_addr, to, amount_evm).await
-}
-
-// call proxy.get_nonce() to get nonce
-async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
-    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let cycles: u64 = 100000;
-    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
-        proxy_canister,
-        "get_tx_count",
-        (chain_id, addr,),
-        cycles
-    ).await;
-    match call_res {
-        Ok((res, )) => {
-            res.map(|v| U256::from(v))
-        }
-        Err((_code, msg)) => {
-            return Err(msg);
-        }
-    }
-}
-
-// call proxy.get_gas_price() to get nonce
-async fn get_gas_price(chain_id: u32) -> Result<U256> {
-    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let cycles: u64 = 100000;
-    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
-        proxy_canister,
-        "get_gas_price",
-        (chain_id,),
-        cycles
-    ).await;
-    match call_res {
-        Ok((res, )) => {
-            res.map(|v| U256::from(v))
-        }
-        Err((_code, msg)) => {
-            return Err(msg);
-        }
-    }
-}
-
-// call bridge.handleSwap
-async fn handle_burn(chain_id: u32, symbol: String, bridge_addr: Vec<u8>, to: Vec<u8>, value: Vec<u8>) -> Result<String> {
-    // ecdsa key info
-    let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
-    let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
-
-    let w3 = match ICHttp::new(URL, None, None) {
-        Ok(v) => { Web3::new(v) },
-        Err(e) => { return Err(e.to_string()) },
-    };
-    let contract_address = Address::from_slice(&bridge_addr);
-    let contract = Contract::from_json(
-        w3.eth(),
-        contract_address,
-        BRIDGE_ABI
-    ).map_err(|e| format!("init contract failed: {}", e))?;
-
-    let c_addr = BRIDGE_ADDR.with(|addr| addr.borrow().clone());
-    // add nonce to options
-    let tx_count = get_nonce(chain_id, c_addr.clone())
-        .await
-        .map_err(|e| format!("get tx count error: {}", e))?;
-    // get gas_price
-    let gas_price = get_gas_price(chain_id)
-        .await
-        .map_err(|e| format!("get gas_price error: {}", e))?;
-    // legacy transaction type is still ok
-    let options = Options::with(|op| { 
-        op.nonce = Some(tx_count);
-        op.gas_price = Some(gas_price);
-        op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
-    });
-    // params: u256, u256, bytes32
-    let mut temp = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    let mut to_addr = to.clone();
-    temp.append(&mut to_addr);
-    let to_addr = H256::from_slice(&temp);
-
-    let value = U256::from_little_endian(&value);
-    // TODO: get pool_id from state, fix unwrap
-    let pool_id: u32 = ROUTER.with(|r| {
-        let r = r.borrow();
-        let ic_pool_id = r.get_pool_id_by_symbol(&symbol).unwrap();
-        let pool = r.get_pool(ic_pool_id).unwrap();
-        let token = pool.get_token_by_chain_id(chain_id).unwrap();
-        let src_pool_id = token.src_chain_pool_id();
-        let temp = src_pool_id.0.to_bytes_be().try_into().unwrap();
-        u32::from_be_bytes(temp)
-    });
-    // let pool_id = U256::from(0);
-    // return Err(format!("{:?}, {:?}, {:?}", pool_id, value, temp));
-
-    let signed = contract
-        .sign("handleSwap", (pool_id, value, to_addr,), options, key_info, chain_id as u64)
-        .await
-        .map_err(|e| format!("sign handleSwap failed: {}", e))?;
-
-    let raw_tx: Vec<u8> = signed.raw_transaction.0; 
-    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
-    let cycles = raw_tx.len() as u64 * 10000u64;
-    let call_res: CallResult<(Result<Vec<u8>>, )> = call_with_payment(
-        proxy_canister,
-        "send_raw_tx",
-        (chain_id, raw_tx),
-        cycles,
-    ).await;
-    match call_res {
-        Ok((_res, )) => {
-            Ok(hex::encode(signed.message_hash.as_bytes()))
-        }
-        Err((_code, msg)) => {
-            return Err(msg);
-        }
-    }
 }
 
 #[update(name = "create_pool")]
@@ -570,124 +515,47 @@ fn post_upgrade() {
     });
 }
 
-// #[cfg(not(any(target_arch = "wasm32", test)))]
+// call proxy.get_nonce() to get nonce
+async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
+    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
+    let cycles: u64 = 100000;
+    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
+        proxy_canister,
+        "get_tx_count",
+        (chain_id, addr,),
+        cycles
+    ).await;
+    match call_res {
+        Ok((res, )) => {
+            res.map(|v| U256::from(v))
+        }
+        Err((_code, msg)) => {
+            return Err(msg);
+        }
+    }
+}
+
+// call proxy.get_gas_price() to get nonce
+async fn get_gas_price(chain_id: u32) -> Result<U256> {
+    let proxy_canister: Principal = Principal::from_text(PROXY).unwrap();
+    let cycles: u64 = 100000;
+    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
+        proxy_canister,
+        "get_gas_price",
+        (chain_id,),
+        cycles
+    ).await;
+    match call_res {
+        Ok((res, )) => {
+            res.map(|v| U256::from(v))
+        }
+        Err((_code, msg)) => {
+            return Err(msg);
+        }
+    }
+}
+
 fn main() {
     candid::export_service!();
     std::print!("{}", __export_service());
-}
-
-// #[cfg(any(target_arch = "wasm32", test))]
-// fn main() {}
-
-
-// the test should be executed in one thread
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_web3::{
-        ethabi::{Token, encode, ParamType, Bytes, Uint},
-        contract::tokens::{Detokenize, Tokenizable},
-        types::{Address, U256, BytesArray},
-    };
-    use ic_cdk::api::call::CallResult;
-    use ic_cdk::export::candid::{Deserialize, CandidType, Nat};
-    use ic_kit::{mock_principals::{alice, bob, john}, MockContext};
-    use hex_literal::hex;
-
-    fn add_new_pool(src_chain_id: u32, src_pool_id: Nat, symbol: String) -> bool {
-        create_pool(src_chain_id, src_pool_id, symbol).is_ok()
-    }
-
-    fn add_wrapper_token(pool_id: Nat, wrapper_token_addr: String) -> bool {
-        add_wrapper_token_addr(pool_id, wrapper_token_addr).unwrap_or(false)
-    }
-
-    #[test]
-    #[ignore]
-    fn should_create_pool() {
-        let src_chain_id: u32 = 1; //ethereum
-        let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        let symbol: String = "USDT".to_string();
-        let res: bool = add_new_pool(src_chain_id, src_pool_id.clone(), symbol.clone());
-        assert!(res);
-        let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
-        assert_eq!(pool_id, Nat::from(0));
-        let pool_id = get_pool_id_by_symbol(symbol).unwrap();
-        assert_eq!(pool_id, Nat::from(0));
-    }
-
-    #[test]
-    #[ignore]
-    fn should_add_wrapper_token_addr() {
-        let src_chain_id: u32 = 1; //ethereum
-        let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        assert!(add_new_pool(src_chain_id, src_pool_id.clone(), "USDT".to_string()));
-        let wrapper_token_addr: &str = "aaaaa-aa"; //wrapper usdt canister address
-        let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
-        assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
-    }
-
-    #[async_std::test]
-    async fn should_process_swap_message() {
-        let src_chain_id: u32 = 1; //ethereum
-        let src_pool_id: Nat = 0.into(); // fake usdt pool id
-        assert!(add_new_pool(src_chain_id, src_pool_id.clone(), "USDT".to_string()));
-        let wrapper_token_addr: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai"; //wrapper usdt canister address
-        let pool_id = get_pool_id(src_chain_id, src_pool_id).unwrap();
-        assert!(add_wrapper_token(pool_id, wrapper_token_addr.to_string()));
-
-        let token = vec![
-            3u8.into_token(), // swap
-            1u16.into_token(), // src_chain_id = 1
-            Token::Uint(Uint::from(0)), // src pool id = 0 (fake usdt)
-            0u16.into_token(), // dst chain id = 0 (ic)
-            Token::Uint(Uint::from(0)), // dst pool id = 0 (canister store usdt token from other chains)
-            Token::Uint(Uint::from(10_000_000_000u128)), // token amount = 1000000000
-            Token::FixedBytes("aaaaa-aa".to_string().into_bytes())
-        ];
-        let payload: Bytes = encode(&token);
-        let sender: Vec<u8> = hex!("0000000000000000000000000000000000000000").into();
-
-        let res: bool = process_message(src_chain_id, sender, 1, payload).await.unwrap();
-        assert!(res);
-    }
-
-    #[async_std::test]
-    async fn should_burn_wrapper_token() {
-        let dst_chain_id: u32 = 5; //goerli ethereum
-        let recipient: Vec<u8> = hex!("AAB27b150451726EC7738aa1d0A94505c8729bd1").into(); // dst chain recipient
-        let amount: Nat = Nat::from(1000000);
-        let wrapper_token_addr: Principal = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(); //wrapper usdt canister address
-
-        let bridge_addr: Vec<u8> = hex!("AAB27b150451726EC7738aa1d0A94505c8729bd1").into(); // goerli bridge adress
-        assert!(add_bridge_addr(dst_chain_id, bridge_addr).unwrap());
-
-        let res: bool = burn_wrapper_token(wrapper_token_addr, dst_chain_id, recipient, amount).await.unwrap();
-        assert!(res);
-    }
-
-    #[async_std::test]
-    async fn should_process_create_pool_message() {
-        let src_chain_id: u32 = 5; //goerli ethereum
-        let name: String = String::from("Fake USDT");
-        let symbol: String = String::from("USDT");
-
-        let token = vec![
-            4u8.into_token(), // create_pool
-            Token::Uint(Uint::from(0)), // src pool id = 0 (fake usdt)
-            10u8.into_token(), // shared_decimals 10
-            18u8.into_token(), // local_decimals 18 (real decimal of token on evm)
-            Token::String(name), // token name
-            Token::String(symbol.clone()), // token symbol
-        ];
-        let payload: Bytes = encode(&token);
-        let sender: Vec<u8> = hex!("0000000000000000000000000000000000000000").into();
-
-        let res: bool = process_message(src_chain_id, sender, 1, payload).await.unwrap();
-        assert!(res);
-        let pool_id: Nat = get_pool_id_by_symbol(symbol).unwrap();
-        assert_eq!(pool_id, Nat::from(0));
-    }
-
-
 }
