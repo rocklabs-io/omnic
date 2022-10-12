@@ -456,7 +456,6 @@ async fn remove_owner(owner: Principal) {
     });
 }
 
-// TODO: aggregate roots from multiple different rpc providers
 async fn fetch_root() {
     // query omnic contract.getLatestRoot, 
     // fetch from multiple rpc providers and aggregrate results, should be exact match
