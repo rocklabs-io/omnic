@@ -2,6 +2,7 @@ use crate::token::Token;
 use crate::pool::Pool;
 use candid::{CandidType, Deserialize};
 use std::collections::BTreeMap;
+use std::cell::RefCell;
 
 #[derive(Deserialize, CandidType, Clone, Debug)]
 pub struct Router {
@@ -114,7 +115,7 @@ impl Router {
 
 // chain_id -> Router
 #[derive(Deserialize, CandidType, Clone, Debug)]
-pub struct BridgeRouters(BTreeMap<u32, Router>); 
+pub struct BridgeRouters(BTreeMap<u32, RefCell<Router>>); 
 
 impl BridgeRouters {
     pub fn new() -> Self {
@@ -126,46 +127,47 @@ impl BridgeRouters {
     }
 
     pub fn get_router(&self, chain_id: u32) -> Router {
-        self.0.get(&chain_id).expect("router not found").clone()
+        let router = self.0.get(&chain_id).expect("router not found");
+        router.borrow().clone()
     }
 
     pub fn pool_count(&self, chain_id: u32) -> u32 {
         let router = self.0.get(&chain_id).expect("no router on this chain!");
-        router.pool_count()
+        router.borrow().pool_count()
     }
 
     pub fn pool_exists(&self, chain_id: u32, token_addr: &str) -> bool {
         let router = self.0.get(&chain_id).expect("no router on this chain!");
-        router.pool_exists(token_addr)
+        router.borrow().pool_exists(token_addr)
     }
 
     pub fn pool_by_token_address(&self, chain_id: u32, token_addr: &str) -> Pool {
         let router = self.0.get(&chain_id).expect("no router on this chain!");
-        router.pool_by_token_address(token_addr)
+        router.borrow().pool_by_token_address(token_addr)
     }
 
     pub fn pool_by_id(&self, chain_id: u32, pool_id: u32) -> Pool {
         let router = self.0.get(&chain_id).expect("no router on this chain!");
-        router.pool_by_id(pool_id)
+        router.borrow().pool_by_id(pool_id)
     }
 
     pub fn pool_token(&self, chain_id: u32, pool_id: u32) -> Token {
         let router = self.0.get(&chain_id).expect("no router on this chain!");
-        router.pool_token(pool_id)
+        router.borrow().pool_token(pool_id)
     }
 
     pub fn amount_ld(&self, chain_id: u32, pool_id: u32, amount_sd: u128) -> u128 {
         let router = self.0.get(&chain_id).expect("no router on this chain!");
-        router.amount_ld(pool_id, amount_sd)
+        router.borrow().amount_ld(pool_id, amount_sd)
     }
 
     pub fn add_chain(&mut self, chain_id: u32, bridge_addr: String) {
         let r = Router::new(chain_id, bridge_addr);
-        self.0.entry(chain_id).or_insert(r);
+        self.0.entry(chain_id).or_insert(RefCell::new(r));
     }
 
     pub fn create_pool(
-        &mut self, 
+        &self, 
         chain_id: u32, 
         pool_id: u32, 
         pool_address: String,
@@ -173,47 +175,47 @@ impl BridgeRouters {
         local_decimals: u8,
         token: Token
     ) {
-        let router = self.0.get_mut(&chain_id).expect("BridgeRouter: no router on this chain!");
-        router.create_pool(pool_id, pool_address, shared_decimals, local_decimals, token);
+        let router = self.0.get(&chain_id).expect("BridgeRouter: no router on this chain!");
+        router.borrow_mut().create_pool(pool_id, pool_address, shared_decimals, local_decimals, token);
     }
 
     pub fn add_liquidity(
-        &mut self,
+        &self,
         src_chain_id: u32,
         src_pool_id: u32,
         amount_ld: u128,
     ) {
-        let router = self.0.get_mut(&src_chain_id).expect("BridgeRouter: no router on this chain!");
-        router.add_liquidity(src_pool_id, amount_ld);
+        let router = self.0.get(&src_chain_id).expect("BridgeRouter: no router on this chain!");
+        router.borrow_mut().add_liquidity(src_pool_id, amount_ld);
     }
 
     pub fn remove_liquidity(
-        &mut self,
+        &self,
         src_chain_id: u32,
         src_pool_id: u32,
         amount_ld: u128,
     ) {
-        let router = self.0.get_mut(&src_chain_id).expect("BridgeRouter: no router on this chain!");
-        router.remove_liquidity(src_pool_id, amount_ld);
+        let router = self.0.get(&src_chain_id).expect("BridgeRouter: no router on this chain!");
+        router.borrow_mut().remove_liquidity(src_pool_id, amount_ld);
     }
 
     pub fn swap(
-        &mut self,
+        &self,
         src_chain_id: u32,
         src_pool_id: u32,
         dst_chain_id: u32,
         dst_pool_id: u32,
         amount_sd: u128,
     ) {
-        let mut src_router = self.0.get_mut(&src_chain_id).cloned().expect("BridgeRouter: no router on this chain!");
-        let mut dst_router = self.0.get_mut(&dst_chain_id).cloned().expect("BridgeRouter: no router on this chain!");
-        let dst_amount_ld = dst_router.amount_ld(dst_pool_id, amount_sd);
-        dst_router.enough_liquidity(dst_pool_id, dst_amount_ld)
+        let src_router = self.0.get(&src_chain_id).expect("BridgeRouter: no router on this chain!");
+        let dst_router = self.0.get(&dst_chain_id).expect("BridgeRouter: no router on this chain!");
+        let dst_amount_ld = dst_router.borrow().amount_ld(dst_pool_id, amount_sd);
+        dst_router.borrow().enough_liquidity(dst_pool_id, dst_amount_ld)
             .then(move || {
-                let src_amount_ld = src_router.amount_ld(src_pool_id, amount_sd);
-                src_router.add_liquidity(src_pool_id, src_amount_ld);
+                let src_amount_ld = src_router.borrow().amount_ld(src_pool_id, amount_sd);
+                src_router.borrow_mut().add_liquidity(src_pool_id, src_amount_ld);
                 // TODO: how to handle transaction failure with remote swap ?
-                dst_router.remove_liquidity(dst_pool_id, dst_amount_ld);
+                dst_router.borrow_mut().remove_liquidity(dst_pool_id, dst_amount_ld);
             });
     }
 
@@ -224,7 +226,7 @@ impl BridgeRouters {
         amount_sd: u128,
     ) -> bool {
         let dst_router = self.0.get(&dst_chain_id).expect("BridgeRouter: no router on this chain!");
-        let dst_amount_ld = dst_router.amount_ld(dst_pool_id, amount_sd);
-        dst_router.enough_liquidity(dst_pool_id, dst_amount_ld)
+        let dst_amount_ld = dst_router.borrow().amount_ld(dst_pool_id, amount_sd);
+        dst_router.borrow_mut().enough_liquidity(dst_pool_id, dst_amount_ld)
     }
 }
