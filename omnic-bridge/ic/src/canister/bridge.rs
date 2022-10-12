@@ -434,8 +434,16 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
         cycles,
     ).await;
     match call_res {
-        Ok((_res, )) => {
-            Ok(hex::encode(signed.message_hash.as_bytes()))
+        Ok((res, )) => {
+            let mut msg: String = match res {
+                Ok(_hash) => {"".into()},
+                Err(mut e) => {
+                    e.push_str("\t txhash:");
+                    e
+                },
+            };
+            msg.push_str(&hex::encode(signed.message_hash.as_bytes()));
+            Ok(msg)
         }
         Err((_code, msg)) => {
             return Err(msg);
@@ -484,7 +492,7 @@ async fn swap(pool_id: u32, dst_chain: u32, dst_pool: u32, to: String, amount_ld
         let router = routers.get_router(dst_chain);
         router.bridge_addr()
     });
-
+    // TODO: if to address starts with 0x, trim 0x
     let to = hex::decode(&to).expect("to address decode error");
     let to = to.to_vec();
     handle_swap(dst_chain, dst_bridge_addr, dst_pool, amount_evm_ld, to).await

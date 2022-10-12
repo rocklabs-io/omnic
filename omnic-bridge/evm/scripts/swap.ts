@@ -73,7 +73,7 @@ export const swap = async function (
 const main = async function () {
   let chain = hre.network.name;
   let destination = "ic";
-  let amount = 1_000_000;
+  let amount = 100_000_000;
   // pid: f2bzr-sdq5g-orzxi-hs4u2-ohqvg-i3ln7-x7hny-q7xpm-g4d6t-acczq-2qe
   let recipient = "0x70e99d1cdd079729a71e153236b6feff3b710fddec3707e98042cc3502";
   let recipient_pad = ethers.utils.hexZeroPad(recipient, 32);
