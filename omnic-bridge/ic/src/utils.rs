@@ -135,21 +135,22 @@ pub fn decode_operation_create_pool(payload: &[u8]) -> Result<(u32, String, Stri
         .into_uint()
         .ok_or("cannot convert src_pool_id to U256".to_string())?
         .as_u32();
-    let shared_decimal: u8 = d[2]
-        .clone()
-        .into_uint()
-        .ok_or("cannot convert shared_decimals to U256".to_string())?
-        .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
-    let pool_addr: String = d[3]
+    let pool_addr: String = d[2]
         .clone()
         .into_address()
         .ok_or("cannot convert pool_address".to_string())?
         .to_string();
-    let token_addr: String = d[4]
+    let token_addr: String = d[3]
         .clone()
         .into_address()
         .ok_or("cannot convert token_address".to_string())?
         .to_string();
+    let shared_decimal: u8 = d[4]
+        .clone()
+        .into_uint()
+        .ok_or("cannot convert shared_decimals to U256".to_string())?
+        .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
+    
     let local_decimal: u8 = d[5]
         .clone()
         .into_uint()

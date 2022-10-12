@@ -68,6 +68,7 @@ impl Router {
         if self.pool_exists(&token.address) {
             return;
         }
+        let token_addr = token.address.clone();
         let pool = Pool::new(
             self.src_chain,
             pool_id,
@@ -77,6 +78,7 @@ impl Router {
             token
         );
         self.pools.entry(pool_id).or_insert(pool);
+        self.token_pool.entry(token_addr).or_insert(pool_id);
     }
 
     pub fn add_liquidity(&mut self, pool_id: u32, amount_ld: u128) {
