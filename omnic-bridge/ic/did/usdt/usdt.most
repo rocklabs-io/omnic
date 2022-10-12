@@ -1,0 +1,43 @@
+// Version: 1.0.0
+type Operation = {#approve; #burn; #mint; #transfer; #transferFrom};
+type Time = Int;
+type TransactionStatus = {#failed; #inprogress; #succeeded};
+type TxRecord =
+  {
+    amount : Nat;
+    caller : ?Principal;
+    fee : Nat;
+    from : Principal;
+    index : Nat;
+    op : Operation;
+    status : TransactionStatus;
+    timestamp : Time;
+    to : Principal
+  };
+type TxRecord__1 = TxRecord;
+actor {
+  stable var allowanceEntries : [(Principal, [(Principal, Nat)])];
+  stable var balanceEntries : [(Principal, Nat)];
+  stable var blackhole : Principal;
+  stable var decimals_ : Nat8;
+  stable var fee : Nat;
+  stable var feeTo : Principal;
+  stable genesis :
+    {
+      amount : Nat;
+      caller : ?Principal;
+      fee : Nat;
+      from : Principal;
+      index : Nat;
+      op : Operation;
+      status : TransactionStatus;
+      timestamp : Time;
+      to : Principal
+    };
+  stable var logo_ : Text;
+  stable var name_ : Text;
+  stable var ops : [TxRecord__1];
+  stable var owner_ : Principal;
+  stable var symbol_ : Text;
+  stable var totalSupply_ : Nat
+};

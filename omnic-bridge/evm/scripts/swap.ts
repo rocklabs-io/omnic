@@ -73,9 +73,9 @@ export const swap = async function (
 const main = async function () {
   let chain = hre.network.name;
   let destination = "ic";
-  let amount = 1_000_000;
-  // pid: 7bv5o-swpxq-yx3sg-eirhj-rn7tm-7fnh5-pnovl-um577-4qatm-nfesf-iae
-  let recipient = "0xcfbc317dc8c4444e98b7f367cad3f5ed75574677ffe4013634a4915002";
+  let amount = 100_000_000;
+  // pid: f2bzr-sdq5g-orzxi-hs4u2-ohqvg-i3ln7-x7hny-q7xpm-g4d6t-acczq-2qe
+  let recipient = "0x70e99d1cdd079729a71e153236b6feff3b710fddec3707e98042cc3502";
   let recipient_pad = ethers.utils.hexZeroPad(recipient, 32);
   await swap(chain, "USDT", destination, amount, recipient_pad);
 }

@@ -1,302 +1,230 @@
-use crate::error::{Error, Result};
-use crate::pool::{Error as PoolError, Pool};
-use crate::token::{Error as TokenError, Operation};
-use ic_cdk::export::candid::{CandidType, Deserialize, Nat};
+use crate::token::Token;
+use crate::pool::Pool;
+use candid::{CandidType, Deserialize};
 use std::collections::BTreeMap;
 
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct Options {
-    /// wait_optimistic
-    wait_optimistic: bool,
-}
-
-impl Options {
-    /// Create new default `Options` object with some modifications.
-    pub fn with<F>(func: F) -> Options
-    where
-        F: FnOnce(&mut Options),
-    {
-        let mut options = Options::default();
-        func(&mut options);
-        options
-    }
-}
-
-pub trait RouterInterfaces {
-    type AccountItem;
-    fn add_liquidity(
-        &mut self,
-        src_chain_id: u32,
-        src_pool_id: Nat,
-        to: Self::AccountItem,
-        amount: Nat,
-    ) -> Result<bool>;
-    fn remove_liquidity(
-        &mut self,
-        src_chain_id: u32,
-        src_pool_id: Nat,
-        from: Self::AccountItem,
-        amount: Nat,
-    ) -> Result<bool>;
-    fn swap(
-        &mut self,
-        src_chain_id: u32,
-        src_pool_id: Nat,
-        dst_chain_id: u32,
-        dst_pool_id: Nat,
-        amount: Nat,
-    ) -> Result<bool>;
-}
-
 #[derive(Deserialize, CandidType, Clone, Debug)]
-pub struct Router<T>
-where
-    T: std::fmt::Debug + Clone,
-    T: CandidType + std::cmp::Ord,
-{
-    bridge_addr: BTreeMap<u32, T>,
-    pool_ids: BTreeMap<u32, BTreeMap<Nat, Nat>>, // src_chain_id -> src_pool_id -> pool_id
-    pools: BTreeMap<Nat, Pool<T>>,               // pool_id -> Pool
-    pool_symbols: BTreeMap<String, Nat>,         // pool symbol -> pool_id
-    // TODO
-    weights: BTreeMap<Nat, f32>, // allocate weights for different chain
+pub struct Router {
+    src_chain: u32,
+    bridge_addr: String, // bridge address on src chain
+    pools: BTreeMap<u32, Pool>, // src_pool_id -> Pool
+    token_pool: BTreeMap<String, u32>, // token_address -> pool_id
 }
 
-impl<T> Router<T>
-where
-    T: std::fmt::Debug + Clone,
-    T: CandidType + std::cmp::Ord,
-{
-    pub fn new() -> Self {
+// get some info from router
+impl Router {
+    pub fn new(
+        src_chain: u32,
+        bridge_addr: String,
+    ) -> Self {
         Router {
-            bridge_addr: BTreeMap::new(),
-            pool_ids: BTreeMap::new(),
+            src_chain,
+            bridge_addr,
             pools: BTreeMap::new(),
-            pool_symbols: BTreeMap::new(),
-            weights: BTreeMap::new()
+            token_pool: BTreeMap::new(),
         }
     }
 
-    pub fn get_bridge_addr(&self, chain_id: u32) -> Result<T> {
-        self.bridge_addr
-            .get(&chain_id)
-            .ok_or(Error::Pool(PoolError::Invalid(format!(
-                "chain id is not found: {}",
-                chain_id
-            ))))
-            .cloned()
+    pub fn pool_count(&self) -> u32 {
+        self.pools.len() as u32
     }
 
-    pub fn is_bridge_exist(&self, chain_id: u32) -> bool {
-        self.bridge_addr.contains_key(&chain_id)
+    pub fn src_chain(&self) -> u32 {
+        self.src_chain
     }
 
-    pub fn add_bridge_addr(&mut self, chain_id: u32, bridge_addr: T) {
-        self.bridge_addr.entry(chain_id).or_insert(bridge_addr);
+    pub fn bridge_addr(&self) -> String {
+        self.bridge_addr.clone()
     }
 
-    pub fn remove_bridge_addr(&mut self, chain_id: u32) -> Result<T> {
-        self.bridge_addr
-            .remove(&chain_id)
-            .ok_or(Error::Pool(PoolError::Invalid(format!(
-                "chain id is not found: {}",
-                chain_id
-            ))))
+    pub fn pool_exists(&self, token_addr: &str) -> bool {
+        self.token_pool.get(token_addr).is_some()
     }
 
-    pub fn get_pools_length(&self) -> Nat {
-        Nat::from(self.pools.len())
+    pub fn pool_by_token_address(&self, token_addr: &str) -> Pool {
+        let pool_id = self.token_pool.get(token_addr).cloned().expect("no pool! Please check the token address input.");
+        self.pool_by_id(pool_id)
     }
 
-    pub fn get_pool_id(&self, src_chain_id: u32, src_pool_id: Nat) -> Result<Nat> {
-        //
-        match self.pool_ids.get(&src_chain_id) {
-            Some(pools) => match pools.get(&src_pool_id).cloned() {
-                Some(pid) => Ok(pid.clone()),
-                None => Err(Error::Pool(PoolError::Invalid(format!(
-                    "source chain id is not found: {}",
-                    src_pool_id
-                )))),
-            },
-            None => Err(Error::Pool(PoolError::Invalid(format!(
-                "source chain id is not found: {}",
-                src_chain_id
-            )))),
-        }
+    pub fn pool_by_id(&self, pool_id: u32) -> Pool {
+        self.pools.get(&pool_id).cloned().expect("no pool! Please check the pool_id.")
     }
 
-    pub fn contain_pool(&self, src_chain_id: u32, src_pool_id: Nat) -> Result<bool> {
-        let pool_id: Nat = self.get_pool_id(src_chain_id, src_pool_id)?;
-        Ok(self.get_pool(pool_id).is_ok())
-    }
-
-    pub fn get_pool_id_by_symbol(&self, symbol: &str) -> Result<Nat> {
-        //
-        self.pool_symbols
-            .get(symbol)
-            .ok_or(Error::Pool(PoolError::Invalid(format!(
-                "{} pool has not created yet. Please check the input!",
-                symbol.to_owned()
-            )))).cloned()
-    }
-
-    pub fn contain_pool_by_symbol(&self, symbol: &str) -> Result<bool> {
-        Ok(self.pool_symbols.contains_key(symbol))
-    }
-
-    pub fn get_pool(&self, pool_id: Nat) -> Result<Pool<T>> {
-        //
-        match self.pools.get(&pool_id).cloned() {
-            Some(pool) => Ok(pool),
-            None => Err(Error::Pool(PoolError::Invalid(format!(
-                "pool is not found: {}",
-                pool_id
-            )))),
-        }
-    }
-
-    pub fn add_pool(&mut self, pool: Pool<T>) -> Result<bool> {
-        let pool_id: Nat = self.get_pools_length();
-        self.pools.entry(pool_id.clone()).or_insert(pool);
-        Ok(true)
-    }
-
-    pub fn update_pool(&mut self, pool_id: Nat, pool: Pool<T>) -> Result<bool> {
-        self.pools.insert(pool_id, pool);
-        Ok(true)
-    }
-
-    pub fn add_pool_id(&mut self, src_chain: u32, src_pool_id: Nat) -> Result<bool> {
-        let pool_id: Nat = self.get_pools_length() - 1;
-        self.pool_ids
-            .entry(src_chain)
-            .or_default()
-            .entry(src_pool_id)
-            .or_insert(pool_id);
-        Ok(true)
-    }
-
-    pub fn add_pool_symbol(&mut self, symbol: String) -> Result<bool> {
-        let pool_id: Nat = self.get_pools_length() - 1;
-        self.pool_symbols.entry(symbol.clone()).or_insert(pool_id);
-        Ok(true)
-    }
-
-    pub fn remove_pool(&mut self, pool_id: &Nat) -> Result<Pool<T>> {
-        self.pools
-            .remove(pool_id)
-            .ok_or(Error::Pool(PoolError::Invalid(format!(
-                "remove pool failed!"
-            ))))
-    }
-
-    pub fn remove_pool_id(&mut self, src_chain: &u32, src_pool_id: &Nat) -> Result<Nat> {
-        self.pool_ids.remove(src_chain).map_or(
-            Err(Error::Pool(PoolError::Invalid(format!(
-                "remove pool failed!"
-            )))),
-            |mut p| {
-                p.remove(src_pool_id)
-                    .ok_or(Error::Pool(PoolError::Invalid(format!("no pool!"))))
-            },
-        )
+    pub fn pool_token(&self, pool_id: u32) -> Token {
+        let pool = self.pools.get(&pool_id).cloned().expect("no pool! Please check the input pool_id");
+        pool.token()
     }
 }
 
-impl<T> RouterInterfaces for Router<T>
-where
-    T: std::fmt::Debug + Clone,
-    T: CandidType + std::cmp::Ord,
-{
-    type AccountItem = T;
-    fn add_liquidity(
-        &mut self,
-        src_chain_id: u32,
-        src_pool_id: Nat,
-        to: Self::AccountItem,
-        amount: Nat,
-    ) -> Result<bool> {
-        let pool_id: Nat = self.get_pool_id(src_chain_id.clone(), src_pool_id.clone())?;
-        let pool = self.get_pool(pool_id)?;
-        let mut token = match pool.get_token_by_chain_id(src_chain_id) {
-            Some(token) => token,
-            None => {
-                return Err(Error::Token(TokenError::Invalid(format!(
-                    "Errors getting pool token: {}",
-                    src_pool_id
-                ))))
-            }
-        };
-        Ok(token.mint(to, amount))
+// set function for Router
+impl Router {
+    pub fn create_pool(&mut self, 
+        pool_id: u32,
+        pool_address: String,
+        shared_decimals: u8,
+        local_decimals: u8,
+        token: Token
+    ) {
+        if self.pool_exists(&token.address) {
+            return;
+        }
+        let token_addr = token.address.clone();
+        let pool = Pool::new(
+            self.src_chain,
+            pool_id,
+            pool_address,
+            shared_decimals,
+            local_decimals,
+            token
+        );
+        self.pools.entry(pool_id).or_insert(pool);
+        self.token_pool.entry(token_addr).or_insert(pool_id);
     }
 
-    fn remove_liquidity(
-        &mut self,
-        src_chain_id: u32,
-        src_pool_id: Nat,
-        from: Self::AccountItem,
-        amount: Nat,
-    ) -> Result<bool> {
-        //
-        let pool_id: Nat = self.get_pool_id(src_chain_id.clone(), src_pool_id.clone())?;
-        let pool = self.get_pool(pool_id)?;
-        let mut token = match pool.get_token_by_chain_id(src_chain_id) {
-            Some(token) => token,
-            None => {
-                return Err(Error::Token(TokenError::Invalid(format!(
-                    "Errors getting pool token: {}",
-                    src_pool_id
-                ))))
-            }
-        };
-        Ok(token.burn(from, amount))
+    pub fn add_liquidity(&mut self, pool_id: u32, amount_ld: u128) {
+        let pool = self.pools.get_mut(&pool_id).expect("no pool! Please check the input pool_id");
+        pool.add_liquidity(amount_ld)
     }
-    fn swap(
+
+    pub fn remove_liquidity(&mut self, pool_id: u32, amount_ld: u128) -> bool {
+        let pool = self.pools.get_mut(&pool_id).expect("no pool! Please check the input pool_id");
+        if pool.enough_liquidity(amount_ld) {
+            pool.remove_liquidity(amount_ld);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn enough_liquidity(&self, pool_id: u32, amount_ld: u128) -> bool {
+        let pool = self.pools.get(&pool_id).expect("no pool! Please check the input pool_id");
+        pool.enough_liquidity(amount_ld)
+    }
+
+    pub fn amount_ld(&self, pool_id: u32, amount_sd: u128) -> u128 {
+        let pool = self.pools.get(&pool_id).expect("no pool! Please check the input pool_id");
+        pool.amount_ld(amount_sd)
+    }
+
+    pub fn amount_sd(&self, pool_id: u32, amount_ld: u128) -> u128 {
+        let pool = self.pools.get(&pool_id).expect("no pool! Please check the input pool_id");
+        pool.amount_sd(amount_ld)
+    }
+}
+
+// chain_id -> Router
+#[derive(Deserialize, CandidType, Clone, Debug)]
+pub struct BridgeRouters(BTreeMap<u32, Router>); 
+
+impl BridgeRouters {
+    pub fn new() -> Self {
+        BridgeRouters(BTreeMap::new())
+    }
+
+    pub fn chain_exists(&self, chain_id: u32) -> bool {
+        self.0.contains_key(&chain_id)
+    }
+
+    pub fn get_router(&self, chain_id: u32) -> Router {
+        self.0.get(&chain_id).expect("router not found").clone()
+    }
+
+    pub fn pool_count(&self, chain_id: u32) -> u32 {
+        let router = self.0.get(&chain_id).expect("no router on this chain!");
+        router.pool_count()
+    }
+
+    pub fn pool_exists(&self, chain_id: u32, token_addr: &str) -> bool {
+        let router = self.0.get(&chain_id).expect("no router on this chain!");
+        router.pool_exists(token_addr)
+    }
+
+    pub fn pool_by_token_address(&self, chain_id: u32, token_addr: &str) -> Pool {
+        let router = self.0.get(&chain_id).expect("no router on this chain!");
+        router.pool_by_token_address(token_addr)
+    }
+
+    pub fn pool_by_id(&self, chain_id: u32, pool_id: u32) -> Pool {
+        let router = self.0.get(&chain_id).expect("no router on this chain!");
+        router.pool_by_id(pool_id)
+    }
+
+    pub fn pool_token(&self, chain_id: u32, pool_id: u32) -> Token {
+        let router = self.0.get(&chain_id).expect("no router on this chain!");
+        router.pool_token(pool_id)
+    }
+
+    pub fn amount_ld(&self, chain_id: u32, pool_id: u32, amount_sd: u128) -> u128 {
+        let router = self.0.get(&chain_id).expect("no router on this chain!");
+        router.amount_ld(pool_id, amount_sd)
+    }
+
+    pub fn add_chain(&mut self, chain_id: u32, bridge_addr: String) {
+        let r = Router::new(chain_id, bridge_addr);
+        self.0.entry(chain_id).or_insert(r);
+    }
+
+    pub fn create_pool(
+        &mut self, 
+        chain_id: u32, 
+        pool_id: u32, 
+        pool_address: String,
+        shared_decimals: u8,
+        local_decimals: u8,
+        token: Token
+    ) {
+        let router = self.0.get_mut(&chain_id).expect("BridgeRouter: no router on this chain!");
+        router.create_pool(pool_id, pool_address, shared_decimals, local_decimals, token);
+    }
+
+    pub fn add_liquidity(
         &mut self,
         src_chain_id: u32,
-        src_pool_id: Nat,
+        src_pool_id: u32,
+        amount_ld: u128,
+    ) {
+        let router = self.0.get_mut(&src_chain_id).expect("BridgeRouter: no router on this chain!");
+        router.add_liquidity(src_pool_id, amount_ld);
+    }
+
+    pub fn remove_liquidity(
+        &mut self,
+        src_chain_id: u32,
+        src_pool_id: u32,
+        amount_ld: u128,
+    ) {
+        let router = self.0.get_mut(&src_chain_id).expect("BridgeRouter: no router on this chain!");
+        router.remove_liquidity(src_pool_id, amount_ld);
+    }
+
+    pub fn swap(
+        &mut self,
+        src_chain_id: u32,
+        src_pool_id: u32,
         dst_chain_id: u32,
-        dst_pool_id: Nat,
-        amount: Nat,
-    ) -> Result<bool> {
-        //
-        let pool_id1: Nat = self.get_pool_id(src_chain_id.clone(), src_pool_id.clone())?;
-        let pool1 = self.get_pool(pool_id1.clone())?;
+        dst_pool_id: u32,
+        amount_sd: u128,
+    ) {
+        let mut src_router = self.0.get_mut(&src_chain_id).cloned().expect("BridgeRouter: no router on this chain!");
+        let mut dst_router = self.0.get_mut(&dst_chain_id).cloned().expect("BridgeRouter: no router on this chain!");
+        let dst_amount_ld = dst_router.amount_ld(dst_pool_id, amount_sd);
+        dst_router.enough_liquidity(dst_pool_id, dst_amount_ld)
+            .then(move || {
+                let src_amount_ld = src_router.amount_ld(src_pool_id, amount_sd);
+                src_router.add_liquidity(src_pool_id, src_amount_ld);
+                // TODO: how to handle transaction failure with remote swap ?
+                dst_router.remove_liquidity(dst_pool_id, dst_amount_ld);
+            });
+    }
 
-        let pool_id2: Nat = self.get_pool_id(dst_chain_id.clone(), dst_pool_id.clone())?;
-        let pool2 = self.get_pool(pool_id2.clone())?;
-
-        // No AMM now, so pool1 == pool2
-        assert_eq!(pool_id1, pool_id2);
-
-        let mut token1 = pool1.get_token_by_chain_id(src_chain_id).unwrap();
-        let mut token2 = pool2.get_token_by_chain_id(dst_chain_id).unwrap();
-
-        //1. check if dst_chain has enough token to transfer
-        if amount >= token2.get_total_supply() {
-            return Err(Error::Token(TokenError::Invalid(format!(
-                "dst chain does not have enough tokens to transfer"
-            ))));
-        }
-        // 2. check if src & dst chain bridge address exists
-
-        let src_bridge_addr = self.get_bridge_addr(src_chain_id).unwrap();
-        let dst_bridge_addr = self.get_bridge_addr(dst_chain_id).unwrap();
-
-        //3. src_chain_id pool mint token to src bridge address
-        if !token1.mint(src_bridge_addr, amount.clone()) {
-            return Err(Error::Pool(PoolError::Invalid(format!(
-                "mint src token failed!"
-            ))));
-        }
-
-        //4. dst_chain_id pool burn token
-        if !token2.burn(dst_bridge_addr, amount.clone()) {
-            return Err(Error::Pool(PoolError::Invalid(format!(
-                "burn dst token failed!"
-            ))));
-        }
-
-        Ok(true)
+    pub fn check_swap(
+        &self,
+        dst_chain_id: u32,
+        dst_pool_id: u32,
+        amount_sd: u128,
+    ) -> bool {
+        let dst_router = self.0.get(&dst_chain_id).expect("BridgeRouter: no router on this chain!");
+        let dst_amount_ld = dst_router.amount_ld(dst_pool_id, amount_sd);
+        dst_router.enough_liquidity(dst_pool_id, dst_amount_ld)
     }
 }
