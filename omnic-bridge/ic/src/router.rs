@@ -25,6 +25,10 @@ impl Router {
         }
     }
 
+    pub fn pool_count(&self) -> u32 {
+        self.pools.len() as u32
+    }
+
     pub fn src_chain(&self) -> u32 {
         self.src_chain
     }
@@ -115,8 +119,17 @@ impl BridgeRouters {
         BridgeRouters(BTreeMap::new())
     }
 
+    pub fn chain_exists(&self, chain_id: u32) -> bool {
+        self.0.contains_key(&chain_id)
+    }
+
     pub fn get_router(&self, chain_id: u32) -> Router {
         self.0.get(&chain_id).expect("router not found").clone()
+    }
+
+    pub fn pool_count(&self, chain_id: u32) -> u32 {
+        let router = self.0.get(&chain_id).expect("no router on this chain!");
+        router.pool_count()
     }
 
     pub fn pool_exists(&self, chain_id: u32, token_addr: &str) -> bool {
@@ -142,6 +155,11 @@ impl BridgeRouters {
     pub fn amount_ld(&self, chain_id: u32, pool_id: u32, amount_sd: u128) -> u128 {
         let router = self.0.get(&chain_id).expect("no router on this chain!");
         router.amount_ld(pool_id, amount_sd)
+    }
+
+    pub fn add_chain(&mut self, chain_id: u32, bridge_addr: String) {
+        let r = Router::new(chain_id, bridge_addr);
+        self.0.entry(chain_id).or_insert(r);
     }
 
     pub fn create_pool(

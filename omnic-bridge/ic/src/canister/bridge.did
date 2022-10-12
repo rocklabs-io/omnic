@@ -24,11 +24,16 @@ type Token = record {
   address : text;
   symbol : text;
 };
-service : {
+service : () -> {
+  add_chain : (nat32, text) -> (Result);
+  add_owner : (principal) -> (Result);
   check_swap : (nat32, nat32, nat64) -> (Result) query;
+  create_pool : (text, nat8) -> (Result);
   get_router : (nat32) -> (Result_1) query;
   handle_message : (nat32, vec nat8, nat32, vec nat8) -> (Result);
   pool_by_token_address : (nat32, text) -> (Result_2) query;
+  remove_owner : (principal) -> (Result);
   set_canister_addr : () -> (Result_3);
+  set_omnic : (principal) -> (Result);
   swap : (nat32, nat32, nat32, text, nat64) -> (Result_3);
 }

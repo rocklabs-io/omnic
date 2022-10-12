@@ -1,5 +1,5 @@
 use ic_cdk::export::candid::{candid_method, Deserialize, CandidType, Nat, Principal};
-use ic_cdk_macros::{query, update, pre_upgrade, post_upgrade};
+use ic_cdk_macros::{query, update, pre_upgrade, post_upgrade, init};
 use ic_cdk::api::call::CallResult;
 use ic_cdk::api::call::call_with_payment;
 
@@ -11,16 +11,15 @@ use ic_web3::{
     ethabi::ethereum_types::{U64, U256},
     types::{Address, H256},
 };
-use num_bigint::BigUint;
 use omnic_bridge::pool::Pool;
 use omnic_bridge::router::{Router, BridgeRouters};
 use omnic_bridge::token::Token;
 use omnic_bridge::utils::*;
+use omnic_bridge::dip20::*;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::str::FromStr;
 use std::collections::HashSet;
+use std::result::Result;
 
 ic_cron::implement_cron!();
 
@@ -45,22 +44,7 @@ const OPERATION_CREATE_POOL: u8 = 4;
 const KEY_NAME: &str = "test_key_1";
 const BRIDGE_ABI: &[u8] = include_bytes!("./bridge.json");
 
-
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub enum TxError {
-    InsufficientBalance,
-    InsufficientAllowance,
-    Unauthorized,
-    LedgerTrap,
-    AmountTooSmall,
-    BlockUsed,
-    ErrorOperationStyle,
-    ErrorTo,
-    Other(String),
-}
-pub type TxReceipt = std::result::Result<Nat, TxError>;
-
-type Result<T> = std::result::Result<T, String>;
+// type Result<T> = std::result::Result<T, String>;
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct State {
@@ -72,23 +56,31 @@ pub struct State {
 impl State {
     pub fn new() -> Self {
         State {
-            omnic: Principal::management_canister(),
+            omnic: Principal::from_text("y3lks-laaaa-aaaam-aat7q-cai").unwrap(),
             owners: HashSet::new(),
             bridge_canister_addr: "".into(),
         }
     }
 
-    pub fn set_omnic(mut self, omnic_proxy: Principal) {
+    pub fn set_omnic(&mut self, omnic_proxy: Principal) {
         self.omnic = omnic_proxy;
     }
 
-    // pub fn set_bridge_canister_addr() {
+    pub fn set_bridge_canister_addr(&mut self, addr: String) {
+        self.bridge_canister_addr = addr;
+    }
 
-    // }
+    pub fn is_owner(&self, user: Principal) -> bool {
+        self.owners.contains(&user)
+    }
 
-    // pub fn is_authorized(&self, user: Principal) -> bool {
+    pub fn add_owner(&mut self, user: Principal) {
+        self.owners.insert(user);
+    }
 
-    // }
+    pub fn remove_owner(&mut self, owner: Principal) {
+        self.owners.remove(&owner);
+    }
 }
 
 thread_local! {
@@ -96,59 +88,133 @@ thread_local! {
     static ROUTERS: RefCell<BridgeRouters> = RefCell::new(BridgeRouters::new());
 }
 
-// #[update(name = "set_omnic")]
-// #[candid_method(update, rename = "set_omnic")]
-// async fn set_omnic() -> Result<String>
+fn is_authorized() -> Result<(), String> {
+    let user = ic_cdk::api::caller();
+    STATE.with(|info| {
+        let info = info.borrow();
+        if !info.is_owner(user) {
+            Err("unauthorized!".into())
+        } else {
+            Ok(())
+        }
+    })
+}
 
-// #[update(name = "add_owner")]
-// #[candid_method(update, rename = "add_owner")]
-// async fn add_owner() -> Result<String>
+#[init]
+#[candid_method(init)]
+fn init() {
+    let caller = ic_cdk::api::caller();
+    STATE.with(|info| {
+        let mut info = info.borrow_mut();
+        info.add_owner(caller);
+    });
+}
 
-// #[update(name = "remove_owner")]
-// #[candid_method(update, rename = "remove_owner")]
-// async fn remove_owner() -> Result<String>
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "set_omnic")]
+async fn set_omnic(omnic: Principal) -> Result<bool, String> {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.set_omnic(omnic);
+    });
+    Ok(true)
+}
 
-// fn is_authorized() -> bool {
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "add_owner")]
+async fn add_owner(user: Principal) -> Result<bool, String> {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.add_owner(user);
+    });
+    Ok(true)
+}
 
-// }
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "remove_owner")]
+async fn remove_owner(user: Principal) -> Result<bool, String> {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.remove_owner(user);
+    });
+    Ok(true)
+}
 
-// // add supported chain, add to BRIDGE state
-// // ic: chain_id = 0, bridge_addr = ""
-// // goerli: chain_id = 5, bridge_addr = "xxxx"
-// #[update(name = "add_chain")]
-// #[candid_method(update, rename = "add_chain")]
-// fn add_chain(chain_id: u32, bridge_addr: String) -> Result<String>
+// add supported chain, add to BRIDGE state
+// ic: chain_id = 0, bridge_addr = ""
+// goerli: chain_id = 5, bridge_addr = "xxxx"
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "add_chain")]
+fn add_chain(chain_id: u32, bridge_addr: String) -> Result<bool, String> {
+    ROUTERS.with(|r| {
+        let mut routers = r.borrow_mut();
+        if routers.chain_exists(chain_id) {
+            return Err("chain exists!".into());
+        }
+        routers.add_chain(chain_id, bridge_addr);
+        Ok(true)
+    })
+}
 
+// add wrapper token pool to chain ic
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "create_pool")]
+async fn create_pool(token_id: String, shared_decimals: u8) -> Result<bool, String> {
+    let chain_id = 0u32;
+    let token_pid = Principal::from_text(&token_id).unwrap();
+    // get token metadata
+    let res: CallResult<(Metadata, )> = ic_cdk::call(
+        token_pid,
+        "getMetadata",
+        (),
+    ).await;
+    let metadata = match res {
+        Ok((v, )) => {
+            v
+        }
+        Err((_code, msg)) => {
+            return Err(msg);
+        }
+    };
+    let local_decimals = metadata.decimals;
+    let token = Token::new(metadata.name, metadata.symbol, metadata.decimals, token_id.clone());
 
-// // add wrapper token pool to chain ic
-// #[update(name = "create_pool")]
-// #[candid_method(update, rename = "create_pool")]
-// fn create_pool(token_id: Principal) -> Result<bool> {
-
-// }
+    ROUTERS.with(|r| {
+        let mut routers = r.borrow_mut();
+        if routers.pool_exists(chain_id, &token_id) {
+            return Err("pool exists!".into());
+        }
+        let pool_id = routers.pool_count(chain_id);
+        routers.create_pool(
+            chain_id,
+            pool_id,
+            token_id, // pool address, just a placeholder
+            shared_decimals,
+            local_decimals,
+            token,
+        );
+        Ok(true)
+    })
+}
 
 // calc bridge canister's evm address and store to state, only owners can call
 #[update(name = "set_canister_addr")]
 #[candid_method(update, rename = "set_canister_addr")]
-async fn set_canister_addr() -> Result<String> {
+async fn set_canister_addr() -> Result<String, String> {
     let cid = ic_cdk::id();
     let derivation_path = vec![cid.clone().as_slice().to_vec()];
     let evm_addr = get_eth_addr(Some(cid), Some(derivation_path), KEY_NAME.to_string())
         .await
         .map(|v| hex::encode(v))
         .map_err(|e| format!("calc evm address failed: {:?}", e))?;
-    // TODO: add addr to state
-    // BRIDGE_ADDR.with(|addr| {
-    //     let mut addr = addr.borrow_mut();
-    //     *addr = evm_addr.clone();
-    // });
+    STATE.with(|s| s.borrow_mut().set_bridge_canister_addr(evm_addr.clone()));
     Ok(evm_addr)
 }
 
 // check if there's enough liquidity for a swap
 #[query(name = "check_swap")]
 #[candid_method(query, rename = "check_swap")]
-fn check_swap(dst_chain: u32, dst_pool: u32, amount: u64) -> Result<bool> {
+fn check_swap(dst_chain: u32, dst_pool: u32, amount: u64) -> Result<bool, String> {
     ROUTERS.with(|r| {
         let routers = r.borrow();
         Ok(routers.check_swap(dst_chain, dst_pool, amount.into()))
@@ -157,7 +223,7 @@ fn check_swap(dst_chain: u32, dst_pool: u32, amount: u64) -> Result<bool> {
 
 #[query(name = "get_router")]
 #[candid_method(query, rename = "get_router")]
-fn get_router(chain_id: u32) -> Result<Router> {
+fn get_router(chain_id: u32) -> Result<Router, String> {
     ROUTERS.with(|r| {
         Ok(r.borrow().get_router(chain_id))
     })
@@ -166,7 +232,7 @@ fn get_router(chain_id: u32) -> Result<Router> {
 // chain id -> token address -> pool_id
 #[query(name = "pool_by_token_address")]
 #[candid_method(query, rename = "pool_by_token_address")]
-fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool> {
+fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool, String> {
     ROUTERS.with(|r| {
         let routers = r.borrow();
         if !routers.pool_exists(chain_id, &token_addr) {
@@ -179,7 +245,7 @@ fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool> {
 // handle message, only omnic proxy canister can call
 #[update(name = "handle_message")]
 #[candid_method(update, rename = "handle_message")]
-async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool> {
+async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool, String> {
     let operation_type = get_operation_type(&payload)?;
 
     if operation_type == OPERATION_ADD_LIQUIDITY {
@@ -195,7 +261,7 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
     }
 }
 
-fn _handle_operation_add_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u8]) -> Result<bool> {
+fn _handle_operation_add_liquidity(src_chain: u32, _sender: Vec<u8>, payload: &[u8]) -> Result<bool, String> {
     let (_src_chain_id, src_pool_id, amount_ld) = decode_operation_liquidity(payload)?;
 
     ROUTERS.with(|routers| {
@@ -205,7 +271,7 @@ fn _handle_operation_add_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u
     Ok(true)
 }
 
-fn _handle_operation_remove_liquidity(src_chain: u32, sender: Vec<u8>, payload: &[u8]) -> Result<bool> {
+fn _handle_operation_remove_liquidity(src_chain: u32, _sender: Vec<u8>, payload: &[u8]) -> Result<bool, String> {
     let (_src_chain_id, src_pool_id, amount_ld) = decode_operation_liquidity(payload)?;
 
     ROUTERS.with(|routers| {
@@ -215,7 +281,7 @@ fn _handle_operation_remove_liquidity(src_chain: u32, sender: Vec<u8>, payload: 
     Ok(true)
 }
 
-async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> {
+async fn _handle_operation_swap(_src_chain: u32, payload: &[u8]) -> Result<bool, String> {
     let (src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_sd, recipient) = decode_operation_swap(payload)?;
 
     // if dst chain_id == 0 means mint/lock mode for evm <=> ic
@@ -280,7 +346,7 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
         })?;
         // send tx to destination chain
         let amount_ld = dst_pool.amount_ld(amount_sd);
-        let txhash = handle_swap(dst_chain_id, dst_bridge_addr, dst_pool_id, amount_ld, recipient).await?;
+        let _txhash = handle_swap(dst_chain_id, dst_bridge_addr, dst_pool_id, amount_ld, recipient).await?;
         // update state
         ROUTERS.with(|routers| {
             let mut routers = routers.borrow_mut();
@@ -290,7 +356,7 @@ async fn _handle_operation_swap(src_chain: u32, payload: &[u8]) -> Result<bool> 
     }
 }
 
-fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool> {
+fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool, String> {
     let (src_pool_id, pool_addr, token_addr, shared_decimals, local_decimals, token_name, token_symbol) = decode_operation_create_pool(payload)?;
     
     let token = Token::new(
@@ -306,7 +372,7 @@ fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool>
     Ok(true)
 }
 
-async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_ld: u128, to: Vec<u8>) -> Result<String> {
+async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_ld: u128, to: Vec<u8>) -> Result<String, String> {
     // ecdsa key info
     let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
     let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
@@ -353,7 +419,7 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
     let raw_tx: Vec<u8> = signed.raw_transaction.0; 
     let proxy_canister: Principal = STATE.with(|s| s.borrow().omnic.clone());
     let cycles = raw_tx.len() as u64 * 10000u64;
-    let call_res: CallResult<(Result<Vec<u8>>, )> = call_with_payment(
+    let call_res: CallResult<(Result<Vec<u8>, String>, )> = call_with_payment(
         proxy_canister,
         "send_raw_tx",
         (dst_chain, raw_tx),
@@ -372,7 +438,7 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
 // swap from ic to evm
 #[update(name = "swap")]
 #[candid_method(update, rename = "swap")]
-async fn swap(pool_id: u32, dst_chain: u32, dst_pool: u32, to: String, amount_ld: u64) -> Result<String> {
+async fn swap(pool_id: u32, dst_chain: u32, dst_pool: u32, to: String, amount_ld: u64) -> Result<String, String> {
     let caller = ic_cdk::caller();
     let pool = ROUTERS.with(|routers| {
         let routers = routers.borrow();
@@ -445,10 +511,10 @@ fn post_upgrade() {
 }
 
 // call proxy.get_nonce() to get nonce
-async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
+async fn get_nonce(chain_id: u32, addr: String) -> Result<U256, String> {
     let proxy_canister: Principal = STATE.with(|s| s.borrow().omnic.clone());
     let cycles: u64 = 100000;
-    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
+    let call_res: CallResult<(Result<u64, String>, )> = call_with_payment(
         proxy_canister,
         "get_tx_count",
         (chain_id, addr,),
@@ -465,10 +531,10 @@ async fn get_nonce(chain_id: u32, addr: String) -> Result<U256> {
 }
 
 // call proxy.get_gas_price() to get nonce
-async fn get_gas_price(chain_id: u32) -> Result<U256> {
+async fn get_gas_price(chain_id: u32) -> Result<U256, String> {
     let proxy_canister: Principal = STATE.with(|s| s.borrow().omnic.clone());
     let cycles: u64 = 100000;
-    let call_res: CallResult<(Result<u64>, )> = call_with_payment(
+    let call_res: CallResult<(Result<u64, String>, )> = call_with_payment(
         proxy_canister,
         "get_gas_price",
         (chain_id,),
