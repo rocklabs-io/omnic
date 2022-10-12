@@ -1,4 +1,3 @@
-
 use ic_web3::ethabi::{decode, ParamType};
 use ic_web3::types::Address;
 
@@ -9,8 +8,7 @@ type Result<T> = std::result::Result<T, String>;
 pub fn get_operation_type(payload: &[u8]) -> Result<u8> {
     let t = vec![ParamType::Uint(8)];
     let d = decode(&t, &payload).map_err(|e| format!("payload decode error: {}", e))?;
-    d[0]
-        .clone()
+    d[0].clone()
         .into_uint()
         .ok_or("can not convert src_chain to U256")?
         .try_into()
@@ -68,7 +66,7 @@ pub fn decode_operation_swap(payload: &[u8]) -> Result<(u32, u32, u32, u32, u128
         ParamType::Uint(16),
         ParamType::Uint(256),
         ParamType::Uint(256),
-        ParamType::FixedBytes(32), 
+        ParamType::FixedBytes(32),
     ];
     let d = decode(&types, payload).map_err(|e| format!("payload decode error: {}", e))?;
     let src_chain_id: u32 = d[1]
@@ -100,11 +98,20 @@ pub fn decode_operation_swap(payload: &[u8]) -> Result<(u32, u32, u32, u32, u128
         .clone()
         .into_fixed_bytes()
         .ok_or("can not convert recipient to bytes")?;
-    Ok((src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount, recipient))
+    Ok((
+        src_chain_id,
+        src_pool_id,
+        dst_chain_id,
+        dst_pool_id,
+        amount,
+        recipient,
+    ))
 }
 
 // return (pool_id, shared_decimals, local_decimals, name, symbol)
-pub fn decode_operation_create_pool(payload: &[u8]) -> Result<(u32, String, String, u8, u8, String, String)> {
+pub fn decode_operation_create_pool(
+    payload: &[u8],
+) -> Result<(u32, String, String, u8, u8, String, String)> {
     /*
         uint8(OperationTypes.CreatePool), u8
         _poolId, u256
@@ -123,7 +130,7 @@ pub fn decode_operation_create_pool(payload: &[u8]) -> Result<(u32, String, Stri
         ParamType::Uint(8), // shared_decimals
         ParamType::Uint(8), // local_decimals
         ParamType::String,
-        ParamType::String, 
+        ParamType::String,
     ];
     let d = decode(&types, payload).map_err(|e| format!("payload decode error: {}", e))?;
 
@@ -147,12 +154,14 @@ pub fn decode_operation_create_pool(payload: &[u8]) -> Result<(u32, String, Stri
         .clone()
         .into_uint()
         .ok_or("cannot convert shared_decimals to U256".to_string())?
-        .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
+        .try_into()
+        .map_err(|_| format!("convert U256 to u8 failed"))?;
     let local_decimal: u8 = d[5]
         .clone()
         .into_uint()
         .ok_or("can not convert local_decimals U256".to_string())?
-        .try_into().map_err(|_| format!("convert U256 to u8 failed"))?;
+        .try_into()
+        .map_err(|_| format!("convert U256 to u8 failed"))?;
     let name: String = d[6]
         .clone()
         .into_string()
@@ -161,5 +170,13 @@ pub fn decode_operation_create_pool(payload: &[u8]) -> Result<(u32, String, Stri
         .clone()
         .into_string()
         .ok_or("can not convert symbol to String".to_string())?;
-    Ok((src_pool_id, pool_addr, token_addr, shared_decimal, local_decimal, name, symbol))
+    Ok((
+        src_pool_id,
+        pool_addr,
+        token_addr,
+        shared_decimal,
+        local_decimal,
+        name,
+        symbol,
+    ))
 }

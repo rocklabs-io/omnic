@@ -37,20 +37,14 @@ const OPERATION_SWAP: u8 = 2;
 const OPERATION_REMOVE_LIQUIDITY: u8 = 3;
 const OPERATION_CREATE_POOL: u8 = 4;
 
-// const OWNER: &'static str = "aaaaa-aa";
-// const PROXY: &'static str = "y3lks-laaaa-aaaam-aat7q-cai"; // update when proxy canister deployed.
-
-// const URL: &'static str = "https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm";
 const KEY_NAME: &str = "test_key_1";
 const BRIDGE_ABI: &[u8] = include_bytes!("./bridge.json");
 
-// type Result<T> = std::result::Result<T, String>;
-
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub struct State {
-    pub omnic: Principal, // omnic proxy canister
-    pub owners: HashSet<Principal>,
-    pub bridge_canister_addr: String, // evm address of this canister
+struct State {
+    omnic: Principal, // omnic proxy canister
+    owners: HashSet<Principal>,
+    bridge_canister_addr: String, // evm address of this canister
 }
 
 impl State {
@@ -66,8 +60,16 @@ impl State {
         self.omnic = omnic_proxy;
     }
 
+    pub fn is_omnic(&self, caller: Principal) -> bool {
+        self.omnic == caller
+    }
+
     pub fn set_bridge_canister_addr(&mut self, addr: String) {
         self.bridge_canister_addr = addr;
+    }
+
+    pub fn get_bridge_canister_addr(&self) -> String {
+        self.bridge_canister_addr.clone()
     }
 
     pub fn is_owner(&self, user: Principal) -> bool {
@@ -237,7 +239,7 @@ fn get_routers() -> Result<BridgeRouters, String> {
     })
 }
 
-// chain id -> token address -> pool_id
+// chain id -> token address -> Pool
 #[query(name = "pool_by_token_address")]
 #[candid_method(query, rename = "pool_by_token_address")]
 fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool, String> {
@@ -254,6 +256,16 @@ fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool, Stri
 #[update(name = "handle_message")]
 #[candid_method(update, rename = "handle_message")]
 async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool, String> {
+    let caller: Principal = ic_cdk::api::caller();
+    STATE.with(|info| {
+        let info = info.borrow();
+        if !info.is_omnic(caller) {
+            return Err("!omnic_proxy".to_string());
+        } else {
+            Ok(())
+        }
+    })?;
+    
     let operation_type = get_operation_type(&payload)?;
 
     if operation_type == OPERATION_ADD_LIQUIDITY {
@@ -270,7 +282,11 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
 }
 
 fn _handle_operation_add_liquidity(src_chain: u32, _sender: Vec<u8>, payload: &[u8]) -> Result<bool, String> {
-    let (_src_chain_id, src_pool_id, amount_ld) = decode_operation_liquidity(payload)?;
+    let (
+        _src_chain_id, 
+        src_pool_id, 
+        amount_ld
+    ) = decode_operation_liquidity(payload)?;
 
     ROUTERS.with(|routers| {
         let routers = routers.borrow();
@@ -280,7 +296,11 @@ fn _handle_operation_add_liquidity(src_chain: u32, _sender: Vec<u8>, payload: &[
 }
 
 fn _handle_operation_remove_liquidity(src_chain: u32, _sender: Vec<u8>, payload: &[u8]) -> Result<bool, String> {
-    let (_src_chain_id, src_pool_id, amount_ld) = decode_operation_liquidity(payload)?;
+    let (
+        _src_chain_id, 
+        src_pool_id, 
+        amount_ld
+    ) = decode_operation_liquidity(payload)?;
 
     ROUTERS.with(|routers| {
         let routers = routers.borrow();
@@ -290,11 +310,19 @@ fn _handle_operation_remove_liquidity(src_chain: u32, _sender: Vec<u8>, payload:
 }
 
 async fn _handle_operation_swap(_src_chain: u32, payload: &[u8]) -> Result<bool, String> {
-    let (src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_sd, recipient) = decode_operation_swap(payload)?;
+    let (
+        src_chain_id, 
+        src_pool_id, 
+        dst_chain_id, 
+        dst_pool_id, 
+        amount_sd, 
+        recipient
+    ) = decode_operation_swap(payload)?;
 
     // if dst chain_id == 0 means mint/lock mode for evm <=> ic
     // else means swap between evms
     if dst_chain_id == 0 {
+        assert_ne!(src_chain_id, dst_chain_id, "src_chain_id == dst_chain_id");
         // get wrapper token cansider address
         let token = ROUTERS.with(|routers| {
             let routers = routers.borrow();
@@ -365,7 +393,15 @@ async fn _handle_operation_swap(_src_chain: u32, payload: &[u8]) -> Result<bool,
 }
 
 fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool, String> {
-    let (src_pool_id, pool_addr, token_addr, shared_decimals, local_decimals, token_name, token_symbol) = decode_operation_create_pool(payload)?;
+    let (
+        src_pool_id, 
+        pool_addr, 
+        token_addr, 
+        shared_decimals, 
+        local_decimals, 
+        token_name, 
+        token_symbol
+    ) = decode_operation_create_pool(payload)?;
     
     let token = Token::new(
         token_name,
@@ -396,7 +432,7 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
         BRIDGE_ABI
     ).map_err(|e| format!("init contract failed: {}", e))?;
 
-    let c_addr = STATE.with(|state| state.borrow().bridge_canister_addr.clone());
+    let c_addr = STATE.with(|state| state.borrow().get_bridge_canister_addr());
     // add nonce to options
     let tx_count = get_nonce(dst_chain, c_addr.clone())
         .await
@@ -412,7 +448,7 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
         op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
     });
     // params: u256, u256, bytes32
-    let mut temp = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut temp = vec![0;12];
     let mut to_addr = to.clone();
     temp.append(&mut to_addr);
     let to_addr = H256::from_slice(&temp);
@@ -492,7 +528,13 @@ async fn swap(pool_id: u32, dst_chain: u32, dst_pool: u32, to: String, amount_ld
         let router = routers.get_router(dst_chain);
         router.bridge_addr()
     });
-    // TODO: if to address starts with 0x, trim 0x
+    // if to address starts with 0x, trim 0x
+    let to_trim =  (&to).trim();
+    let to = if to_trim.starts_with("0x") {
+        to_trim.strip_prefix("0x").unwrap().to_string()
+    } else {
+        to_trim.to_string()
+    };
     let to = hex::decode(&to).expect("to address decode error");
     let to = to.to_vec();
     handle_swap(dst_chain, dst_bridge_addr, dst_pool, amount_evm_ld, to).await
