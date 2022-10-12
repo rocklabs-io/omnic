@@ -135,7 +135,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         address _from,
         uint256 _amountLD,
         uint256 _minAmountLD
-    ) external nonReentrant onlyRouter onlyNotPause returns (amountSD) {
+    ) external nonReentrant onlyRouter onlyNotPause returns (uint256) {
         uint256 amountSD = amountLDtoSD(_amountLD);
         uint256 minAmountSD = amountLDtoSD(_minAmountLD);
         // update the new amount the user gets minus the fees

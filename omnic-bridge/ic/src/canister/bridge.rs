@@ -229,6 +229,14 @@ fn get_router(chain_id: u32) -> Result<Router, String> {
     })
 }
 
+#[query(name = "get_routers")]
+#[candid_method(query, rename = "get_routers")]
+fn get_routers() -> Result<BridgeRouters, String> {
+    ROUTERS.with(|r| {
+        Ok(r.borrow().clone())
+    })
+}
+
 // chain id -> token address -> pool_id
 #[query(name = "pool_by_token_address")]
 #[candid_method(query, rename = "pool_by_token_address")]
