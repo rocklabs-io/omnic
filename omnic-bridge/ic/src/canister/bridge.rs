@@ -180,7 +180,7 @@ async fn create_pool(token_id: String, shared_decimals: u8) -> Result<bool, Stri
     let token = Token::new(metadata.name, metadata.symbol, metadata.decimals, token_id.clone());
 
     ROUTERS.with(|r| {
-        let mut routers = r.borrow_mut();
+        let routers = r.borrow();
         if routers.pool_exists(chain_id, &token_id) {
             return Err("pool exists!".into());
         }
@@ -273,7 +273,7 @@ fn _handle_operation_add_liquidity(src_chain: u32, _sender: Vec<u8>, payload: &[
     let (_src_chain_id, src_pool_id, amount_ld) = decode_operation_liquidity(payload)?;
 
     ROUTERS.with(|routers| {
-        let mut routers = routers.borrow_mut();
+        let routers = routers.borrow();
         routers.add_liquidity(src_chain, src_pool_id, amount_ld);
     });
     Ok(true)
@@ -283,7 +283,7 @@ fn _handle_operation_remove_liquidity(src_chain: u32, _sender: Vec<u8>, payload:
     let (_src_chain_id, src_pool_id, amount_ld) = decode_operation_liquidity(payload)?;
 
     ROUTERS.with(|routers| {
-        let mut routers = routers.borrow_mut();
+        let routers = routers.borrow();
         routers.remove_liquidity(src_chain, src_pool_id, amount_ld);
     });
     Ok(true)
@@ -338,7 +338,7 @@ async fn _handle_operation_swap(_src_chain: u32, payload: &[u8]) -> Result<bool,
         }
         // update liquidity info
         ROUTERS.with(|routers| {
-            let mut routers = routers.borrow_mut();
+            let routers = routers.borrow();
             let amount_ld = routers.amount_ld(src_chain_id, src_pool_id, amount_sd);
             routers.add_liquidity(src_chain_id, src_pool_id, amount_ld);
         });
@@ -357,7 +357,7 @@ async fn _handle_operation_swap(_src_chain: u32, payload: &[u8]) -> Result<bool,
         let _txhash = handle_swap(dst_chain_id, dst_bridge_addr, dst_pool_id, amount_ld, recipient).await?;
         // update state
         ROUTERS.with(|routers| {
-            let mut routers = routers.borrow_mut();
+            let routers = routers.borrow();
             routers.swap(src_chain_id, src_pool_id, dst_chain_id, dst_pool_id, amount_sd);
         });
         Ok(true)
@@ -374,7 +374,7 @@ fn _handle_operation_create_pool(src_chain: u32, payload: &[u8]) -> Result<bool,
         token_addr,
     );
     ROUTERS.with(|routers| {
-        let mut routers = routers.borrow_mut();
+        let routers = routers.borrow();
         routers.create_pool(src_chain, src_pool_id, pool_addr, shared_decimals, local_decimals, token);
     });
     Ok(true)
