@@ -131,6 +131,11 @@ impl BridgeRouters {
         router.borrow().clone()
     }
 
+    pub fn bridge_addr(&self, chain_id: u32) -> String {
+        let router = self.0.get(&chain_id).expect("router not found");
+        router.borrow().bridge_addr()
+    }
+
     pub fn pool_count(&self, chain_id: u32) -> u32 {
         let router = self.0.get(&chain_id).expect("no router on this chain!");
         router.borrow().pool_count()

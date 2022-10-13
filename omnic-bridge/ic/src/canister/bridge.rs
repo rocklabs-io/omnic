@@ -256,6 +256,7 @@ fn pool_by_token_address(chain_id: u32, token_addr: String) -> Result<Pool, Stri
 #[update(name = "handle_message")]
 #[candid_method(update, rename = "handle_message")]
 async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: Vec<u8>) -> Result<bool, String> {
+    // only omnic proxy canister can call
     let caller: Principal = ic_cdk::api::caller();
     STATE.with(|info| {
         let info = info.borrow();
@@ -264,6 +265,22 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
         } else {
             Ok(())
         }
+    })?;
+    // sender on src chain must be corresponding bridge contract
+    ROUTERS.with(|r| {
+        let r = r.borrow();
+        let bridge_addr = {
+            let s = r.bridge_addr(src_chain);
+            s.to_lowercase()
+        };
+        let sender_str = {
+            let temp = hex::encode(&sender);
+            temp.trim_start_matches("0x").to_string()
+        };
+        if sender_str != bridge_addr {
+            return Err("msg sender is not bridge contract!".to_string());
+        }
+        Ok(())
     })?;
     
     let operation_type = get_operation_type(&payload)?;
