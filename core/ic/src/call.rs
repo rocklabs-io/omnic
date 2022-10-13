@@ -18,6 +18,7 @@ pub async fn call_to_canister(recipient: Principal, m: &Message) -> Result<bool,
                 },
                 Err(err) => {
                     ic_cdk::println!("handle_message failed: {:?}", err);
+                    return Err(format!("handle_message failed: {:?}", err));
                 }
             }
             // message delivered

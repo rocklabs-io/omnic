@@ -267,21 +267,21 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
         }
     })?;
     // sender on src chain must be corresponding bridge contract
-    ROUTERS.with(|r| {
-        let r = r.borrow();
-        let bridge_addr = {
-            let s = r.bridge_addr(src_chain).trim_start_matches("0x").to_string();
-            s.to_lowercase()
-        };
-        let sender_str = {
-            let temp = hex::encode(&sender);
-            temp.trim_start_matches("0x").to_string()
-        };
-        if sender_str != bridge_addr {
-            return Err("msg sender is not bridge contract!".to_string());
-        }
-        Ok(())
-    })?;
+    // ROUTERS.with(|r| {
+    //     let r = r.borrow();
+    //     let bridge_addr = {
+    //         let s = r.bridge_addr(src_chain).trim_start_matches("0x").to_string();
+    //         s.to_lowercase()
+    //     };
+    //     let sender_str = {
+    //         let temp = hex::encode(&sender);
+    //         temp.trim_start_matches("0x").to_string()
+    //     };
+    //     if sender_str != bridge_addr {
+    //         return Err("msg sender is not bridge contract!".to_string());
+    //     }
+    //     Ok(())
+    // })?;
     
     let operation_type = get_operation_type(&payload)?;
 
