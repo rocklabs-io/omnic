@@ -19,10 +19,10 @@
 		},
 		"mumbai": {
 			"Omnic": "0x4DCAA1f4f21333911394e83A075941474859E75E",
-			"USDT": "",
-			"Router": "",
-			"Bridge": "",
-			"FactoryPool": ""
+			"USDT": "0x4a22D4DEdbF85Ee9F1fbC4aBfD1349D56C905fDC",
+			"Router": "0x0E8683178C3035Ef66DEcff7F0b4BeF96cA66Ab1",
+			"Bridge": "0xA8D2c4f3A422B62984D04f6F3951dbE84CB52c7b",
+			"FactoryPool": "0x9022053B35559fc7eA88b5175cF598a3F91EFb5F"
 		}
 	}
 }
