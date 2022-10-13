@@ -495,7 +495,7 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
                     e
                 },
             };
-            msg.push_str(&hex::encode(signed.message_hash.as_bytes()));
+            msg.push_str(&hex::encode(signed.transaction_hash.as_bytes()));
             Ok(msg)
         }
         Err((_code, msg)) => {
