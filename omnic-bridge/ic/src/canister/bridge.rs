@@ -270,7 +270,7 @@ async fn handle_message(src_chain: u32, sender: Vec<u8>, _nonce: u32, payload: V
     ROUTERS.with(|r| {
         let r = r.borrow();
         let bridge_addr = {
-            let s = r.bridge_addr(src_chain);
+            let s = r.bridge_addr(src_chain).trim_start_matches("0x").to_string();
             s.to_lowercase()
         };
         let sender_str = {
