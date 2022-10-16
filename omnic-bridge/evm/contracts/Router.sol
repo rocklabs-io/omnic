@@ -77,6 +77,8 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
         address _to
     ) external override nonReentrant {
         Pool pool = _getPool(_poolId);
+        uint256 convertRate = pool.convertRate();
+        _amountLD = _amountLD.div(convertRate).mul(convertRate);
         _safeTransferFrom(pool.token(), msg.sender, address(pool), _amountLD);
         pool.addLiquidity(_to, _amountLD);
         // send message to bridge on ic
@@ -90,6 +92,8 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     ) external override nonReentrant {
         require(_amountLP > 0, "insufficient lp");
         Pool pool = _getPool(_srcPoolId);
+        uint256 convertRate = pool.convertRate();
+        _amountLD = _amountLD.div(convertRate).mul(convertRate);
         uint256 amountLD = pool.removeLiquidity(msg.sender, _amountLP, _to);
 
         // send message to bridge on ic

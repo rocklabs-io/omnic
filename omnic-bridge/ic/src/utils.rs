@@ -19,13 +19,13 @@ pub fn get_operation_type(payload: &[u8]) -> Result<u8> {
 pub fn decode_operation_liquidity(payload: &[u8]) -> Result<(u32, u32, u128)> {
     /*
     uint8(OperationTypes.AddLiquidity), u8
-    _srcChainId, u16
+    _srcChainId, u32
     _srcPoolId, u256
     _amount, u256
     */
     let types = vec![
         ParamType::Uint(8),
-        ParamType::Uint(16),
+        ParamType::Uint(32),
         ParamType::Uint(256),
         ParamType::Uint(256),
     ];
@@ -52,18 +52,18 @@ pub fn decode_operation_liquidity(payload: &[u8]) -> Result<(u32, u32, u128)> {
 pub fn decode_operation_swap(payload: &[u8]) -> Result<(u32, u32, u32, u32, u128, Vec<u8>)> {
     /*
         uint8(OperationTypes.Swap),
-        uint16 _srcChainId,
+        uint32 _srcChainId,
         uint256 _srcPoolId,
-        uint16 _dstChainId,
+        uint32 _dstChainId,
         uint256 _dstPoolId,
         uint256 _amountLD,
         bytes32 _to
     */
     let types = vec![
         ParamType::Uint(8),
-        ParamType::Uint(16),
+        ParamType::Uint(32),
         ParamType::Uint(256),
-        ParamType::Uint(16),
+        ParamType::Uint(32),
         ParamType::Uint(256),
         ParamType::Uint(256),
         ParamType::FixedBytes(32),
