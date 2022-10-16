@@ -11,7 +11,7 @@ interface IBridgeRouter {
     ) external;
 
     function swap(
-        uint16 _dstChainId,
+        uint32 _dstChainId,
         uint256 _srcPoolId,
         uint256 _dstPoolId,
         uint256 _amountLD,
@@ -20,21 +20,21 @@ interface IBridgeRouter {
     ) external;
 
     function removeLiquidity(
-        uint16 _srcPoolId,
+        uint32 _srcPoolId,
         uint256 _amountLP,
         address _to
     ) external;
 
     function handleSwap(
         uint256 _nonce,
-        uint16 _dstChainId,
+        uint32 _dstChainId,
         uint256 _dstPoolId,
         uint256 _amountLD,
         bytes32 _to
     ) external;
 
     function revertFailedSwap(
-        uint16 _srcChainId,
+        uint32 _srcChainId,
         uint256 _srcPoolId,
         uint256 _amountLD,
         bytes32 _to

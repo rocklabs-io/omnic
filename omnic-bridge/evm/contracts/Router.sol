@@ -19,7 +19,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
     //------------------------------- variables --------------------------------------------
-    uint16 public chainId;
+    uint32 public chainId;
     FactoryPool public factory; // used for creating pools
     Bridge public localBridge;
 
@@ -27,13 +27,13 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
 
     event HandleSwap(
         uint256 nonce,
-        uint16 dstChainId,
+        uint32 dstChainId,
         uint256 dstPoolId,
         uint256 amount,
         bytes32 to
     );
     event Revert(
-        uint16 srcChainId,
+        uint32 srcChainId,
         uint256 _srcPoolId,
         uint256 _amount,
         bytes32 _to
@@ -50,7 +50,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     }
 
     constructor() {
-        chainId = uint16(block.chainid);
+        chainId = uint32(block.chainid);
     }
 
     // must be called after deployment
@@ -84,7 +84,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     }
 
     function removeLiquidity(
-        uint16 _srcPoolId,
+        uint32 _srcPoolId,
         uint256 _amountLP,
         address _to
     ) external override nonReentrant {
@@ -97,7 +97,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     }
 
     function swap(
-        uint16 _dstChainId,
+        uint32 _dstChainId,
         uint256 _srcPoolId,
         uint256 _dstPoolId,
         uint256 _amountLD,
@@ -126,7 +126,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
 
     function handleSwap(
         uint256 _nonce,
-        uint16 _dstChainId,
+        uint32 _dstChainId,
         uint256 _dstPoolId,
         uint256 _amountLD,
         bytes32 _to
@@ -147,7 +147,7 @@ contract Router is IBridgeRouter, Ownable, ReentrancyGuard {
     }
 
     function revertFailedSwap(
-        uint16 _srcChainId,
+        uint32 _srcChainId,
         uint256 _srcPoolId,
         uint256 _amountLD,
         bytes32 _to
