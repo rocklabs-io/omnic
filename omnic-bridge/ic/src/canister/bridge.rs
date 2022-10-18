@@ -495,10 +495,16 @@ async fn handle_swap(dst_chain: u32, dst_bridge: String, dst_pool: u32, amount_l
         op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
     });
     // params: u256, u256, bytes32
-    let mut temp = vec![0;12];
-    let mut to_addr = to.clone();
-    temp.append(&mut to_addr);
-    let to_addr = H256::from_slice(&temp);
+    let to_addr = if to.len() < 32 {
+        // swap from ic to evm
+        let mut temp = vec![0;12];
+        let mut to_addr = to.clone();
+        temp.append(&mut to_addr);
+        H256::from_slice(&temp)
+    } else {
+        // swap from evm to evm
+        H256::from_slice(&to)
+    };
 
     let value = U256::from(amount_ld);
 
