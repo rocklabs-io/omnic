@@ -44,7 +44,9 @@ contract FactoryPool is Ownable {
         string memory _symbol
     ) public onlyRouter returns (address, uint256) {
         uint256 poolId = allPools.length;
-        // TODO: check if pool for this token already exist
+        if(poolId > 0) {
+            require(getPoolId(_token) == 0, "pool already exist!");
+        }
         Pool pool = new Pool(
             poolId,
             router,

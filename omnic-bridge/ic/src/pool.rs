@@ -60,6 +60,10 @@ impl Pool {
         self.pool_address.clone()
     }
 
+    pub fn token_address(&self) -> String {
+        self.token.address.clone()
+    }
+
     pub fn shared_decimals(&self) -> u8 {
         self.shared_decimals
     }

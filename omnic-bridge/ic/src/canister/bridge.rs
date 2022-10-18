@@ -213,6 +213,36 @@ async fn set_canister_addr() -> Result<String, String> {
     Ok(evm_addr)
 }
 
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "delete_pool")]
+async fn delete_pool(chain_id: u32, pool_id: u32) -> Result<bool, String> {
+    ROUTERS.with(|r| {
+        let mut routers = r.borrow_mut();
+        routers.remove_pool(chain_id, pool_id);
+        Ok(true)
+    })
+}
+
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "add_liquidity")]
+async fn add_liquidity(chain_id: u32, pool_id: u32, amount: u64) -> Result<bool, String> {
+    ROUTERS.with(|r| {
+        let routers = r.borrow_mut();
+        routers.add_liquidity(chain_id, pool_id, amount as u128);
+        Ok(true)
+    })
+}
+
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "remove_liquidity")]
+async fn remove_liquidity(chain_id: u32, pool_id: u32, amount: u64) -> Result<bool, String> {
+    ROUTERS.with(|r| {
+        let routers = r.borrow_mut();
+        routers.remove_liquidity(chain_id, pool_id, amount as u128);
+        Ok(true)
+    })
+}
+
 // check if there's enough liquidity for a swap
 #[query(name = "check_swap")]
 #[candid_method(query, rename = "check_swap")]

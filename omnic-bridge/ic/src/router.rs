@@ -26,6 +26,12 @@ impl Router {
         }
     }
 
+    pub fn remove_pool(&mut self, pool_id: u32) {
+        let pool = self.pool_by_id(pool_id);
+        self.pools.remove(&pool_id);
+        self.token_pool.remove(&pool.token_address());
+    }
+
     pub fn pool_count(&self) -> u32 {
         self.pools.len() as u32
     }
@@ -134,6 +140,11 @@ impl BridgeRouters {
     pub fn bridge_addr(&self, chain_id: u32) -> String {
         let router = self.0.get(&chain_id).expect("router not found");
         router.borrow().bridge_addr()
+    }
+
+    pub fn remove_pool(&mut self, chain_id: u32, pool_id: u32) {
+        let router = self.0.get(&chain_id).expect("router not found");
+        router.borrow_mut().remove_pool(pool_id);
     }
 
     pub fn pool_count(&self, chain_id: u32) -> u32 {

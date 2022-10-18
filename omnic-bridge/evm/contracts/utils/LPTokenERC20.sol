@@ -34,7 +34,7 @@ contract LPTokenERC20 {
 
     constructor(string memory _name, string memory _symbol) {
         name = string(abi.encodePacked(_name, "-LP"));
-        symbol = _symbol;
+        symbol = string(abi.encodePacked(_symbol, "-LP"));
     }
 
     function _mint(address to, uint256 value) internal {

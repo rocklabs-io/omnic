@@ -49,6 +49,7 @@ export const addLiquidity = async function (
     to
     );
   console.log("addLiquidity tx:", tx.hash);
+  await tx.wait();
 }
 
 // send USDT to IC
