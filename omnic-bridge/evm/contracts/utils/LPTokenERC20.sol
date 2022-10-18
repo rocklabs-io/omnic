@@ -33,7 +33,7 @@ contract LPTokenERC20 {
     event Transfer(address indexed from, address indexed to, uint256 value);
 
     constructor(string memory _name, string memory _symbol) {
-        name = _name;
+        name = string(abi.encodePacked(_name, "-LP"));
         symbol = _symbol;
     }
 
