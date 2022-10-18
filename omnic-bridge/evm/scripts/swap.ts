@@ -21,6 +21,8 @@ export const approveToken = async function(
     console.log("approving...");
     let tx = await token.approve(spender, amount);
     console.log("approve tx:", tx.hash);
+    let res = tx.wait();
+    console.log("res:", res);
   } else {
     console.log("already approved, allowance:", allowance);
   }
@@ -67,6 +69,8 @@ export const swap = async function (
     recipient
     );
   console.log("swap tx:", tx.hash);
+  let res = await tx.wait();
+  console.log("res:", res);
 }
 
 // send USDT to IC

@@ -45,7 +45,7 @@ contract FactoryPool is Ownable {
     ) public onlyRouter returns (address, uint256) {
         uint256 poolId = allPools.length;
         if(poolId > 0) {
-            require(getPoolId(_token) == 0, "pool already exist!");
+            require(getPoolId[_token] == 0, "pool already exist!");
         }
         Pool pool = new Pool(
             poolId,

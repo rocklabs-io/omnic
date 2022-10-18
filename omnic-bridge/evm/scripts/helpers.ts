@@ -1,6 +1,14 @@
 import fs from 'fs';
 import { ethers } from "hardhat";
 
+export const getNonce = async function() {
+    const addrs = await ethers.getSigners();
+    let addr = addrs[0].address;
+    let nonce = await ethers.provider.getTransactionCount(addr);
+    console.log("nonce:", nonce);
+    return nonce;
+}
+
 export const getChainId = function(network: string | number) {
     if(typeof network == "number") {
         return network;

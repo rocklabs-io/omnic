@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { getContractAddr, updateConfig, getBridgeCanisterAddr, getBridgeCanisterIdBytes } from "./helpers";
+import { getContractAddr, updateConfig, getBridgeCanisterAddr, getBridgeCanisterIdBytes, getNonce } from "./helpers";
 const hre = require("hardhat");
 
 // Router -> Bridge -> FactoryPool -> call Router.setBridgeAndFactory
@@ -46,7 +46,7 @@ export const deployBridge = async function (chain: string) {
   let factory;
   if(factoryAddr == null) {
     console.log("deploying FactoryPool...");
-    factory = await FactoryPool.deploy(router.address);
+    factory = await FactoryPool.deploy(router.address, {nonce: await getNonce()});
 
     await factory.deployed();
     console.log("chain: ", chain, "FactoryPool deployed to:", factory.address);
@@ -57,8 +57,10 @@ export const deployBridge = async function (chain: string) {
   }
 
   // setBridgeAndFactory
-  let tx = await router.setBridgeAndFactory(bridge.address, factory.address);
+  let tx = await router.setBridgeAndFactory(bridge.address, factory.address, {nonce: await getNonce()});
   console.log("BridgeRouter.setBridgeAndFactory tx:", tx.hash);
+  let res = await tx.wait();
+  console.log("res:", res);
 }
 
 const main = async function () {

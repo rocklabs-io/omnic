@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { getContractAddr } from "./helpers";
+import { getContractAddr, getNonce } from "./helpers";
 const hre = require("hardhat");
 
 export const createPool = async function (chain: string, tokenSymbol: string) {
@@ -18,9 +18,12 @@ export const createPool = async function (chain: string, tokenSymbol: string) {
       await token.decimals(),
       await token.decimals(),
       await token.name(),
-      await token.symbol()
+      await token.symbol(),
+      {nonce: await getNonce()}
       );
   console.log("createPool tx:", tx.hash);
+  let res = await tx.wait();
+  console.log("res:", res);
 }
 
 const main = async function () {
