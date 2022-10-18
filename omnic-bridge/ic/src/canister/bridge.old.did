@@ -27,6 +27,7 @@ type Token = record {
 };
 service : () -> {
   add_chain : (nat32, text) -> (Result);
+  add_liquidity : (nat32, nat32, nat64) -> (Result);
   add_owner : (principal) -> (Result);
   check_swap : (nat32, nat32, nat64) -> (Result) query;
   create_pool : (text, nat8) -> (Result);
@@ -35,6 +36,7 @@ service : () -> {
   get_routers : () -> (Result_2) query;
   handle_message : (nat32, vec nat8, nat32, vec nat8) -> (Result);
   pool_by_token_address : (nat32, text) -> (Result_3) query;
+  remove_liquidity : (nat32, nat32, nat64) -> (Result);
   remove_owner : (principal) -> (Result);
   set_canister_addr : () -> (Result_4);
   set_omnic : (principal) -> (Result);

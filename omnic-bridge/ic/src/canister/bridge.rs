@@ -590,7 +590,12 @@ async fn swap(pool_id: u32, dst_chain: u32, dst_pool: u32, to: String, amount_ld
     };
     let to = hex::decode(&to).expect("to address decode error");
     let to = to.to_vec();
-    handle_swap(dst_chain, dst_bridge_addr, dst_pool, amount_evm_ld, to).await
+    let res = handle_swap(dst_chain, dst_bridge_addr, dst_pool, amount_evm_ld, to).await;
+    ROUTERS.with(|routers| {
+        let routers = routers.borrow();
+        routers.remove_liquidity(dst_chain, dst_pool, amount_evm_ld);
+    });
+    res
 }
 
 
