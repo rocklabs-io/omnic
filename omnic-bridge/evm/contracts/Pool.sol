@@ -53,7 +53,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
         address to
     );
     event Swap(
-        uint16 dstchainId,
+        uint32 dstchainId,
         uint256 dstPoolId,
         address from,
         uint256 amountSD,
@@ -130,7 +130,7 @@ contract Pool is LPTokenERC20, ReentrancyGuard {
     }
 
     function swap(
-        uint16 _dstChainId,
+        uint32 _dstChainId,
         uint256 _dstPoolId,
         address _from,
         uint256 _amountLD,

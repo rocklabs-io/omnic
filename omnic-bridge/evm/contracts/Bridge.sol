@@ -31,7 +31,7 @@ contract Bridge is IBridge, Ownable {
     uint256 public nonce;
     IOmnic public immutable omnic;
     Router public immutable router;
-    uint16 public immutable chainIdIC = 0;
+    uint32 public immutable chainIdIC = 0;
     address public bridgeCanister;
     bytes32 public bridgeCanisterId;
 
@@ -86,11 +86,11 @@ contract Bridge is IBridge, Ownable {
             //decode data from bridge on IC
             (
                 ,
-                uint16 _dstChainId,
+                uint32 _dstChainId,
                 uint256 _dstPoolId,
                 uint256 _amountLD,
                 bytes32 _to
-            ) = abi.decode(_payload, (uint8, uint16, uint256, uint256, bytes32));
+            ) = abi.decode(_payload, (uint8, uint32, uint256, uint256, bytes32));
             router.handleSwap(++nonce, _dstChainId, _dstPoolId, _amountLD, _to);
         }
         return true;
@@ -106,12 +106,12 @@ contract Bridge is IBridge, Ownable {
         onlyBridgeCanister
         returns (bool)
     {
-        router.handleSwap(++nonce, uint16(block.chainid), _dstPoolId, _amountLD, _to);
+        router.handleSwap(++nonce, uint32(block.chainid), _dstPoolId, _amountLD, _to);
         return true;
     }
 
     function revertFailedSwap(
-        uint16 _srcChainId,
+        uint32 _srcChainId,
         uint256 _srcPoolId,
         uint256 _amountLD,
         bytes32 _to
@@ -122,9 +122,9 @@ contract Bridge is IBridge, Ownable {
 
     //----------------------------- router called  functions ------------------------------
     function swap(
-        uint16 _srcChainId,
+        uint32 _srcChainId,
         uint256 _srcPoolId,
-        uint16 _dstChainId,
+        uint32 _dstChainId,
         uint256 _dstPoolId,
         uint256 _amountSD,
         bytes32 _to
@@ -142,7 +142,7 @@ contract Bridge is IBridge, Ownable {
     }
 
     function addLiquidity(
-        uint16 _srcChainId,
+        uint32 _srcChainId,
         uint256 _srcPoolId,
         uint256 _amountLD
     ) external override onlyRouter {
@@ -156,7 +156,7 @@ contract Bridge is IBridge, Ownable {
     }
 
     function removeLiquidity(
-        uint16 _srcChainId,
+        uint32 _srcChainId,
         uint256 _srcPoolId,
         uint256 _amountLD
     ) external override onlyRouter {
