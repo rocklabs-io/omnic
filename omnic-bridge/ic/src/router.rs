@@ -225,14 +225,15 @@ impl BridgeRouters {
     ) {
         let src_router = self.0.get(&src_chain_id).expect("BridgeRouter: no router on this chain!");
         let dst_router = self.0.get(&dst_chain_id).expect("BridgeRouter: no router on this chain!");
-        let dst_amount_ld = dst_router.borrow().amount_ld(dst_pool_id, amount_sd);
-        dst_router.borrow().enough_liquidity(dst_pool_id, dst_amount_ld)
-            .then(move || {
-                let src_amount_ld = src_router.borrow().amount_ld(src_pool_id, amount_sd);
-                src_router.borrow_mut().add_liquidity(src_pool_id, src_amount_ld);
-                // TODO: how to handle transaction failure with remote swap ?
-                dst_router.borrow_mut().remove_liquidity(dst_pool_id, dst_amount_ld);
-            });
+        let mut dst_router_mut_ref = dst_router.borrow_mut();
+        let mut src_router_mut_ref = src_router.borrow_mut();
+        let dst_amount_ld = dst_router_mut_ref.amount_ld(dst_pool_id, amount_sd);
+        if dst_router_mut_ref.enough_liquidity(dst_pool_id, dst_amount_ld) {
+            let src_amount_ld = src_router_mut_ref.amount_ld(src_pool_id, amount_sd);
+            src_router_mut_ref.add_liquidity(src_pool_id, src_amount_ld);
+            // TODO: how to handle transaction failure with remote swap ?
+            dst_router_mut_ref.remove_liquidity(dst_pool_id, dst_amount_ld);
+        }
     }
 
     pub fn check_swap(
