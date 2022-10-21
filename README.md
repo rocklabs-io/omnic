@@ -42,5 +42,6 @@ Omnic gateway contract on EVM chains:
 ## 3. Code 
 
 1. [core](./core): Omnic message passing protocol core implementation
-2. [omnic-bridge](./omnic-bridge): A demo bridge app based on the Omnic messaging protocol
-3. [omnic-relayer](https://github.com/rocklabs-io/omnic-relayer): Omnic offchain relayer implementation
+2. [examples](./examples): Example apps built on Omnic messaging protocol
+3. [omnic-bridge](https://github.com/rocklabs-io/omnic-bridge): A demo bridge app based on the Omnic messaging protocol
+4. [omnic-relayer](https://github.com/rocklabs-io/omnic-relayer): Omnic offchain relayer implementation
