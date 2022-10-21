@@ -32,7 +32,7 @@ bytes payload // message data in bytes
 
 If the destination is 0, then it's a message sent to canister `recipient` on the IC.
 
-
+The sender & recipient are padded into `bytes32` format, principal IDs should be converted into bytes format first then left padded with zeros.
 
 ### 2. EVM gateway contract
 

@@ -20,11 +20,6 @@ INFURA_API_KEY=...
 ETHERSCAN_API_KEY=...
 ```
 
-deploy to goerli:
-```
-npx hardhat run --network goerli scripts/deploy.ts
-```
-
 deployment process:
 1. deploy-impl.ts
 2. deploy-proxy.ts

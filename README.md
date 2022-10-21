@@ -28,8 +28,19 @@ Core components:
 
 
 
-## 2. Code 
+## 2. Deployment
 
-1. core: Omnic message passing protocol core implementation
-2. omnic-bridge: A demo bridge app based on the Omnic messaging protocol
-3. omnic-relayer: Omnic offchain relayer implementation
+Omnic proxy canister on IC mainnet: y3lks-laaaa-aaaam-aat7q-cai
+
+Omnic gateway contract on EVM chains:
+
+* Goerli: 0xF98Ea5ca4BC350739FEd5D39582774D43ae403a8
+* Mumbai: 0x254dffcd3277C0b1660F6d42EFbB754edaBAbC2B
+
+
+
+## 3. Code 
+
+1. [core](./core): Omnic message passing protocol core implementation
+2. [omnic-bridge](./omnic-bridge): A demo bridge app based on the Omnic messaging protocol
+3. [omnic-relayer](https://github.com/rocklabs-io/omnic-relayer): Omnic offchain relayer implementation

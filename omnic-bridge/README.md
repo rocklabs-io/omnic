@@ -1,6 +1,6 @@
 
 ## omnic bridge:
 
-ic-eth bridge
+ic-eth lock & mint bridge
 omnic cross-evm bridge
 
