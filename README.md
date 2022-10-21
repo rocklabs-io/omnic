@@ -28,7 +28,17 @@ Core components:
 
 
 
-## 2. Deployment
+## 2. TODOs
+
+* Fix todos in code
+* Add examples
+* ...
+
+
+
+## 3. Deployment
+
+Omnic test version is live on IC and 2 evm testnets:
 
 Omnic proxy canister on IC mainnet: y3lks-laaaa-aaaam-aat7q-cai
 
@@ -39,7 +49,7 @@ Omnic gateway contract on EVM chains:
 
 
 
-## 3. Code 
+## 4. Code 
 
 1. [core](./core): Omnic message passing protocol core implementation
 2. [examples](./examples): Example apps built on Omnic messaging protocol
