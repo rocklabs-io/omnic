@@ -1,8 +1,3 @@
-/*
-omnic proxy canister:
-    fetch_root: fetch merkel roots from all supported chains and insert to chain state
-*/
-
 use std::str;
 use ic_cdk_macros::{query, update};
 use ic_cdk::export::candid::{candid_method};

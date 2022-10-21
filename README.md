@@ -31,5 +31,5 @@ Core components:
 ## 2. Code 
 
 1. core: Omnic message passing protocol core implementation
-2. omnic-bridge: A demo bridge app based on Omnic messaging protocol
+2. omnic-bridge: A demo bridge app based on the Omnic messaging protocol
 3. omnic-relayer: Omnic offchain relayer implementation
