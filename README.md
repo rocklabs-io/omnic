@@ -31,6 +31,7 @@ Core components:
 ## 2. TODOs
 
 * Fix todos in code
+* Add more chains
 * Add examples
 * ...
 
@@ -55,3 +56,7 @@ Omnic gateway contract on EVM chains:
 2. [examples](./examples): Example apps built on Omnic messaging protocol
 3. [omnic-bridge](https://github.com/rocklabs-io/omnic-bridge): A demo bridge app based on the Omnic messaging protocol
 4. [omnic-relayer](https://github.com/rocklabs-io/omnic-relayer): Omnic offchain relayer implementation
+
+
+
+**Note: This project is unaudited and still in very early experimental stage!**
