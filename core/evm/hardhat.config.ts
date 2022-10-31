@@ -51,6 +51,14 @@ module.exports = {
       // gas: 100000,
       // gasPrice: 10,
     },
+    arbi_goerli: {
+      url: `https://arb-goerli.g.alchemy.com/v2/${alchemyKey}`,
+      accounts: [testPrivKey],
+    },
+    op_goerli: {
+      url: `https://opt-goerli.g.alchemy.com/v2/${alchemyKey}`,
+      accounts: [testPrivKey],
+    },
     mainnet: {
       url: `https://mainnet.infura.io/v3/${infuraKey}`,
     },

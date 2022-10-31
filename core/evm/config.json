@@ -27,6 +27,20 @@
 			"UpgradeBeaconProxy": "0x4DCAA1f4f21333911394e83A075941474859E75E",
 			"Implementation": "0x7729d18cd5C7Ec82140E011b49Fda45DCA3D680D",
 			"Demo": "0xcD5330aCf97E53489E3093Da52844e4D57b6Eae8"
+		},
+		"arbi_goerli": {
+			"UpgradeBeaconController": "0x0fA355bEEA41d190CAE64F24a58F70ff2912D7df",
+			"UpgradeBeacon": "0x32459C1d39bFdd95A8b7F167FBF2a4ab5A78A41E",
+			"UpgradeBeaconProxy": "0x0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8",
+			"Implementation": "0x430365a65eAC8626AFf329e5B3a549f6C13D0c26",
+			"Demo": ""
+		},
+		"op_goerli": {
+			"UpgradeBeaconController": "0x0fA355bEEA41d190CAE64F24a58F70ff2912D7df",
+			"UpgradeBeacon": "0x32459C1d39bFdd95A8b7F167FBF2a4ab5A78A41E",
+			"UpgradeBeaconProxy": "0x0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8",
+			"Implementation": "0x430365a65eAC8626AFf329e5B3a549f6C13D0c26",
+			"Demo": ""
 		}
 	}
 }
