@@ -16,6 +16,10 @@ dfx canister --network ic call proxy add_chain "(5:nat32, vec {\"https://eth-goe
 
 dfx canister --network ic call proxy add_chain "(80001:nat32, vec{\"https://polygon-mumbai.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"}, \"4DCAA1f4f21333911394e83A075941474859E75E\", 28370114:nat64)"
 
+dfx canister --network ic call proxy add_chain "(421613:nat32, vec{\"https://arb-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"}, \"0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8\", 910917:nat64)"
+
+dfx canister --network ic call proxy add_chain "(420:nat32, vec{\"https://opt-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"}, \"0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8\", 2377565:nat64)"
+
 dfx canister --network ic call proxy set_canister_addrs
 
 dfx canister --network ic call proxy get_canister_addr "(variant {Evm})"
