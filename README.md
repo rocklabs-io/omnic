@@ -47,6 +47,8 @@ Omnic gateway contract on EVM chains:
 
 * Goerli: 0xF98Ea5ca4BC350739FEd5D39582774D43ae403a8
 * Mumbai: 0x254dffcd3277C0b1660F6d42EFbB754edaBAbC2B
+* Arbitrum Goerli: 0x0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8
+* Optimism Goerli: 0x0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8
 
 
 
