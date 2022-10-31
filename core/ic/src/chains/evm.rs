@@ -1,7 +1,7 @@
 use ic_web3::Web3;
 use ic_web3::transports::ICHttp;
 use ic_web3::contract::{Contract, Options};
-use ic_web3::types::{U64, U256, H256, Bytes, Address, BlockNumber, BlockId};
+use ic_web3::types::{U256, H256, Bytes, Address, BlockNumber, BlockId};
 use ic_web3::ic::KeyInfo;
 
 use std::str::FromStr;
@@ -46,14 +46,14 @@ impl EVMChainClient {
 #[async_trait]
 impl HomeContract for EVMChainClient {
     async fn dispatch_message(&self, caller: String, dst_chain: u32, msg_bytes: Vec<u8>) -> Result<H256, OmnicError> {
-        let caller = Address::from_str(&caller)
+        let caller_addr = Address::from_str(&caller)
             .map_err(|e| Other(format!("address decode failed: {:?}", e)))?;
         // ecdsa key info
         let derivation_path = vec![ic_cdk::id().as_slice().to_vec()];
         let key_info = KeyInfo{ derivation_path: derivation_path, key_name: KEY_NAME.to_string() };
         // add nonce to options
         let tx_count = self.w3.eth()
-            .transaction_count(caller, None)
+            .transaction_count(caller_addr, None)
             .await
             .map_err(|e| ClientError(format!("get tx count error: {}", e)))?;
         // get gas_price
@@ -66,14 +66,10 @@ impl HomeContract for EVMChainClient {
             op.gas = Some(U256::from(100000));
             op.nonce = Some(tx_count);
             op.gas_price = Some(gas_price);
-            // op.gas_price = Some(U256::from(50));
-            // op.transaction_type = Some(U64::from(2)); //EIP1559_TX_ID
-            // op.max_fee_per_gas = Some(U256::from(1500000028));
-            // op.max_priority_fee_per_gas = Some(U256::from(1500000018));
         });
         ic_cdk::println!("gas price: {:?}", gas_price);
         let txhash = self.contract
-            .signed_call("processMessage", (msg_bytes,), options, key_info, dst_chain as u64)
+            .signed_call("processMessage", (msg_bytes,), options, caller, key_info, dst_chain as u64)
             .await
             .map_err(|e| ClientError(format!("processMessage failed: {}", e)))?;
 
