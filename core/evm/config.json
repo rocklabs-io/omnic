@@ -4,7 +4,9 @@
 	"ChainIds": {
 		"ic": 0,
 		"goerli": 5,
-		"mumbai": 80001
+		"mumbai": 80001,
+		"arbi_goerli": 421613,
+		"op_goerli": 430
 	},
 	"networks": {
 		"goerli": {
