@@ -9,6 +9,15 @@
               "ic-cdk-optimizer target/wasm32-unknown-unknown/release/proxy.wasm -o target/wasm32-unknown-unknown/release/proxy_opt.wasm"
             ]
         },
+        "gateway": {
+            "candid": "src/canisters/gateway.did",
+            "type": "custom",
+            "wasm": "target/wasm32-unknown-unknown/release/gateway_opt.wasm",
+            "build": [
+              "cargo build --target wasm32-unknown-unknown --bin gateway --release",
+              "ic-cdk-optimizer target/wasm32-unknown-unknown/release/gateway.wasm -o target/wasm32-unknown-unknown/release/gateway_opt.wasm"
+            ]
+        },
         "demo": {
             "candid": "src/canisters/demo.did",
             "type": "custom",

@@ -3,7 +3,7 @@ use ic_web3::types::H256;
 use candid::{CandidType, Deserialize};
 use crate::config::{ChainConfig, ChainType};
 
-#[derive(CandidType, Deserialize, Clone)]
+#[derive(CandidType, Deserialize, Clone, Default)]
 pub struct ChainState {
     pub config: ChainConfig,
     pub roots: VecDeque<Vec<u8>>,

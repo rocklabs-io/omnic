@@ -7,7 +7,13 @@ pub enum ChainType {
     Solana,
 }
 
-#[derive(CandidType, Deserialize, Clone)]
+impl Default for ChainType {
+    fn default() -> Self {
+        Self::Evm
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone, Default)]
 pub struct ChainConfig {
     pub chain_type: ChainType,
     pub chain_id: u32,
