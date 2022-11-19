@@ -5,40 +5,23 @@ omnic proxy canister:
 
 use std::cell::{RefCell};
 use std::collections::{HashMap, VecDeque};
-use std::convert::TryInto;
-use std::iter::FromIterator;
 
-use ic_cron::task_scheduler::TaskScheduler;
-use ic_web3::types::H256;
 use ic_web3::ic::get_eth_addr;
 
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
-use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::export::candid::{candid_method};
 use ic_cdk::api::management_canister::http_request::HttpResponse;
 use candid::types::principal::Principal;
 
-use ic_cron::types::Iterations;
-
-use accumulator::{TREE_DEPTH, merkle_root_from_branch};
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
 use omnic::HomeContract;
 use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
-use omnic::state::{State, StateMachine, StateMachineStable, StateInfo};
+use omnic::state::StateInfo;
 use omnic::call::{call_to_canister, call_to_chain};
-use omnic::utils::check_roots_result;
-
-ic_cron::implement_cron!();
-
-#[derive(CandidType, Deserialize, Clone)]
-enum Task {
-    FetchRoots,
-    FetchRoot
-}
 
 thread_local! {
     static STATE_INFO: RefCell<StateInfo> = RefCell::new(StateInfo::default());
     static CHAINS: RefCell<HashMap<u32, ChainState>>  = RefCell::new(HashMap::new());
-    static STATE_MACHINE: RefCell<StateMachine> = RefCell::new(StateMachine::default());
     static LOGS: RefCell<VecDeque<String>> = RefCell::new(VecDeque::default());
 }
 
@@ -50,14 +33,6 @@ fn get_logs() -> Vec<String> {
     })
 }
 
-fn get_fetch_root_period() -> u64 {
-    STATE_INFO.with(|s| s.borrow().fetch_root_period)
-}
-
-fn get_fetch_roots_period() -> u64 {
-    STATE_INFO.with(|s| s.borrow().fetch_roots_period)
-}
-
 #[init]
 #[candid_method(init)]
 fn init() {
@@ -66,16 +41,6 @@ fn init() {
         let mut info = info.borrow_mut();
         info.add_owner(caller);
     });
-
-    // set up cron job
-    cron_enqueue(
-        Task::FetchRoots, 
-        ic_cron::types::SchedulingOptions {
-            delay_nano: get_fetch_roots_period(),
-            interval_nano: get_fetch_roots_period(),
-            iterations: Iterations::Infinite,
-        },
-    ).unwrap();
 }
 
 #[query]
@@ -138,10 +103,13 @@ async fn set_fetch_period(fetch_root_period: u64, fetch_roots_period: u64) -> Re
 fn add_chain(
     chain_id: u32, 
     urls: Vec<String>, 
+    gateway_canster_addr: Principal,
     omnic_addr: String, 
     start_block: u64
 ) -> Result<bool, String> {
     // add chain config
+    // need to deploy gateway canister manually
+    // provide the gateway canister principal, as the WASM size will exceed if include the gateway canister bytes
     CHAINS.with(|chains| {
         let mut chains = chains.borrow_mut();
         if !chains.contains_key(&chain_id) {
@@ -150,18 +118,11 @@ fn add_chain(
                     ChainType::Evm,
                     chain_id,
                     urls,
+                    gateway_canster_addr,
                     omnic_addr.into(),
                     start_block,
                 )
             ));
-        }
-    });
-    // add chain_id to state machine
-    STATE_MACHINE.with(|s| {
-        let mut state_machine = s.borrow_mut();
-        // append s.chain_ids;
-        if !state_machine.chain_exists(chain_id) {
-            state_machine.add_chain(chain_id);    
         }
     });
     Ok(true)
@@ -185,6 +146,7 @@ fn delete_chain(chain_id: u32) -> Result<bool, String> {
 fn update_chain(
     chain_id: u32, 
     urls: Vec<String>, 
+    gateway_canster_addr: Principal,
     omnic_addr: String, 
     start_block: u64
 ) -> Result<bool, String> {
@@ -197,6 +159,7 @@ fn update_chain(
                     ChainType::Evm,
                     chain_id,
                     urls,
+                    gateway_canster_addr,
                     omnic_addr.into(),
                     start_block,
                 )
@@ -312,45 +275,30 @@ async fn get_gas_price(chain_id: u32) -> Result<u64, String> {
 }
 
 // relayer canister call this to check if a message is valid before process_message
-#[query(name = "is_valid")]
+#[update(name = "is_valid")]
 #[candid_method(query, rename = "is_valid")]
-fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
+async fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
     // verify message proof: use proof, message to calculate the merkle root, 
     // check if the merkle root exists in corresponding chain state
     let m = Message::from_raw(message.clone()).map_err(|e| {
         format!("parse message from bytes failed: {:?}", e)
     })?;
-    let h = m.to_leaf();
-    let p_h256: Vec<H256> = proof.iter().map(|v| H256::from_slice(&v)).collect();
-    let p: [H256; TREE_DEPTH] = p_h256.try_into().map_err(|e| format!("parse proof failed: {:?}", e))?;
-    // calculate root with leaf hash & proof
-    let root = merkle_root_from_branch(h, &p, TREE_DEPTH, leaf_index as usize);
-    // do not add optimistic yet
-    CHAINS.with(|c| {
+    // call to gate way canister
+    let gateway: Principal = CHAINS.with(|c| {
         let chains = c.borrow();
         let chain = chains.get(&m.origin).ok_or("src chain id not exist".to_string())?;
-        Ok(chain.is_root_exist(root))
-    })
-}
+        Ok::<Principal, String>(chain.config.gateway_addr)
+    })?;
 
-#[query(name = "get_latest_root")]
-#[candid_method(query, rename = "get_latest_root")]
-fn get_latest_root(chain_id: u32) -> Result<String, String> {
-    CHAINS.with(|c| {
-        let chains = c.borrow();
-        let chain = chains.get(&chain_id).ok_or("src chain id not exist".to_string())?;
-        Ok(format!("{:x}", chain.latest_root()))
-    })
-}
-
-#[query(name = "get_next_index")]
-#[candid_method(query, rename = "get_next_index")]
-fn get_next_index(chain_id: u32) -> Result<u32, String> {
-    CHAINS.with(|c| {
-        let chains = c.borrow();
-        let chain = chains.get(&chain_id).ok_or("src chain id not exist".to_string())?;
-        Ok(chain.next_index())
-    })
+    let res = ic_cdk::call(gateway, "is_valid", (message, proof, leaf_index, )).await;
+    match res {
+        Ok((validation_result, )) => {
+            Ok(validation_result)
+        }
+        Err((_code, msg)) => {
+            Err(msg)
+        }
+    }
 }
 
 // application canister call this method to send tx to destination chain
@@ -396,7 +344,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
     // check if the root exists in corresponding chain state
     // if valid, call dest canister.handleMessage or send tx to dest chain
     // if invalid, return error
-    let valid = is_valid(message.clone(), proof, leaf_index)?;
+    let valid = is_valid(message.clone(), proof, leaf_index).await?;
     if !valid {
         add_log("message does not pass verification!".to_string());
         return Err("message does not pass verification!".into());
@@ -420,6 +368,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         c.bump_index();
     });
     // send msg to destination
+    // TODO reset next index after call error?
     if m.destination == 0 {
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
@@ -456,178 +405,6 @@ async fn remove_owner(owner: Principal) {
     });
 }
 
-async fn fetch_root() {
-    // query omnic contract.getLatestRoot, 
-    // fetch from multiple rpc providers and aggregrate results, should be exact match
-    let state = STATE_MACHINE.with(|s| {
-        s.borrow().clone()
-    });
-    
-    let next_state = match state.sub_state {
-        State::Init => {
-            match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
-                Ok(client) => { 
-                    match client.get_block_number().await {
-                        Ok(h) => {
-                            STATE_MACHINE.with(|s| {
-                                let mut state = s.borrow_mut();
-                                state.block_height = h;
-                                state.roots = HashMap::default(); // reset roots in this round
-                            });
-                            State::Fetching(0)
-                        },
-                        Err(e) => {
-                            add_log(format!("init contract failed: {}", e));
-                            State::Fail
-                        },
-                    }
-                },
-                Err(_e) => { 
-                    State::Fail
-                },
-            }
-        },
-        State::Fetching(idx) => {
-            // query root in block height
-            match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
-                Ok(client) => {
-                    let root = client.get_latest_root(Some(state.block_height)).await;
-                    add_log(format!("root from {:?}: {:?}", state.rpc_urls[idx], root));
-                    match root {
-                        Ok(r) => {
-                            incr_state_root(r);
-                        },
-                        Err(e) => {
-                            add_log(format!("query root failed: {}", e));
-                            incr_state_root(H256::zero());
-                        },
-                    };
-                    STATE_MACHINE.with(|s| {
-                        let s = s.borrow();
-                        let (check_result, _) = check_roots_result(&s.roots, s.rpc_count());
-                        s.get_fetching_next_sub_state(check_result)
-                    })
-                },
-                Err(e) => {
-                    add_log(format!("init evm chain client failed: {}", e));
-                    State::Fail
-                }
-            }
-        },
-        State::End | State::Fail => {
-            return
-        },
-    };
-
-    // update sub state
-    STATE_MACHINE.with(|s| {
-        s.borrow_mut().sub_state = next_state;
-    });
-
-    if next_state != State::End && next_state != State::Fail {
-        cron_enqueue(
-            Task::FetchRoot, 
-            ic_cron::types::SchedulingOptions {
-                delay_nano: get_fetch_root_period(),
-                interval_nano: get_fetch_root_period(),
-                iterations: Iterations::Exact(1),
-            },
-        ).unwrap();
-    }
-}
-
-// this is done in heart_beat
-async fn fetch_roots() {
-    let state = STATE_MACHINE.with(|s| {
-        s.borrow().clone()
-    });
-
-    match state.state {
-        State::Init => {
-            // get chain ids
-            let chain_ids = CHAINS.with(|c| {
-                Vec::from_iter(c.borrow().keys().cloned())
-            });
-            STATE_MACHINE.with(|s| {
-                let mut state = s.borrow_mut();
-                if chain_ids.len() > 0 {
-                    state.chain_ids = chain_ids;
-                    state.state = State::Fetching(0);
-                }
-            });
-        }
-        State::Fetching(idx) => {
-            match state.sub_state {
-                State::Init => {
-                    // update rpc urls
-                    let chain_id = state.chain_ids[idx];
-                    let (rpc_urls, omnic_addr) = CHAINS.with(|c| {
-                        let cs = c.borrow();
-                        let chain = cs.get(&chain_id).unwrap();
-                        (chain.config.rpc_urls.clone(), chain.config.omnic_addr.clone())
-                    });
-                    STATE_MACHINE.with(|s| {
-                        let mut state = s.borrow_mut();
-                        state.rpc_urls = rpc_urls;
-                        state.omnic_addr = omnic_addr;
-                    });
-                    add_log(format!("fetching for chain {:?}...", chain_id));
-                    cron_enqueue(
-                        Task::FetchRoot, 
-                        ic_cron::types::SchedulingOptions {
-                            delay_nano: get_fetch_root_period(),
-                            interval_nano: get_fetch_root_period(),
-                            iterations: Iterations::Exact(1),
-                        },
-                    ).unwrap();
-                }
-                State::Fetching(_) => {},
-                State::End => {
-                    // update root
-                    CHAINS.with(|c| {
-                        let mut chain = c.borrow_mut();
-                        let chain_state = chain.get_mut(&state.chain_ids[idx]).expect("chain id not exist");
-                        let (check_result, root) = check_roots_result(&state.roots, state.rpc_count());
-                        if check_result {
-                            chain_state.insert_root(root);
-                        } else {
-                            add_log(format!("invalid roots: {:?}", state.roots))
-                        }
-                    });
-                    // update state
-                    STATE_MACHINE.with(|s| {
-                        let mut state = s.borrow_mut();
-                        (state.state, state.sub_state) = state.get_fetching_next_state();
-                    });
-                },
-                State::Fail => {
-                    // update state
-                    STATE_MACHINE.with(|s| {
-                        let mut state = s.borrow_mut();
-                        (state.state, state.sub_state) = state.get_fetching_next_state();
-                    });
-                },
-            }
-        },
-        _ => { panic!("can't reach here")},
-    }
-}
-
-#[heartbeat]
-fn heart_beat() {
-    for task in cron_ready_tasks() {
-        let kind = task.get_payload::<Task>().expect("Serialization error");
-        match kind {
-            Task::FetchRoots => {
-                ic_cdk::spawn(fetch_roots());
-            },
-            Task::FetchRoot => {
-                ic_cdk::spawn(fetch_root());
-            },
-        }
-    }
-}
-
 #[pre_upgrade]
 fn pre_upgrade() {
     let chains = CHAINS.with(|c| {
@@ -636,22 +413,15 @@ fn pre_upgrade() {
     let state_info = STATE_INFO.with(|s| {
         s.replace(StateInfo::default())
     });
-    let state_machine = STATE_MACHINE.with(|s| {
-        s.replace(StateMachine::default())
-    });
-    ic_cdk::storage::stable_save((chains, state_info, StateMachineStable::from(state_machine), _take_cron_state())).expect("pre upgrade error");
+    ic_cdk::storage::stable_save((chains, state_info,)).expect("pre upgrade error");
 }
 
 #[post_upgrade]
 fn post_upgrade() {
     let (chains, 
-        state_info, 
-        state_machine, 
-        cron_state
+        state_info,
     ): (HashMap<u32, ChainState>, 
         StateInfo, 
-        StateMachineStable, 
-        Option<TaskScheduler>
     ) = ic_cdk::storage::stable_restore().expect("post upgrade error");
     
     CHAINS.with(|c| {
@@ -660,10 +430,6 @@ fn post_upgrade() {
     STATE_INFO.with(|s| {
         s.replace(state_info);
     });
-    STATE_MACHINE.with(|s| {
-        s.replace(state_machine.into());
-    });
-    _put_cron_state(cron_state);
 }
 
 /// get the unix timestamp in second
@@ -680,17 +446,6 @@ fn is_authorized() -> Result<(), String> {
         } else {
             Ok(())
         }
-    })
-}
-
-fn incr_state_root(root: H256) {
-    STATE_MACHINE.with(|s| {
-        let mut state = s.borrow_mut();
-        state
-            .roots
-            .entry(root)
-            .and_modify(|c| *c += 1)
-            .or_insert(1);
     })
 }
 

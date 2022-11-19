@@ -107,6 +107,7 @@ fn set_chain(
                 ChainType::Evm,
                 chain_id,
                 urls.clone(),
+                ic_cdk::id(),
                 omnic_addr.clone(),
                 start_block,
             )
