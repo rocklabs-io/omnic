@@ -7,6 +7,9 @@ use std::cell::{RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 
+use rand::{rngs::StdRng, SeedableRng};
+use rand::seq::SliceRandom;
+
 use ic_cdk::api::management_canister::http_request::HttpResponse;
 use ic_cron::task_scheduler::TaskScheduler;
 use ic_web3::types::H256;
@@ -62,6 +65,10 @@ fn get_fetch_roots_period() -> u64 {
     STATE_INFO.with(|s| s.borrow().fetch_roots_period)
 }
 
+fn get_query_rpc_number() -> u64 {
+    STATE_INFO.with(|s| s.borrow().query_rpc_number)
+}
+
 #[init]
 #[candid_method(init)]
 fn init() {
@@ -88,6 +95,23 @@ async fn set_fetch_period(fetch_root_period: u64, fetch_roots_period: u64) -> Re
     STATE_INFO.with(|s| {
         let mut s = s.borrow_mut();
         s.set_fetch_period(fetch_root_period, fetch_roots_period);
+    });
+    Ok(true)
+}
+
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "set_rpc_number")]
+async fn set_rpc_number(query_rpc_number: u64) -> Result<bool, String> {
+    let rpc_url_count = CHAINS.with(|c| {
+        let chain = c.borrow();
+        chain.config.rpc_urls.len()
+    });
+    if query_rpc_number <= 0 || query_rpc_number > rpc_url_count as u64 {
+        return Err("Invalid rpc number".to_string());
+    }
+    STATE_INFO.with(|s| {
+        let mut s = s.borrow_mut();
+        s.set_rpc_number(query_rpc_number);
     });
     Ok(true)
 }
@@ -138,10 +162,18 @@ fn set_next_index(
 #[query(name = "get_chain")]
 #[candid_method(query, rename = "get_chain")]
 fn get_chain() -> Result<ChainState, String> {
-    // add chain config
     CHAINS.with(|chain| {
         let chain = chain.borrow();
         Ok(chain.clone())
+    })
+}
+
+#[query(name = "get_info", guard = "is_authorized")]
+#[candid_method(query, rename = "get_info")]
+fn get_info() -> Result<StateInfo, String> {
+    STATE_INFO.with(|info| {
+        let info = info.borrow();
+        Ok(info.clone())
     })
 }
 
@@ -379,16 +411,38 @@ async fn fetch_roots() {
         State::Fetching(_) => {
             match state.sub_state {
                 State::Init => {
-                    // reserve for further initialization operation
-                    add_log(format!("start fetching"));
-                    cron_enqueue(
-                        Task::FetchRoot, 
-                        ic_cron::types::SchedulingOptions {
-                            delay_nano: get_fetch_root_period(),
-                            interval_nano: get_fetch_root_period(),
-                            iterations: Iterations::Exact(1),
+                    // randomly select rpc url to fetch
+                    // call IC raw rand to get random seed
+                    let seed_res = ic_cdk::api::management_canister::main::raw_rand().await;
+                    match seed_res {
+                        Ok((seed, )) => {
+                            let mut rpc_urls = CHAINS.with(|c| {
+                                c.borrow().config.rpc_urls.clone()
+                            });
+                            // shuffle
+                            let seed: [u8; 32] = seed.as_slice().try_into().expect("convert vector to array error");
+                            let mut rng: StdRng = SeedableRng::from_seed(seed);
+                            rpc_urls.shuffle(&mut rng);
+                            let random_urls = rpc_urls[..get_query_rpc_number() as usize].to_vec();
+                            // set random urls for this round
+                            STATE_MACHINE.with(|s| {
+                                s.borrow_mut().set_rpc_urls(random_urls.clone());
+                            });
+                            add_log(format!("start fetching, random rpc urls: {:?}", random_urls));
+                            cron_enqueue(
+                                Task::FetchRoot, 
+                                ic_cron::types::SchedulingOptions {
+                                    delay_nano: get_fetch_root_period(),
+                                    interval_nano: get_fetch_root_period(),
+                                    iterations: Iterations::Exact(1),
+                                },
+                            ).unwrap();
                         },
-                    ).unwrap();
+                        Err((_code, msg)) => {
+                            // error, do nothing
+                            add_log(format!("Error getting raw rand: {}", msg));
+                        },
+                    }
                 }
                 State::Fetching(_) => {},
                 State::End => {

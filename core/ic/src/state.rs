@@ -140,6 +140,7 @@ pub struct StateInfo {
     pub owners: HashSet<Principal>,
     pub fetch_root_period: u64,
     pub fetch_roots_period: u64,
+    pub query_rpc_number: u64,
 }
 
 impl StateInfo {
@@ -148,6 +149,7 @@ impl StateInfo {
             owners: HashSet::default(),
             fetch_root_period: 1_000_000_000 * 5,
             fetch_roots_period: 1_000_000_000 * 20,
+            query_rpc_number: 1,
         }
     }
 
@@ -166,5 +168,9 @@ impl StateInfo {
     pub fn set_fetch_period(&mut self, v1: u64, v2: u64) {
         self.fetch_root_period = v1;
         self.fetch_roots_period = v2;
+    }
+
+    pub fn set_rpc_number(&mut self, n: u64) {
+        self.query_rpc_number = n
     }
 }
