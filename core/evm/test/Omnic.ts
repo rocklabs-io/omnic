@@ -15,4 +15,16 @@ describe("Omnic", function () {
   //     expect(await lock.unlockTime()).to.equal(unlockTime);
   //   });
   // });
+	describe("SendMessage", function() {
+		it("Should send msg", async function () {
+			const Omnic = await ethers.getContractFactory("Omnic");
+			const omnic = await Omnic.deploy();
+
+			let recipient_addr = "0xcD5330aCf97E53489E3093Da52844e4D57b6Eae8";
+			let recipient = ethers.utils.hexZeroPad(recipient_addr, 32);
+			let data = ethers.utils.hexlify(ethers.utils.toUtf8Bytes("hello omnic demo app on polygon!"));
+			const tx = await omnic.sendMessage(0, recipient, data);
+			//const tx1 = await omnic.processMessage(recipient + data.slice(2))
+		});
+	});
 });
