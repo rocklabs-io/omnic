@@ -350,7 +350,7 @@ async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String>
 
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
-async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
+async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<(String, u64), String> {
     // verify message proof: use proof, message to calculate the merkle root, 
     // check if the root exists in corresponding chain state
     // if valid, call dest canister.handleMessage or send tx to dest chain
@@ -384,7 +384,9 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
         add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
-        call_to_canister(recipient, &m).await
+        let res = call_to_canister(recipient, &m).await?;
+        let time = ic_cdk::api::time();
+        Ok((res, time))
     } else {
         // send tx to dst chain
         // call_to_chain(m.destination, message).await
@@ -396,7 +398,9 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         if caller == "" || omnic_addr == "" {
             return Err("caller address is empty".into());
         }
-        call_to_chain(caller, omnic_addr, rpc, m.destination, message).await
+        let res = call_to_chain(caller, omnic_addr, rpc, m.destination, message).await?;
+        let time = ic_cdk::api::time();
+        Ok((res, time))
     }
 }
 
