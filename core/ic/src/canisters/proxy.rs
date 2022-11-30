@@ -197,7 +197,7 @@ fn get_chains() -> Result<Vec<ChainState>, String> {
 
 #[update(name = "fetch_root")]
 #[candid_method(update, rename = "fetch_root")]
-async fn fetch(chain_id: u32, height: u64) -> Result<String, String> {
+async fn fetch(chain_id: u32, height: u64) -> Result<(String, u64, u64), String> {
     let (_caller, omnic_addr, rpc) = CHAINS.with(|chains| {
         let chains = chains.borrow();
         let c = chains.get(&chain_id).expect("chain not found");
@@ -206,10 +206,21 @@ async fn fetch(chain_id: u32, height: u64) -> Result<String, String> {
 
     let client = EVMChainClient::new(rpc, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
         .map_err(|e| format!("init client failed: {:?}", e))?;
-    client.get_latest_root(Some(height))
+    
+    let start_cycles = ic_cdk::api::canister_balance();
+    let start_time = ic_cdk::api::time();
+
+    let root = client.get_latest_root(Some(height))
         .await
         .map(|v| hex::encode(v))
-        .map_err(|e| format!("get root err: {:?}", e))
+        .map_err(|e| format!("get root err: {:?}", e))?;
+    
+    let end_cycles = ic_cdk::api::canister_balance();
+    let end_time = ic_cdk::api::time();
+
+    let cycle_cost = start_cycles - end_cycles;
+    let time_cost = end_time - start_time;
+    Ok((root, cycle_cost, time_cost))
 }
 
 #[update(name = "get_tx_count")]
