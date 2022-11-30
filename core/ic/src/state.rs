@@ -147,8 +147,8 @@ impl StateInfo {
     pub fn default() -> StateInfo {
         StateInfo {
             owners: HashSet::default(),
-            fetch_root_period: 1_000_000_000 * 5,
-            fetch_roots_period: 1_000_000_000 * 20,
+            fetch_root_period: 1_000_000_000 * 3,
+            fetch_roots_period: 1_000_000_000 * 10,
             query_rpc_number: 1,
         }
     }

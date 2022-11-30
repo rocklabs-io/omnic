@@ -28,6 +28,14 @@ impl ChainState {
         self.config = new_config;
     }
 
+    pub fn add_urls(&mut self, urls: Vec<String>) {
+        self.config.add_urls(urls);
+    }
+
+    pub fn rpc_urls(&self) -> Vec<String> {
+        self.config.rpc_urls.clone()
+    }
+
     pub fn chain_type(&self) -> ChainType {
         self.config.chain_type.clone()
     }

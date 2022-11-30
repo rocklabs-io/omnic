@@ -10,7 +10,7 @@ use ic_web3::ic::get_eth_addr;
 
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cdk::export::candid::{candid_method};
-use ic_cdk::api::management_canister::http_request::HttpResponse;
+use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use candid::types::principal::Principal;
 
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
@@ -44,8 +44,8 @@ fn init() {
 }
 
 #[query]
-async fn transform(raw: HttpResponse) -> HttpResponse {
-    let mut t = raw;
+async fn transform(raw: TransformArgs) -> HttpResponse {
+    let mut t = raw.response;
     t.headers = vec![];
     t
 }
@@ -305,6 +305,26 @@ async fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Res
     match res {
         Ok((validation_result, )) => {
             Ok(validation_result)
+        }
+        Err((_code, msg)) => {
+            Err(msg)
+        }
+    }
+}
+
+#[update(name = "get_latest_root")]
+#[candid_method(query, rename = "get_latest_root")]
+async fn get_latest_root(chain_id: u32) -> Result<String, String> {
+    let gateway: Principal = CHAINS.with(|c| {
+        let chains = c.borrow();
+        let chain = chains.get(&chain_id).ok_or("chain id not exist".to_string())?;
+        Ok::<Principal, String>(chain.config.gateway_addr)
+    })?;
+
+    let res = ic_cdk::call(gateway, "get_latest_root", ()).await;
+    match res {
+        Ok((root, )) => {
+            Ok(root)
         }
         Err((_code, msg)) => {
             Err(msg)

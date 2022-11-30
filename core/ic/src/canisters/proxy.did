@@ -1,5 +1,6 @@
 type ChainConfig = record {
   rpc_urls : vec text;
+  gateway_addr : principal;
   omnic_addr : text;
   chain_id : nat32;
   chain_type : ChainType;
@@ -13,27 +14,28 @@ type ChainState = record {
 };
 type ChainType = variant { Evm; Solana; Cosmos };
 type Result = variant { Ok : bool; Err : text };
-type Result_1 = variant { Ok : text; Err : text };
-type Result_2 = variant { Ok : vec ChainState; Err : text };
-type Result_3 = variant { Ok : nat64; Err : text };
-type Result_4 = variant { Ok : nat32; Err : text };
-type Result_5 = variant { Ok : vec nat8; Err : text };
+type Result_1 = variant { Ok : record { text; nat64; nat64 }; Err : text };
+type Result_2 = variant { Ok : text; Err : text };
+type Result_3 = variant { Ok : vec ChainState; Err : text };
+type Result_4 = variant { Ok : nat64; Err : text };
+type Result_5 = variant { Ok : record { text; nat64 }; Err : text };
+type Result_6 = variant { Ok : vec nat8; Err : text };
 service : () -> {
-  add_chain : (nat32, vec text, text, nat64) -> (Result);
+  add_chain : (nat32, vec text, principal, text, nat64) -> (Result);
   add_owner : (principal) -> ();
+  delete_chain : (nat32) -> (Result);
   fetch_root : (nat32, nat64) -> (Result_1);
-  get_canister_addr : (ChainType) -> (Result_1);
-  get_chains : () -> (Result_2) query;
-  get_gas_price : (nat32) -> (Result_3);
-  get_latest_root : (nat32) -> (Result_1) query;
-  get_next_index : (nat32) -> (Result_4) query;
-  get_tx_count : (nat32, text) -> (Result_3);
+  get_canister_addr : (ChainType) -> (Result_2);
+  get_chains : () -> (Result_3) query;
+  get_gas_price : (nat32) -> (Result_4);
+  get_logs : () -> (vec text) query;
+  get_tx_count : (nat32, text) -> (Result_4);
   is_valid : (vec nat8, vec vec nat8, nat32) -> (Result) query;
-  process_message : (vec nat8, vec vec nat8, nat32) -> (Result);
+  process_message : (vec nat8, vec vec nat8, nat32) -> (Result_5);
   remove_owner : (principal) -> ();
-  send_raw_tx : (nat32, vec nat8) -> (Result_5);
+  send_raw_tx : (nat32, vec nat8) -> (Result_6);
   set_canister_addrs : () -> (Result);
   set_fetch_period : (nat64, nat64) -> (Result);
   set_next_index : (nat32, nat32) -> (Result);
-  update_chain : (nat32, vec text, text, nat64) -> (Result);
+  update_chain : (nat32, vec text, principal, text, nat64) -> (Result);
 }

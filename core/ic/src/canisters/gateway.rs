@@ -10,7 +10,7 @@ use std::convert::TryInto;
 use rand::{rngs::StdRng, SeedableRng};
 use rand::seq::SliceRandom;
 
-use ic_cdk::api::management_canister::http_request::HttpResponse;
+use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use ic_cron::task_scheduler::TaskScheduler;
 use ic_web3::types::H256;
 
@@ -43,8 +43,8 @@ thread_local! {
 }
 
 #[query]
-async fn transform(raw: HttpResponse) -> HttpResponse {
-    let mut t = raw;
+async fn transform(raw: TransformArgs) -> HttpResponse {
+    let mut t = raw.response;
     t.headers = vec![];
     t
 }
@@ -142,6 +142,24 @@ fn set_chain(
         state_machine.set_chain_id(chain_id);
         state_machine.set_rpc_urls(urls.clone());
         state_machine.set_omnic_addr(omnic_addr.clone());
+    });
+    Ok(true)
+}
+
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "add_urls")]
+fn add_urls(
+    urls: Vec<String>
+) -> Result<bool, String> {
+    // set chain config
+    let rpc_urls = CHAINS.with(|c| {
+        let mut c = c.borrow_mut();
+        c.add_urls(urls);
+        c.rpc_urls()
+    });
+    STATE_MACHINE.with(|s| {
+        let mut state_machine = s.borrow_mut();
+        state_machine.set_rpc_urls(rpc_urls);
     });
     Ok(true)
 }
@@ -276,10 +294,10 @@ fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bo
 
 #[query(name = "get_latest_root")]
 #[candid_method(query, rename = "get_latest_root")]
-fn get_latest_root() -> Result<String, String> {
+fn get_latest_root() -> String {
     CHAINS.with(|c| {
         let chain = c.borrow();
-        Ok(format!("{:x}", chain.latest_root()))
+        format!("{:x}", chain.latest_root())
     })
 }
 
@@ -429,6 +447,7 @@ async fn fetch_roots() {
                                 s.borrow_mut().set_rpc_urls(random_urls.clone());
                             });
                             add_log(format!("start fetching, random rpc urls: {:?}", random_urls));
+                            add_log(format!("start_cycles: {:?},  start_time: {:?}", ic_cdk::api::canister_balance(), ic_cdk::api::time()));
                             cron_enqueue(
                                 Task::FetchRoot, 
                                 ic_cron::types::SchedulingOptions {
@@ -446,6 +465,7 @@ async fn fetch_roots() {
                 }
                 State::Fetching(_) => {},
                 State::End => {
+                    add_log(format!("end_cycles: {:?},  end_time: {:?}", ic_cdk::api::canister_balance(), ic_cdk::api::time()));
                     // update root
                     CHAINS.with(|c| {
                         let mut chain = c.borrow_mut();

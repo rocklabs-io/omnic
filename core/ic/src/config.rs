@@ -52,4 +52,8 @@ impl ChainConfig {
     pub fn add_rpc_url(&mut self, url: String) {
         self.rpc_urls.push(url);
     }
+
+    pub fn add_urls(&mut self, urls: Vec<String>) {
+        self.rpc_urls.extend(urls);
+    }
 }

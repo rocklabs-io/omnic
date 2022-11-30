@@ -1,4 +1,10 @@
 {
+  "goerli-gateway": {
+    "ic": "hsrxk-riaaa-aaaam-aa2eq-cai"
+  },
+  "mumbai-gateway": {
+    "ic": "h3s4w-haaaa-aaaam-aa2fa-cai"
+  },
   "proxy": {
     "ic": "y3lks-laaaa-aaaam-aat7q-cai"
   }
