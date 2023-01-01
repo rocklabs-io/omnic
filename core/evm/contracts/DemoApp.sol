@@ -55,7 +55,9 @@ contract DemoApp {
         Omnic(omnicAddr).sendMessage(
             _dstChainId,
             _recipientAddress,
-            _payload
+            _payload,
+            payable(msg.sender),
+            address(this)
         );
     }
 
