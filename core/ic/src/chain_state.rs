@@ -3,7 +3,7 @@ use ic_web3::types::H256;
 use candid::{CandidType, Deserialize};
 use crate::config::{ChainConfig, ChainType};
 
-#[derive(CandidType, Deserialize, Clone)]
+#[derive(CandidType, Deserialize, Clone, Default)]
 pub struct ChainState {
     pub config: ChainConfig,
     pub roots: VecDeque<Vec<u8>>,
@@ -26,6 +26,14 @@ impl ChainState {
 
     pub fn update_config(&mut self, new_config: ChainConfig) {
         self.config = new_config;
+    }
+
+    pub fn add_urls(&mut self, urls: Vec<String>) {
+        self.config.add_urls(urls);
+    }
+
+    pub fn rpc_urls(&self) -> Vec<String> {
+        self.config.rpc_urls.clone()
     }
 
     pub fn chain_type(&self) -> ChainType {

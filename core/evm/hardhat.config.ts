@@ -1,5 +1,6 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "hardhat-gas-reporter"
 
 import * as dotenv from "dotenv";
 dotenv.config();
@@ -24,6 +25,8 @@ module.exports = {
   },
 
   gasReporter: {
+	enabled: true,
+	gasPrice: 21000000000,
     currency: "USD",
   },
 

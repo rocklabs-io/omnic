@@ -46,7 +46,7 @@ impl Default for State {
 ///     End => _
 #[derive(Default, Clone)]
 pub struct StateMachine {
-    pub chain_ids: Vec<u32>,
+    pub chain_id: u32,
     pub rpc_urls: Vec<String>,
     pub block_height: u64,
     pub omnic_addr: String,
@@ -57,7 +57,7 @@ pub struct StateMachine {
 
 #[derive(CandidType, Deserialize)]
 pub struct StateMachineStable {
-    chain_ids: Vec<u32>,
+    chain_id: u32,
     rpc_urls: Vec<String>,
     block_height: u64,
     omnic_addr: String,
@@ -67,31 +67,26 @@ pub struct StateMachineStable {
 }
 
 impl StateMachine {
-
-    pub fn add_chain(&mut self, chain_id: u32) {
-        if !self.chain_exists(chain_id) {
-            self.chain_ids.push(chain_id)
-        }
+    pub fn set_chain_id(&mut self, chain_id: u32) {
+        self.chain_id = chain_id;
     }
 
-    pub fn chain_exists(&self, chain_id: u32) -> bool {
-        self.chain_ids.contains(&chain_id)
+    pub fn set_rpc_urls(&mut self, rpc_urls: Vec<String>) {
+        self.rpc_urls = rpc_urls;
+    }
+
+    pub fn set_omnic_addr(&mut self, omnic_addr: String) {
+        self.omnic_addr = omnic_addr;
     }
 
     pub fn rpc_count(&self) -> usize {
         self.rpc_urls.len()
     }
 
-
     pub fn get_fetching_next_state(&self) -> (State, State) {
-        if let State::Fetching(idx) = self.state {
-            let next_idx = (idx + 1) % (self.chain_ids.len());
-            // sub state always move to init
-            if next_idx == 0 {
-                (State::Init, State::Init)
-            } else {
-                (State::Fetching(next_idx), State::Init)
-            }
+        if let State::Fetching(_) = self.state {
+            // state and sub state always move to init
+            (State::Init, State::Init)
         } else {
             panic!("state not in fetching")
         }
@@ -115,7 +110,7 @@ impl StateMachine {
 impl From<StateMachineStable> for StateMachine {
     fn from(s: StateMachineStable) -> Self {
         Self {
-            chain_ids: s.chain_ids,
+            chain_id: s.chain_id,
             rpc_urls: s.rpc_urls,
             block_height: s.block_height,
             omnic_addr: s.omnic_addr,
@@ -129,7 +124,7 @@ impl From<StateMachineStable> for StateMachine {
 impl From<StateMachine> for StateMachineStable {
     fn from(s: StateMachine) -> Self {
         Self {
-            chain_ids: s.chain_ids,
+            chain_id: s.chain_id,
             rpc_urls: s.rpc_urls,
             block_height: s.block_height,
             omnic_addr: s.omnic_addr,
@@ -145,14 +140,16 @@ pub struct StateInfo {
     pub owners: HashSet<Principal>,
     pub fetch_root_period: u64,
     pub fetch_roots_period: u64,
+    pub query_rpc_number: u64,
 }
 
 impl StateInfo {
     pub fn default() -> StateInfo {
         StateInfo {
             owners: HashSet::default(),
-            fetch_root_period: 1_000_000_000 * 5,
-            fetch_roots_period: 1_000_000_000 * 20,
+            fetch_root_period: 1_000_000_000 * 3,
+            fetch_roots_period: 1_000_000_000 * 10,
+            query_rpc_number: 1,
         }
     }
 
@@ -171,5 +168,9 @@ impl StateInfo {
     pub fn set_fetch_period(&mut self, v1: u64, v2: u64) {
         self.fetch_root_period = v1;
         self.fetch_roots_period = v2;
+    }
+
+    pub fn set_rpc_number(&mut self, n: u64) {
+        self.query_rpc_number = n
     }
 }

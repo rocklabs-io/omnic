@@ -14,19 +14,21 @@ type ChainState = record {
 type ChainType = variant { Evm; Solana; Cosmos };
 type Result = variant { Ok : bool; Err : text };
 type Result_1 = variant { Ok : text; Err : text };
-type Result_2 = variant { Ok : vec ChainState; Err : text };
-type Result_3 = variant { Ok : nat32; Err : text };
+type Result_2 = variant { Ok : ChainState; Err : text };
+type Result_3 = variant { Ok : nat64; Err : text };
+type Result_4 = variant { Ok : nat32; Err : text };
 service : () -> {
   add_chain : (nat32, vec text, text, nat64) -> (Result);
   add_owner : (principal) -> ();
-  get_canister_addr : (ChainType) -> (Result_1);
-  get_chains : () -> (Result_2) query;
-  get_latest_root : (nat32) -> (Result_1) query;
-  get_next_index : (nat32) -> (Result_3) query;
+  fetch_root : (nat64) -> (Result_1);
+  get_chain : () -> (Result_2) query;
+  get_gas_price : () -> (Result_3);
+  get_latest_root : () -> (Result_1) query;
+  get_logs : () -> (vec text) query;
+  get_next_index : () -> (Result_4) query;
+  get_tx_count : (text) -> (Result_3);
   is_valid : (vec nat8, vec vec nat8, nat32) -> (Result) query;
-  process_message : (vec nat8, vec vec nat8, nat32) -> (Result);
   remove_owner : (principal) -> ();
-  set_canister_addrs : () -> (Result);
-  set_next_index : (nat32, nat32) -> (Result);
-  update_chain : (nat32, vec text, text, nat64) -> (Result);
+  set_fetch_period : (nat64, nat64) -> (Result);
+  set_next_index : (nat32) -> (Result);
 }
