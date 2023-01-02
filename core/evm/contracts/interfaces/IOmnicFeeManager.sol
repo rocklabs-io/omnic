@@ -12,4 +12,9 @@ interface IOmnicFeeManager {
         external
         view
         returns (uint256);
+
+    function getERC20FeeToken()
+        external
+        view
+        returns (address);
 }

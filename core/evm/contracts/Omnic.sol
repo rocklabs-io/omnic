@@ -46,6 +46,7 @@ contract Omnic is QueueManager, OmnicBase {
     // ERC20 token => fee amount
     mapping(address => uint256) public erc20Fees; // record different ERC20 fee amount
 
+    mapping(address => bool) public whitelisted; // whitelisted addresses can send msg for free
 
     // gap for upgrade safety
     uint256[49] private __GAP;
@@ -88,6 +89,7 @@ contract Omnic is QueueManager, OmnicBase {
         entered = 1;
         omnicProxyCanisterAddr = proxyCanisterAddr;
         omnicFeeManager = IOmnicFeeManager(feeManagerAddr);
+        erc20FeeToken = IERC20(omnicFeeManager.getERC20FeeToken());
     }
 
     function sendMessage(
@@ -117,6 +119,41 @@ contract Omnic is QueueManager, OmnicBase {
             require(success, "Omnic: failed to refund");
         }
 
+        // get the next nonce for the destination domain, then increment it
+        uint32 _nonce = nonces[_dstChainId];
+        nonces[_dstChainId] = _nonce + 1;
+
+        bytes memory _message = Types.formatMessage(
+            chainId,
+            TypeCasts.addressToBytes32(msg.sender),
+            _nonce,
+            _dstChainId,
+            _recipientAddress,
+            _payload
+        );
+        bytes32 _messageHash = keccak256(_message);
+        tree.insert(_messageHash);
+        // enqueue the new Merkle root after inserting the message
+        queue.enqueue(tree.root());
+
+        emit SendMessage(
+            _messageHash,
+            tree.count - 1,
+            chainId,
+            _nonce,
+            _message
+        );
+    }
+
+    // fee free function for whitelisted contracts
+    // for omnic bridge's CreatePool, Add/RemoveLiquidity operations
+    function sendMessageFree(
+        uint32 _dstChainId,
+        bytes32 _recipientAddress,
+        bytes memory _payload
+    ) public {
+        require(whitelisted[msg.sender], "not whitelisted caller");
+        require(_payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
         // get the next nonce for the destination domain, then increment it
         uint32 _nonce = nonces[_dstChainId];
         nonces[_dstChainId] = _nonce + 1;
@@ -184,8 +221,7 @@ contract Omnic is QueueManager, OmnicBase {
         uint256 _msgLength
     ) internal returns (uint256 protocolNativeFee) {
         // asset fee pay with native token or ERC20 token
-        bool payInNative = _erc20PaymentAddress == address(0x0) ||
-            address(erc20FeeToken) == address(0x0);
+        bool payInNative = _erc20PaymentAddress == address(0x0);
         uint256 protocolFee = omnicFeeManager.getFees(!payInNative, _msgLength);
 
         if (protocolFee > 0) {
@@ -198,7 +234,9 @@ contract Omnic is QueueManager, OmnicBase {
                         _erc20PaymentAddress == tx.origin,
                     "Omnic: must be paid by sender or origin"
                 );
-
+                if(protocolFee == 0) {
+                    return protocolNativeFee;
+                }
                 // transfer the fee with ERC20 token
                 erc20FeeToken.safeTransferFrom(
                     _erc20PaymentAddress,
@@ -212,6 +250,10 @@ contract Omnic is QueueManager, OmnicBase {
                 );
             }
         }
+    }
+
+    function setWhitelist(address addr, bool value) external onlyOwner {
+        whitelisted[addr] = value;
     }
 
     // withdraw ERC20 token function

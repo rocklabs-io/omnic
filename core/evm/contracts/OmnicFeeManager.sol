@@ -14,38 +14,51 @@ contract OmnicFeeManager is IOmnicFeeManager, Ownable {
 
     uint256 public nativeFeeBase;
     uint256 public nativeFeeForPerByte;
+
+    address public erc20FeeToken;
     uint256 public erc20FeeBase;
-    uint256 public erc20FeeBaseForPerByte;
+    uint256 public erc20FeeForPerByte;
+
     bool public feeEnabled;
     bool public erc20Enabled;
 
     event NativeFeeBase(uint256 nativeFeeBase);
     event NativeFeeForPerByte(uint256 nativeFeeForPerByte);
     event ERC20FeeBase(uint256 erc20FeeBase);
-    event ERC20FeeBaseForPerByte(uint256 erc20FeeBaseForPerByte);
+    event ERC20FeeForPerByte(uint256 erc20FeeForPerByte);
     event FeeEnabled(bool feeEnabled);
     event ERC20Enabled(bool erc20Enabled);
 
     constructor(
         bool _feeEnabled, 
+        bool _erc20Enabled,
+        address _erc20FeeToken,
         uint256 _nativeFeeBase, 
         uint256 _nativeFeePerByte
         ) {
         feeEnabled = _feeEnabled;
+        erc20Enabled = _erc20Enabled;
+        erc20FeeToken = _erc20FeeToken;
+
         nativeFeeBase = _nativeFeeBase;
         nativeFeeForPerByte = _nativeFeePerByte;
+        erc20FeeBase = 0;
+        erc20FeeForPerByte = 0;
     }
 
     function getFees(bool payInERC20, uint256 msgLength) external view override returns (uint256) {
         if (feeEnabled) {
             if (payInERC20) {
-                require(erc20Enabled, "OmnicFeeManager: ERC20 is not enabled");
-                return erc20FeeBase.add(erc20FeeBaseForPerByte.mul(msgLength));
+                return erc20FeeBase.add(erc20FeeForPerByte.mul(msgLength));
             } else {
                 return nativeFeeBase.add(nativeFeeForPerByte.mul(msgLength));
             }
         }
         return 0;
+    }
+
+    function getERC20FeeToken() external view override returns (address) {
+        return erc20FeeToken;
     }
 
     function setFeeEnabled(bool _feeEnabled) external onlyOwner {
@@ -73,8 +86,8 @@ contract OmnicFeeManager is IOmnicFeeManager, Ownable {
         emit NativeFeeBase(nativeFeeForPerByte);
     }
 
-    function setERC20FeeForPerByte(uint256 _erc20FeeBaseForPerByte) external onlyOwner {
-        erc20FeeBaseForPerByte = _erc20FeeBaseForPerByte;
-        emit ERC20FeeBase(erc20FeeBaseForPerByte);
+    function setERC20FeeForPerByte(uint256 _erc20FeeForPerByte) external onlyOwner {
+        erc20FeeForPerByte = _erc20FeeForPerByte;
+        emit ERC20FeeForPerByte(erc20FeeForPerByte);
     }
 }

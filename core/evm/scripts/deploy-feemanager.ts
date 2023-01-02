@@ -13,12 +13,19 @@ export const deployFeeManager = async function (chain: string) {
   let feeManager;
   let nativeBaseFee = 1 * 10**15; // 0.001 eth
   let nativeFeePerByte = 0;
+  let erc20FeeToken = getContractAddr(chain, 'USDT');
+  let erc20BaseFee = 0;
+  let erc20FeePerByte = 0;
   if(feeAddr == null) {
     console.log("deploying OmnicFeeManager...");
     feeManager = await FeeManager.deploy(
       true,
+      true,
+      erc20FeeToken,
       nativeBaseFee,
       nativeFeePerByte,
+      erc20BaseFee,
+      erc20FeePerByte,
     );
 
     await feeManager.deployed();
