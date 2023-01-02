@@ -14,11 +14,11 @@ const setWhitelist = async function (chain: string) {
   // deploy UpgradeBeacon
   const proxyAddr = getContractAddr(chain, "UpgradeBeaconProxy");
   console.log("found deployed UpgradeBeaconProxy:", proxyAddr);
-  let proxy = ethers.getContractAt("UpgradeBeaconProxy", proxyAddr);
+  let omnic = await ethers.getContractAt("Omnic", proxyAddr);
 
   // set fee whitelist
   let bridgeAddr = getContractAddr(chain, "Bridge");
-  let tx = await proxy.setWhitelist(bridgeAddr, true);
+  let tx = await omnic.setWhitelist(bridgeAddr, true);
   console.log("setWhitelist tx:", tx);
 }
 

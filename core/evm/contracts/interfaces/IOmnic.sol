@@ -9,6 +9,12 @@ interface IOmnic {
         bytes memory _payload,
         address payable _refundAddress,
         address _erc20PaymentAddress
+    ) external payable;
+
+    function sendMessageFree(
+        uint32 _dstChainId,
+        bytes32 _recipientAddress,
+        bytes memory _payload
     ) external;
 
     function handleMessage(
