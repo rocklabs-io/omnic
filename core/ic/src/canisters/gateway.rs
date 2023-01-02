@@ -157,10 +157,6 @@ fn add_urls(
         c.add_urls(urls);
         c.rpc_urls()
     });
-    STATE_MACHINE.with(|s| {
-        let mut state_machine = s.borrow_mut();
-        state_machine.set_rpc_urls(rpc_urls);
-    });
     Ok(true)
 }
 
