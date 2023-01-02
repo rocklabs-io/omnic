@@ -1,7 +1,8 @@
 use candid::{CandidType, Deserialize, Principal};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashSet, HashMap, BTreeMap};
 use ic_web3::types::H256;
 use std::iter::FromIterator;
+use serde::Serialize;
 
 #[derive(CandidType, Deserialize, Copy, Clone, PartialEq, Eq)]
 pub enum State {
@@ -172,5 +173,106 @@ impl StateInfo {
 
     pub fn set_rpc_number(&mut self, n: u64) {
         self.query_rpc_number = n
+    }
+}
+
+#[derive(CandidType, Deserialize, Default)]
+pub struct RecordDB {
+    pub records: Vec<Record>,
+    // index
+    pub op_index: BTreeMap<String, Vec<usize>>,
+}
+
+#[derive(CandidType, Deserialize, Clone)]
+pub struct Record {
+    pub id: usize, 
+    pub caller: Principal,
+    pub timestamp: u64,
+    pub operation: String,
+    pub details: Vec<(String, DetailValue)>,
+}
+
+// refer to caps https://github.com/Psychedelic/cap/blob/main/common/src/transaction.rs
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq)]
+pub enum DetailValue {
+    True,
+    False,
+    U64(u64),
+    I64(i64),
+    Float(f64),
+    Text(String),
+    Principal(Principal),
+    #[serde(with = "serde_bytes")]
+    Slice(Vec<u8>),
+    Vec(Vec<DetailValue>),
+}
+
+impl RecordDB {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn size(&self) -> usize {
+        self.records.len()
+    }
+
+    pub fn append(&mut self, caller: Principal, ts: u64, op: String, details: Vec<(String, DetailValue)>) -> usize {
+        let id = self.size();
+        let record = Record{
+            id,
+            caller,
+            timestamp: ts,
+            operation: op.clone(),
+            details,
+        };
+        self.records.push(record);
+        // store the operation index
+        self.op_index
+            .entry(op)
+            .and_modify(|v| v.push(id))
+            .or_insert(vec![id]);
+        id
+    }
+
+    pub fn load_by_id(&self, id: usize) -> Option<Record> {
+        self.records.get(id).cloned()
+    }
+
+    // start: inclusive, end: exclusive
+    pub fn load_by_id_range(&self, start: usize, end: usize) -> Vec<Record> {
+        if start > end {
+            panic!("Invalid range");
+        }
+        let len = self.size();
+        if len == 0 {
+            return Vec::default();
+        }
+        if end > len {
+            end = len
+        }
+        self.records.get(start..end).expect("error load by range").to_vec().clone()
+    }
+
+    // op: operation, start: inclusive, end: exclusive
+    pub fn load_by_opeation(&self, op: String, start: usize, end: usize) -> Vec<Record> {
+        if start > end {
+            panic!("Invalid range");
+        }
+        let ops = self.op_index.get(&op).unwrap_or(&vec![]);
+        let len = op.len();
+        if len == 0 {
+            return Vec::default();
+        }
+        if end > len {
+            end = len
+        }
+
+        let mut res: Vec<Record> = Vec::default();
+        for id in ops {
+            let record = self.records.get(id.to_owned()).expect("error load by id").clone();
+            res.push(record);
+        }
+
+        res
     }
 }
