@@ -26,7 +26,14 @@ contract OmnicFeeManager is IOmnicFeeManager, Ownable {
     event FeeEnabled(bool feeEnabled);
     event ERC20Enabled(bool erc20Enabled);
 
-    constructor() {
+    constructor(
+        bool _feeEnabled, 
+        uint256 _nativeFeeBase, 
+        uint256 _nativeFeePerByte
+        ) {
+        feeEnabled = _feeEnabled;
+        nativeFeeBase = _nativeFeeBase;
+        nativeFeeForPerByte = _nativeFeePerByte;
     }
 
     function getFees(bool payInERC20, uint256 msgLength) external view override returns (uint256) {

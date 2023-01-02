@@ -82,11 +82,12 @@ contract Omnic is QueueManager, OmnicBase {
         entered = 1;
     }
 
-    function initialize(address proxyCanisterAddr) public initializer {
+    function initialize(address proxyCanisterAddr, address feeManagerAddr) public initializer {
         __QueueManager_initialize();
         __OmnicBase_initialize();
         entered = 1;
         omnicProxyCanisterAddr = proxyCanisterAddr;
+        omnicFeeManager = IOmnicFeeManager(feeManagerAddr);
     }
 
     function sendMessage(

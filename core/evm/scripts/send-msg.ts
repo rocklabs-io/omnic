@@ -8,9 +8,14 @@ const send_msg = async function(chain: string, dst_chain: string, recipient: str
   const beaconProxyAddr = getContractAddr(chain, "UpgradeBeaconProxy");
   const omnic = await Omnic.attach(beaconProxyAddr);
 
+  const addrs = await ethers.getSigners();
+  let caller = addrs[0].address;
+
   console.log(`sending message from ${chain} to ${dst_chain}, recipient: ${recipient}, data: ${data}`);
   let tx = await omnic.sendMessage(
-    getChainId(dst_chain), recipient, data
+    getChainId(dst_chain), recipient, data, caller, caller, {
+      value: ethers.utils.parseEther("0.001")
+    }
   );
   console.log("txhash:", tx.hash);
   console.log("new merkle root:", await omnic.getLatestRoot());

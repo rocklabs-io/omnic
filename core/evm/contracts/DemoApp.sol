@@ -50,7 +50,7 @@ contract DemoApp {
         uint32 _dstChainId,
         bytes32 _recipientAddress,
         bytes memory _payload
-    ) public {
+    ) public payable {
         // send message to dst chain, call omnic contract
         Omnic(omnicAddr).sendMessage(
             _dstChainId,

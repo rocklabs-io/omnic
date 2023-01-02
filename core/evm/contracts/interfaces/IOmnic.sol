@@ -6,7 +6,9 @@ interface IOmnic {
     function sendMessage(
         uint32 _dstChainId,
         bytes32 _recipientAddress,
-        bytes memory _payload
+        bytes memory _payload,
+        address payable _refundAddress,
+        address _erc20PaymentAddress
     ) external;
 
     function handleMessage(
