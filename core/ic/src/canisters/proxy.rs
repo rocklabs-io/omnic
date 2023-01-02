@@ -304,7 +304,7 @@ async fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Res
     let res = ic_cdk::call(gateway, "is_valid", (message, proof, leaf_index, )).await;
     match res {
         Ok((validation_result, )) => {
-            Ok(validation_result)
+            validation_result
         }
         Err((_code, msg)) => {
             Err(msg)
@@ -375,6 +375,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
     // check if the root exists in corresponding chain state
     // if valid, call dest canister.handleMessage or send tx to dest chain
     // if invalid, return error
+    add_log(format!("got message: {:?}", leaf_index));
     let valid = is_valid(message.clone(), proof, leaf_index).await?;
     if !valid {
         add_log("message does not pass verification!".to_string());
