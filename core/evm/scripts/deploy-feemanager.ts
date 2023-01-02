@@ -24,8 +24,6 @@ export const deployFeeManager = async function (chain: string) {
       erc20FeeToken,
       nativeBaseFee,
       nativeFeePerByte,
-      erc20BaseFee,
-      erc20FeePerByte,
     );
 
     await feeManager.deployed();

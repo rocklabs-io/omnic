@@ -50,9 +50,9 @@ export const abi_encode = function(abi: Array<string>, func: string, args: Array
     return iface.encodeFunctionData(func, args);
 }
 
-export const encodeCalldata = function(addr: string) {
+export const encodeCalldata = function(addr: string, addr1: string) {
     let abi = [
-        "function initialize(address proxyCanisterAddr)"
+        "function initialize(address proxyCanisterAddr, address feeManagerAddr)"
     ];
-    return abi_encode(abi, "initialize", [addr]);
+    return abi_encode(abi, "initialize", [addr, addr1]);
 }

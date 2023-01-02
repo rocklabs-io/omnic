@@ -56,7 +56,8 @@ const deployProxy = async function (chain: string) {
   let proxy;
   if(proxyAddr == null) {
     console.log("deploying UpgradeBeaconProxy...");
-    const initCalldata = encodeCalldata(getProxyCanisterAddr());
+    // initializer call data
+    const initCalldata = encodeCalldata(getProxyCanisterAddr(), getContractAddr(chain, "OmnicFeeManager"));
     proxy = await UpgradeBeaconProxy.deploy(beacon.address, initCalldata);
 
     await proxy.deployed();
@@ -67,12 +68,6 @@ const deployProxy = async function (chain: string) {
     console.log("found deployed UpgradeBeaconProxy:", proxyAddr);
     proxy = ethers.getContractAt("UpgradeBeaconProxy", proxyAddr);
   }
-
-  // call initializer
-  let omnicCanisterAddr = getProxyCanisterAddr();
-  let feeManagerAddr = getContractAddr(chain, "OmnicFeeManager");
-  let tx = await proxy.initialize(omnicCanisterAddr, feeManagerAddr);
-  console.log("initialize tx:", tx);
 }
 
 const main = async function() {
