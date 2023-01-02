@@ -28,11 +28,12 @@ type StateInfo = record {
 service : () -> {
   add_chain : (nat32, vec text, text, nat64) -> (Result);
   add_owner : (principal) -> ();
+  add_urls : (vec text) -> (Result);
   fetch_root : (nat64) -> (Result_1);
   get_chain : () -> (Result_2) query;
   get_gas_price : () -> (Result_3);
   get_info : () -> (Result_4) query;
-  get_latest_root : () -> (Result_1) query;
+  get_latest_root : () -> (text) query;
   get_logs : () -> (vec text) query;
   get_next_index : () -> (Result_5) query;
   get_tx_count : (text) -> (Result_3);
