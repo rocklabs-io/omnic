@@ -15,7 +15,7 @@ use candid::types::principal::Principal;
 
 use omnic::utils::DetailsBuilder;
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
-use omnic::{HomeContract, DetailValue};
+use omnic::{HomeContract, DetailValue, Record};
 use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::{StateInfo, RecordDB};
 use omnic::call::{call_to_canister, call_to_chain};
@@ -442,7 +442,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
         add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
-        call_to_canister(recipient, &m).await?
+        call_to_canister(recipient, &m).await
     } else {
         // send tx to dst chain
         // call_to_chain(m.destination, message).await
@@ -454,7 +454,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         if caller == "" || omnic_addr == "" {
             return Err("caller address is empty".into());
         }
-        call_to_chain(caller, omnic_addr, rpc, m.destination, message).await?
+        call_to_chain(caller, omnic_addr, rpc, m.destination, message).await
     };
     
     add_record(
@@ -466,8 +466,19 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
             .insert("nonce", DetailValue::U64(m.nonce as u64))
             .insert("destination", DetailValue::U64(m.destination as u64))
             .insert("recipient", DetailValue::Text(m.recipient.to_string()))
+            .insert("result", DetailValue::Text(
+                match res.clone() {
+                    Ok(o) => {
+                        o
+                    }
+                    Err(e) => {
+                        e
+                    }
+                }
+            ))
     );
-    Ok((res, ic_cdk::api::time()))
+    
+    res.map(|o| (o, ic_cdk::api::time()))
 }
 
 #[update(name = "add_owner", guard = "is_authorized")]
@@ -484,6 +495,57 @@ async fn remove_owner(owner: Principal) {
     STATE_INFO.with(|s| {
         s.borrow_mut().delete_owner(owner);
     });
+}
+
+#[query(name = "get_record_size", guard = "is_authorized")]
+#[candid_method(query, rename = "get_record_size")]
+fn get_record_size(operation: Option<String>) -> usize {
+    RECORDS.with(|r| {
+        let records = r.borrow();
+        records.size(operation)
+    })
+}
+
+#[query(name = "get_record", guard = "is_authorized")]
+#[candid_method(query, rename = "get_record")]
+fn get_record(id: usize) -> Option<Record> {
+    RECORDS.with(|r| {
+        let records = r.borrow();
+        records.load_by_id(id)
+    })
+}
+
+#[query(name = "get_records", guard = "is_authorized")]
+#[candid_method(query, rename = "get_records")]
+fn get_records(range: Option<(usize, usize)>, operation: Option<String>) -> Vec<Record> {
+    RECORDS.with(|r| {
+        let records = r.borrow();
+        let (start, end) = match range {
+            Some((s, e)) => {
+                (s, e)
+            }
+            None => {
+                // range not set, default to last 50 records
+                let size = records.size(operation.clone());
+                if size < 50 {
+                    (0, size)
+                } else {
+                    (size-50, size)
+                }
+            }
+        };
+
+        match operation {
+            Some(op) => {
+                // get specific operation
+                records.load_by_opeation(op, start, end)
+            }
+            None => {
+                // operation not set, get all
+                records.load_by_id_range(start, end)
+            }
+        }
+    })
 }
 
 #[pre_upgrade]

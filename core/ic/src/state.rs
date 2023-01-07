@@ -212,12 +212,22 @@ impl RecordDB {
         Self::default()
     }
 
-    pub fn size(&self) -> usize {
-        self.records.len()
+    pub fn size(&self, op: Option<String>) -> usize {
+        match op {
+            Some(o) => {
+                match self.op_index.get(&o) {
+                    Some(i) => i.len(),
+                    None => 0,
+                }
+            }
+            None => {
+                self.records.len()
+            }
+        }
     }
 
     pub fn append(&mut self, caller: Principal, ts: u64, op: String, details: Vec<(String, DetailValue)>) -> usize {
-        let id = self.size();
+        let id = self.size(None);
         let record = Record{
             id,
             caller,
@@ -243,7 +253,7 @@ impl RecordDB {
         if start > end {
             panic!("Invalid range");
         }
-        let len = self.size();
+        let len = self.size(None);
         if len == 0 {
             return Vec::default();
         }
