@@ -37,8 +37,8 @@ rand = "0.8.5"
 tiny-keccak = { version = "2.0.1", features = ["keccak"] }
 thiserror = "*"
 async-trait = { version = "0.1.42", default-features = false }
-#ic-web3 = { git = "https://github.com/rocklabs-io/ic-web3" }
-ic-web3 = { path = "../../../../ic-web3" }
+ic-web3 = { git = "https://github.com/rocklabs-io/ic-web3", rev = "cedffa9764c22b7ae35014825aa49314feb8e1c9"}
+# ic-web3 = { path = "../../../../ic-web3" }
 #ic-web3 = "0.1.6"
 #ic-cron = "0.7.0"
 ic-cron = { git = "https://github.com/rocklabs-io/ic-cron" }

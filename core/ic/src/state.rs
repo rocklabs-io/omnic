@@ -239,7 +239,7 @@ impl RecordDB {
     }
 
     // start: inclusive, end: exclusive
-    pub fn load_by_id_range(&self, start: usize, end: usize) -> Vec<Record> {
+    pub fn load_by_id_range(&self, start: usize, mut end: usize) -> Vec<Record> {
         if start > end {
             panic!("Invalid range");
         }
@@ -254,11 +254,12 @@ impl RecordDB {
     }
 
     // op: operation, start: inclusive, end: exclusive
-    pub fn load_by_opeation(&self, op: String, start: usize, end: usize) -> Vec<Record> {
+    pub fn load_by_opeation(&self, op: String, start: usize, mut end: usize) -> Vec<Record> {
         if start > end {
             panic!("Invalid range");
         }
-        let ops = self.op_index.get(&op).unwrap_or(&vec![]);
+        let default = Vec::default();
+        let ops = self.op_index.get(&op).unwrap_or(default.as_ref());
         let len = op.len();
         if len == 0 {
             return Vec::default();
@@ -268,7 +269,7 @@ impl RecordDB {
         }
 
         let mut res: Vec<Record> = Vec::default();
-        for id in ops {
+        for id in &ops[start..end] {
             let record = self.records.get(id.to_owned()).expect("error load by id").clone();
             res.push(record);
         }
