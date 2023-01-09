@@ -13,16 +13,18 @@ use ic_cdk::export::candid::{candid_method};
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use candid::types::principal::Principal;
 
+use omnic::utils::DetailsBuilder;
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
-use omnic::HomeContract;
+use omnic::{HomeContract, DetailValue, Record};
 use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
-use omnic::state::StateInfo;
+use omnic::state::{StateInfo, RecordDB};
 use omnic::call::{call_to_canister, call_to_chain};
 
 thread_local! {
     static STATE_INFO: RefCell<StateInfo> = RefCell::new(StateInfo::default());
     static CHAINS: RefCell<HashMap<u32, ChainState>>  = RefCell::new(HashMap::new());
     static LOGS: RefCell<VecDeque<String>> = RefCell::new(VecDeque::default());
+    static RECORDS: RefCell<RecordDB> = RefCell::new(RecordDB::new());
 }
 
 #[query]
@@ -103,7 +105,7 @@ async fn set_fetch_period(fetch_root_period: u64, fetch_roots_period: u64) -> Re
 fn add_chain(
     chain_id: u32, 
     urls: Vec<String>, 
-    gateway_canster_addr: Principal,
+    gateway_canister_addr: Principal,
     omnic_addr: String, 
     start_block: u64
 ) -> Result<bool, String> {
@@ -117,27 +119,46 @@ fn add_chain(
                 ChainConfig::new(
                     ChainType::Evm,
                     chain_id,
-                    urls,
-                    gateway_canster_addr,
-                    omnic_addr.into(),
+                    urls.clone(),
+                    gateway_canister_addr,
+                    omnic_addr.clone(),
                     start_block,
                 )
             ));
         }
     });
+    // add record
+    add_record(
+        ic_cdk::caller(), 
+        "add_chain".to_string(), 
+        DetailsBuilder::new()
+            .insert("chain_id", DetailValue::U64(chain_id as u64))
+            .insert("urls", DetailValue::Text(urls.join(",")))
+            .insert("gatewat_addr", DetailValue::Principal(gateway_canister_addr))
+            .insert("omnic_addr", DetailValue::Text(omnic_addr))
+            .insert("start_block", DetailValue::U64(start_block))
+    );
     Ok(true)
 }
 
 #[update(name = "delete_chain", guard = "is_authorized")]
 #[candid_method(update, rename = "delete_chain")]
 fn delete_chain(chain_id: u32) -> Result<bool, String> {
-    CHAINS.with(|c| {
+    match CHAINS.with(|c| {
         let mut chains = c.borrow_mut();
-        match chains.remove(&chain_id) {
-            Some(_) => { Ok(true) }
-            None => { Err("Chain id not exist".to_string()) }
+        chains.remove(&chain_id)
+    }) {
+        Some(_) => { 
+            add_record(
+                ic_cdk::caller(), 
+                "delete_chain".to_string(), 
+                DetailsBuilder::new()
+                    .insert("chain_id", DetailValue::U64(chain_id as u64))
+            );
+            Ok(true) 
         }
-    })
+        None => { Err("Chain id not exist".to_string()) }
+    }
 }
 
 // update chain settings
@@ -146,7 +167,7 @@ fn delete_chain(chain_id: u32) -> Result<bool, String> {
 fn update_chain(
     chain_id: u32, 
     urls: Vec<String>, 
-    gateway_canster_addr: Principal,
+    gateway_canister_addr: Principal,
     omnic_addr: String, 
     start_block: u64
 ) -> Result<bool, String> {
@@ -158,14 +179,24 @@ fn update_chain(
                 ChainConfig::new(
                     ChainType::Evm,
                     chain_id,
-                    urls,
-                    gateway_canster_addr,
-                    omnic_addr.into(),
+                    urls.clone(),
+                    gateway_canister_addr,
+                    omnic_addr.clone(),
                     start_block,
                 )
             ));
         }
     });
+    add_record(
+        ic_cdk::caller(), 
+        "update_chain".to_string(), 
+        DetailsBuilder::new()
+            .insert("chain_id", DetailValue::U64(chain_id as u64))
+            .insert("urls", DetailValue::Text(urls.join(",")))
+            .insert("gateway_addr", DetailValue::Principal(gateway_canister_addr))
+            .insert("omnic_addr", DetailValue::Text(omnic_addr))
+            .insert("start_block", DetailValue::U64(start_block))
+    );
     Ok(true)
 }
 
@@ -182,6 +213,13 @@ fn set_next_index(
         let mut chain = chains.get_mut(&chain_id).expect("chain id not found!");
         chain.next_index = next_index;
     });
+    add_record(
+        ic_cdk::caller(), 
+        "set_next_index".to_string(), 
+        DetailsBuilder::new()
+            .insert("chain_id", DetailValue::U64(chain_id as u64))
+            .insert("next_index", DetailValue::U64(next_index as u64))
+    );
     Ok(true)
 }
 
@@ -401,13 +439,11 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
     });
     // send msg to destination
     // TODO reset next index after call error?
-    if m.destination == 0 {
+    let res = if m.destination == 0 {
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
         add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
-        let res = call_to_canister(recipient, &m).await?;
-        let time = ic_cdk::api::time();
-        Ok((res, time))
+        call_to_canister(recipient, &m).await
     } else {
         // send tx to dst chain
         // call_to_chain(m.destination, message).await
@@ -419,10 +455,31 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         if caller == "" || omnic_addr == "" {
             return Err("caller address is empty".into());
         }
-        let res = call_to_chain(caller, omnic_addr, rpc, m.destination, message).await?;
-        let time = ic_cdk::api::time();
-        Ok((res, time))
-    }
+        call_to_chain(caller, omnic_addr, rpc, m.destination, message).await
+    };
+    
+    add_record(
+        ic_cdk::caller(), 
+        "process_message".to_string(), 
+        DetailsBuilder::new()
+            .insert("origin", DetailValue::U64(m.origin as u64))
+            .insert("send", DetailValue::Text(m.sender.to_string()))
+            .insert("nonce", DetailValue::U64(m.nonce as u64))
+            .insert("destination", DetailValue::U64(m.destination as u64))
+            .insert("recipient", DetailValue::Text(m.recipient.to_string()))
+            .insert("result", DetailValue::Text(
+                match res.clone() {
+                    Ok(o) => {
+                        o
+                    }
+                    Err(e) => {
+                        e
+                    }
+                }
+            ))
+    );
+    
+    res.map(|o| (o, ic_cdk::api::time()))
 }
 
 #[update(name = "add_owner", guard = "is_authorized")]
@@ -441,6 +498,57 @@ async fn remove_owner(owner: Principal) {
     });
 }
 
+#[query(name = "get_record_size", guard = "is_authorized")]
+#[candid_method(query, rename = "get_record_size")]
+fn get_record_size(operation: Option<String>) -> usize {
+    RECORDS.with(|r| {
+        let records = r.borrow();
+        records.size(operation)
+    })
+}
+
+#[query(name = "get_record", guard = "is_authorized")]
+#[candid_method(query, rename = "get_record")]
+fn get_record(id: usize) -> Option<Record> {
+    RECORDS.with(|r| {
+        let records = r.borrow();
+        records.load_by_id(id)
+    })
+}
+
+#[query(name = "get_records", guard = "is_authorized")]
+#[candid_method(query, rename = "get_records")]
+fn get_records(range: Option<(usize, usize)>, operation: Option<String>) -> Vec<Record> {
+    RECORDS.with(|r| {
+        let records = r.borrow();
+        let (start, end) = match range {
+            Some((s, e)) => {
+                (s, e)
+            }
+            None => {
+                // range not set, default to last 50 records
+                let size = records.size(operation.clone());
+                if size < 50 {
+                    (0, size)
+                } else {
+                    (size-50, size)
+                }
+            }
+        };
+
+        match operation {
+            Some(op) => {
+                // get specific operation
+                records.load_by_opeation(op, start, end)
+            }
+            None => {
+                // operation not set, get all
+                records.load_by_id_range(start, end)
+            }
+        }
+    })
+}
+
 #[pre_upgrade]
 fn pre_upgrade() {
     let chains = CHAINS.with(|c| {
@@ -449,15 +557,20 @@ fn pre_upgrade() {
     let state_info = STATE_INFO.with(|s| {
         s.replace(StateInfo::default())
     });
-    ic_cdk::storage::stable_save((chains, state_info,)).expect("pre upgrade error");
+    let records = RECORDS.with(|r| {
+        r.replace(RecordDB::new())
+    });
+    ic_cdk::storage::stable_save((chains, state_info, records, )).expect("pre upgrade error");
 }
 
 #[post_upgrade]
 fn post_upgrade() {
     let (chains, 
         state_info,
+        records,
     ): (HashMap<u32, ChainState>, 
         StateInfo, 
+        RecordDB,
     ) = ic_cdk::storage::stable_restore().expect("post upgrade error");
     
     CHAINS.with(|c| {
@@ -466,12 +579,15 @@ fn post_upgrade() {
     STATE_INFO.with(|s| {
         s.replace(state_info);
     });
+    RECORDS.with(|r| {
+        r.replace(records);
+    });
 }
 
-/// get the unix timestamp in second
-// fn get_time() -> u64 {
-//     ic_cdk::api::time() / 1000000000
-// }
+// get the unix timestamp in second
+fn get_time() -> u64 {
+    ic_cdk::api::time() / 1000000000
+}
 
 fn is_authorized() -> Result<(), String> {
     let user = ic_cdk::api::caller();
@@ -495,8 +611,26 @@ fn add_log(log: String) {
     });
 }
 
+fn add_record(caller: Principal, op: String, details_builder: DetailsBuilder) {
+    RECORDS.with(|r| {
+        let mut records = r.borrow_mut();
+        records.append(
+            caller, 
+            get_time(), 
+            op, 
+            details_builder.build()
+        );
+    });
+}
 
+#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
+    // The line below generates did types and service definition from the
+    // methods annotated with `candid_method` above. The definition is then
+    // obtained with `__export_service()`.
     candid::export_service!();
     std::print!("{}", __export_service());
 }
+
+#[cfg(any(target_arch = "wasm32", test))]
+fn main() {}

@@ -1,3 +1,4 @@
+use crate::state::DetailValue;
 
 use std::collections::HashMap;
 
@@ -55,5 +56,32 @@ pub fn check_roots_result(roots: &HashMap<H256, usize>, total_result: usize) -> 
 
         // otherwise return true and root of most count
         return (true, possible_root.clone())
+    }
+}
+
+/// Allows creating details for an event.
+#[derive(Default, Clone)]
+pub struct DetailsBuilder {
+    inner: Vec<(String, DetailValue)>,
+}
+
+impl DetailsBuilder {
+    /// Creates a new, empty builder.
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Inserts a new element.
+    #[inline(always)]
+    pub fn insert(mut self, key: impl Into<String>, value: impl Into<DetailValue>) -> Self {
+        self.inner.push((key.into(), value.into()));
+
+        self
+    }
+
+    #[inline(always)]
+    pub fn build(self) -> Vec<(String, DetailValue)> {
+        self.inner
     }
 }
