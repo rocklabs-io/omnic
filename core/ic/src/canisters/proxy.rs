@@ -443,7 +443,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
         // take last 10 bytes
         let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
         add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
-        call_to_canister(recipient, &m).await
+        call_to_canister(recipient, m.to_leaf().0.to_vec(), &m).await
     } else {
         // send tx to dst chain
         // call_to_chain(m.destination, message).await

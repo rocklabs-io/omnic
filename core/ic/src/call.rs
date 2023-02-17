@@ -6,10 +6,10 @@ use crate::types::Message;
 use crate::chains::EVMChainClient;
 use crate::traits::chain::HomeContract;
 
-pub async fn call_to_canister(recipient: Principal, m: &Message) -> Result<String, String> {
+pub async fn call_to_canister(recipient: Principal, msg_hash: Vec<u8>, m: &Message) -> Result<String, String> {
     // call ic recipient canister
     let ret: CallResult<(Result<String, String>,)> = 
-        call(recipient, "handle_message", (m.origin, m.sender.as_bytes(), m.nonce, m.body.clone(), )).await;
+        call(recipient, "handle_message", (msg_hash, m.origin, m.sender.as_bytes(), m.nonce, m.body.clone(), )).await;
     match ret {
         Ok((res, )) => {
             match res {
