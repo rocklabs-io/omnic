@@ -409,6 +409,7 @@ async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String>
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
 async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<(String, u64), String> {
+    let origin_caller = ic_cdk::caller();
     // verify message proof: use proof, message to calculate the merkle root, 
     // check if the root exists in corresponding chain state
     // if valid, call dest canister.handleMessage or send tx to dest chain
@@ -459,7 +460,7 @@ async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32)
     };
     
     add_record(
-        ic_cdk::caller(), 
+        origin_caller, 
         "process_message".to_string(), 
         DetailsBuilder::new()
             .insert("origin", DetailValue::U64(m.origin as u64))
