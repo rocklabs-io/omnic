@@ -1,57 +1,78 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
+//external
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+
 
 //internal
-import {QueueLib} from "./libs/Queue.sol";
-import {QueueManager} from "./utils/QueueManager.sol";
-import {MerkleLib} from "./libs/Merkle.sol";
-import {Types} from "./libs/Types.sol";
 import {TypeCasts} from "./utils/Utils.sol";
+import {IOmnic} from "./interfaces/IOmnic.sol";
 import {IOmnicReciver} from "./interfaces/IOmnicReciver.sol";
 import {IOmnicFeeManager} from "./interfaces/IOmnicFeeManager.sol";
-import {OmnicBase} from "./OmnicBase.sol";
-
-
 
 // Omnic Crosschain message passing protocol core contract
-contract Omnic is QueueManager, OmnicBase {
-    using QueueLib for QueueLib.Queue;
-    using MerkleLib for MerkleLib.Tree;
+contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
-    MerkleLib.Tree public tree;
 
-    // re-entrancy
-    uint8 internal entered;
-
-    // ic canister which is responsible for message management, verification and update
-    address public omnicProxyCanisterAddr;
-
+    // ================================ Variables ===================================
     // Maximum bytes per message = 2 KiB
     // (somewhat arbitrarily set to begin)
     uint256 public constant MAX_MESSAGE_BODY_BYTES = 2 * 2**10;
-
-    // chainId => next available nonce for the chainId
-    mapping(uint32 => uint32) public nonces;
-
+    uint32 public chainId;
+    // ic canister which is responsible for message management, verification and update
+    address public omnicProxyCanisterAddr;
      // Token and Contracts
-    IERC20 public erc20FeeToken; // choose a ERC20 token as fee token specified by omnic owner
     IOmnicFeeManager public omnicFeeManager;
-
-    uint256 public nativeFees;
+    // Token and Contracts
+    IERC20 public erc20FeeToken; // choose a ERC20 token as fee token specified by omnic owner
     // ERC20 token => fee amount
     mapping(address => uint256) public erc20Fees; // record different ERC20 fee amount
+    uint256 public nativeFees;
 
     mapping(address => bool) public whitelisted; // whitelisted addresses can send msg for free
+
+    // inboundNonce = [srcChainId][srcAddress].
+    mapping(uint32 => mapping(bytes32 => uint64)) public inboundNonce;
+    // outboundNonce = [dstChainId][srcAddress].
+    mapping(uint32 => mapping(address => uint64)) public outboundNonce;
+    // CacheMessage = [srcChainId][srcAddress]
+    mapping(uint32 => mapping(bytes32 => CacheMessage)) public cacheMessage;
 
     // gap for upgrade safety
     uint256[49] private __GAP;
 
-    // ============ modifiers  ============
+    // ============================== Modifiers ====================================
+
+    // send and receive nonreentrant lock
+    uint8 internal constant _UN_LOCKED = 1;
+    uint8 internal constant _LOCKED = 2;
+    uint8 internal _sendEnteredState = 1;
+    uint8 internal _processEnteredState = 1;
+
+    modifier sendNonReentrant() {
+        require(
+            _sendEnteredState == _UN_LOCKED,
+            "OmnicEndpoint: no send reentrancy"
+        );
+        _sendEnteredState = _LOCKED;
+        _;
+        _sendEnteredState = _UN_LOCKED;
+    }
+    modifier receiveNonReentrant() {
+        require(
+            _processEnteredState == _UN_LOCKED,
+            "OmnicEndpoint: no receive reentrancy"
+        );
+        _processEnteredState = _LOCKED;
+        _;
+        _processEnteredState = _UN_LOCKED;
+    }
 
     modifier onlyProxyCanister() {
         require(msg.sender == omnicProxyCanisterAddr, "!proxyCanisterAddress");
@@ -61,10 +82,11 @@ contract Omnic is QueueManager, OmnicBase {
     // ============ Events  ============
     event SendMessage(
         bytes32 indexed messageHash,
-        uint256 indexed leafIndex,
-        uint32 indexed dstChainId,
-        uint32 nonce,
-        bytes message
+        bytes message,
+        uint32 indexed srcChainId,
+        address sender,
+        uint32 indexed destChainId,
+        bytes32 receiptAddress
     );
 
     event ProcessMessage(
@@ -73,23 +95,45 @@ contract Omnic is QueueManager, OmnicBase {
         bool success
     );
 
+    event InvalidTransaction(
+        uint32 indexed srcChainId,
+        bytes32 srcAddress,
+        address indexed dstAddress,
+        uint64 nonce,
+        bytes32 messageHash
+    );
+
+    event SetCacheMessage(
+        uint32 srcChainId,
+        bytes32 srcAddress,
+        address dstAddress,
+        uint64 nonce,
+        bytes message,
+        bytes exceptions
+    );
+
+    event CacheClean(
+        uint32 srcChainId,
+        bytes32 srcAddress,
+        address dstAddress,
+        uint64 nonce
+    );
+
+    event ForceResumeReceive(uint32 chainId, bytes32 srcAddress);
+
     event UpdateProxyCanister(
         address oldProxyCanisterAddr,
         address newProxyCanisterAddr
     );
 
     // ============== Start ===============
-    constructor() {
-        entered = 1;
-    }
+    constructor() {}
 
     function initialize(address proxyCanisterAddr, address feeManagerAddr) public initializer {
-        __QueueManager_initialize();
-        __OmnicBase_initialize();
-        entered = 1;
+        __Ownable_init();
+        chainId = uint32(block.chainid); 
         omnicProxyCanisterAddr = proxyCanisterAddr;
         omnicFeeManager = IOmnicFeeManager(feeManagerAddr);
-        erc20FeeToken = IERC20(omnicFeeManager.getERC20FeeToken());
     }
 
     function sendMessage(
@@ -98,7 +142,7 @@ contract Omnic is QueueManager, OmnicBase {
         bytes memory _payload,
         address payable _refundAddress,
         address _erc20PaymentAddress
-    ) public payable {
+    ) external payable override sendNonReentrant {
         require(_payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
         // compute all the fees
         uint256 nativeProtocolFee = _handleProtocolFee(
@@ -112,18 +156,12 @@ contract Omnic is QueueManager, OmnicBase {
             nativeProtocolFee <= msg.value,
             "Omnic: not enough value for fees"
         );
-        // refund if sent too much
-        uint256 amount = msg.value.sub(nativeProtocolFee);
-        if (amount > 0) {
-            (bool success, ) = _refundAddress.call{value: amount}("");
-            require(success, "Omnic: failed to refund");
-        }
 
         // get the next nonce for the destination domain, then increment it
-        uint32 _nonce = nonces[_dstChainId];
-        nonces[_dstChainId] = _nonce + 1;
+        uint64 _nonce = ++outboundNonce[_dstChainId][msg.sender];
 
-        bytes memory _message = Types.formatMessage(
+        Message memory m = Message (
+            IOmnicReciver.MessageType.SYN,
             chainId,
             TypeCasts.addressToBytes32(msg.sender),
             _nonce,
@@ -131,18 +169,24 @@ contract Omnic is QueueManager, OmnicBase {
             _recipientAddress,
             _payload
         );
+        bytes memory _message = abi.encode(m);
         bytes32 _messageHash = keccak256(_message);
-        tree.insert(_messageHash);
-        // enqueue the new Merkle root after inserting the message
-        queue.enqueue(tree.root());
 
         emit SendMessage(
             _messageHash,
-            tree.count - 1,
+            _message,
             chainId,
-            _nonce,
-            _message
+            msg.sender,
+            _dstChainId,
+            _recipientAddress
         );
+
+        // refund if sent too much
+        uint256 amount = msg.value.sub(nativeProtocolFee);
+        if (amount > 0) {
+            (bool success, ) = _refundAddress.call{value: amount}("");
+            require(success, "Omnic: failed to refund");
+        }
     }
 
     // fee free function for whitelisted contracts
@@ -151,14 +195,15 @@ contract Omnic is QueueManager, OmnicBase {
         uint32 _dstChainId,
         bytes32 _recipientAddress,
         bytes memory _payload
-    ) public {
+    ) external override sendNonReentrant {
         require(whitelisted[msg.sender], "not whitelisted caller");
         require(_payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
         // get the next nonce for the destination domain, then increment it
-        uint32 _nonce = nonces[_dstChainId];
-        nonces[_dstChainId] = _nonce + 1;
+        // get the next nonce for the destination domain, then increment it
+        uint64 _nonce = ++outboundNonce[_dstChainId][msg.sender];
 
-        bytes memory _message = Types.formatMessage(
+        Message memory m = Message (
+            IOmnicReciver.MessageType.SYN,
             chainId,
             TypeCasts.addressToBytes32(msg.sender),
             _nonce,
@@ -166,55 +211,191 @@ contract Omnic is QueueManager, OmnicBase {
             _recipientAddress,
             _payload
         );
+        bytes memory _message = abi.encode(m);
         bytes32 _messageHash = keccak256(_message);
-        tree.insert(_messageHash);
-        // enqueue the new Merkle root after inserting the message
-        queue.enqueue(tree.root());
 
         emit SendMessage(
             _messageHash,
-            tree.count - 1,
+            _message,
             chainId,
-            _nonce,
-            _message
+            msg.sender,
+            _dstChainId,
+            _recipientAddress
         );
+    }
+
+    // ==================================== Internal Func =======================================
+
+    function _isContract(address addr) internal view returns (bool) {
+        uint size;
+        assembly {
+            size := extcodesize(addr)
+        }
+        return size != 0;
+    }
+
+    function _processMessage(Message memory m) internal returns(bool) {
+        require(m.dstChainId == chainId, "!destination");
+        require(
+            m.payload.length <= MAX_MESSAGE_BODY_BYTES,
+            "Omnic: message too long"
+        );
+        bytes32 _messageHash = keccak256(m.payload);
+
+        // if the dst is not a contract, then emit and return early. This will break inbound nonces, but this particular
+        // path is already broken and wont ever be able to deliver anyways
+        address dstAddress = TypeCasts.bytes32ToAddress(m.recipient);
+        if (!_isContract(dstAddress)) {
+            emit InvalidTransaction(
+                m.srcChainId,
+                m.srcSenderAddress,
+                dstAddress,
+                m.nonce,
+                _messageHash
+            );
+            return false;
+        }
+       require(
+            m.nonce == ++inboundNonce[m.srcChainId][m.srcSenderAddress],
+            "Omnic: wrong nonce"
+        );
+
+        // cache failed message
+        CacheMessage storage cache = cacheMessage[m.srcChainId][
+            m.srcSenderAddress
+        ];
+        require(
+            cache.msgHash == bytes32(0),
+            "Omnic: in message blocking"
+        );
+
+        try
+            IOmnicReciver(dstAddress).handleMessage(
+                m.t,
+                m.srcChainId,
+                m.srcSenderAddress,
+                m.nonce,
+                m.payload
+            )
+        {
+            // emit process results
+            emit ProcessMessage(_messageHash, "", true);
+            return true;
+        } catch (bytes memory e) {
+            // revert nonce if any uncaught errors/exceptions if the ua chooses the blocking mode
+            cacheMessage[m.srcChainId][m.srcSenderAddress] = CacheMessage(
+                uint64(m.payload.length),
+                dstAddress,
+                keccak256(m.payload)
+            );
+            emit SetCacheMessage(
+                m.srcChainId,
+                m.srcSenderAddress,
+                dstAddress,
+                m.nonce,
+                m.payload,
+                e
+            );
+            return false;
+        }
     }
 
     // only omnic canister can call this func
     function processMessage(bytes memory _message)
-        public
+        external override
         onlyProxyCanister
+        receiveNonReentrant
         returns (bool success)
     {
         // decode message
-        (
-            uint32 _srcChainId,
-            bytes32 _srcSenderAddress,
-            uint32 _nonce,
-            uint32 _dstChainId,
-            bytes32 _recipientAddress,
-            bytes memory _payload
-        ) = abi.decode(
+        Message memory m = abi.decode(
                 _message,
-                (uint32, bytes32, uint32, uint32, bytes32, bytes)
+                (Message)
             );
-        bytes32 _messageHash = keccak256(_message);
-        require(_dstChainId == chainId, "!destination");
-        // check re-entrancy guard
-        require(entered == 1, "!reentrant");
-        entered = 0;
 
-        // call handle function
-        IOmnicReciver(TypeCasts.bytes32ToAddress(_recipientAddress))
-            .handleMessage(_srcChainId, _srcSenderAddress, _nonce, _payload);
-        // emit process results
-        emit ProcessMessage(_messageHash, "", true);
-        // reset re-entrancy guard
-        entered = 1;
-        // return true
+        return _processMessage(m);
+    }
+
+    function processMessageBatch(bytes[] memory _messages)
+        external override
+        onlyProxyCanister
+        receiveNonReentrant
+        returns (bool success)
+    {
+        for(uint i =0; i < _messages.length; i++){
+            Message memory m = abi.decode(
+                _messages[i],
+                (Message)
+            );
+            _processMessage(m);
+        }
         return true;
     }
 
+    function retryProcessMessage(
+        IOmnicReciver.MessageType t,
+        uint32 _srcChainId,
+        bytes32 _srcSenderAddress,
+        bytes calldata _message
+    ) external override receiveNonReentrant {
+        CacheMessage storage cache = cacheMessage[_srcChainId][
+            _srcSenderAddress
+        ];
+        require(
+            cache.msgHash != bytes32(0),
+            "Omnic: no stored payload"
+        );
+        require(
+            _message.length == cache.msgLength &&
+                keccak256(_message) == cache.msgHash,
+            "Omnic: invalid payload"
+        );
+
+        address dstAddress = cache.dstAddress;
+        // empty the cacheMessage
+        cache.msgLength = 0;
+        cache.dstAddress = address(0);
+        cache.msgHash = bytes32(0);
+
+        uint64 nonce = inboundNonce[_srcChainId][_srcSenderAddress];
+
+        IOmnicReciver(dstAddress).handleMessage(
+            t,
+            _srcChainId,
+            _srcSenderAddress,
+            nonce,
+            _message
+        );
+        emit CacheClean(_srcChainId, _srcSenderAddress, dstAddress, nonce);
+    }
+
+    function forceResumeReceive(uint32 _srcChainId, bytes32 _srcSenderAddress)
+        external
+        override
+    {
+        CacheMessage storage cache = cacheMessage[_srcChainId][
+            _srcSenderAddress
+        ];
+        // revert if no messages are cached
+        require(
+            cache.msgHash != bytes32(0),
+            "Omnic: no stored payload"
+        );
+        require(
+            cache.dstAddress == msg.sender,
+            "Omnic: invalid caller"
+        );
+
+        // empty the cacheMessage
+        cache.msgLength = 0;
+        cache.dstAddress = address(0);
+        cache.msgHash = bytes32(0);
+
+        // emit the event with the new nonce
+        emit ForceResumeReceive(_srcChainId, _srcSenderAddress);
+    }
+
+    // ///////////////////
     function _handleProtocolFee(
         address _srcSenderAddress,
         address _erc20PaymentAddress,
@@ -290,15 +471,5 @@ contract Omnic is QueueManager, OmnicBase {
         address _oldProxyCanisterAddr = omnicProxyCanisterAddr;
         omnicProxyCanisterAddr = _newProxyCanisterAddr;
         emit UpdateProxyCanister(_oldProxyCanisterAddr, _newProxyCanisterAddr);
-    }
-
-    // ============ Public Functions  ============
-    function getLatestRoot() public view returns (bytes32) {
-        require(queue.length() != 0, "no item in queue");
-        return queue.lastItem();
-    }
-
-    function rootExists(bytes32 _root) public view returns (bool) {
-        return queue.contains(_root);
     }
 }
