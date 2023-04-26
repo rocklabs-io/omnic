@@ -1,0 +1,54 @@
+{
+	"OmnicCanisterId": "rrkah-fqaaa-aaaaa-aaaaq-cai",
+	"OmnicCanisterAddr": "0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
+	"ChainIds": {
+		"ic": 0,
+		"goerli": 5,
+		"mumbai": 80001,
+		"arbi_goerli": 421613,
+		"op_goerli": 430
+	},
+	"networks": {
+		"goerli": {
+			"UpgradeBeaconController": "",
+			"UpgradeBeacon": "",
+			"UpgradeBeaconProxy": "",
+			"Implementation": "",
+			"Demo": "",
+			"Bridge": "0x28dCd64EFE0B28Dec5A6e4E0F6b8dc863E76120e",
+			"USDT": "0xf972a2E180aB1ee74161b28d173b83987dEF1Af6",
+			"OmnicFeeManager": "0xcDb431Ce81268767DD05416527ae2076c2b8E693"
+		},
+		"localhost": {
+			"UpgradeBeaconController": "",
+			"UpgradeBeacon": "",
+			"UpgradeBeaconProxy": "",
+			"Implementation": "",
+			"Demo": ""
+		},
+		"mumbai": {
+			"UpgradeBeaconController": "",
+			"UpgradeBeacon": "",
+			"UpgradeBeaconProxy": "",
+			"Implementation": "",
+			"Demo": "",
+			"Bridge": "0xa9513B10bF367948e9cF4122a12B7dc52DFDc6c6",
+			"USDT": "0x4a22D4DEdbF85Ee9F1fbC4aBfD1349D56C905fDC",
+			"OmnicFeeManager": "0xb297C8A1af6981C992De84272BBaBFde3EB1F458"
+		},
+		"arbi_goerli": {
+			"UpgradeBeaconController": "",
+			"UpgradeBeacon": "",
+			"UpgradeBeaconProxy": "",
+			"Implementation": "",
+			"Demo": ""
+		},
+		"op_goerli": {
+			"UpgradeBeaconController": "",
+			"UpgradeBeacon": "",
+			"UpgradeBeaconProxy": "",
+			"Implementation": "",
+			"Demo": ""
+		}
+	}
+}

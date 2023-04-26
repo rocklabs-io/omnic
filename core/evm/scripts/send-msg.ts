@@ -4,21 +4,12 @@ import { getContractAddr, getChainId } from "./helpers";
 const hre = require("hardhat");
 
 const send_msg = async function(chain: string, dst_chain: string, recipient: string, data: string) {
-  const Omnic = await ethers.getContractFactory("Omnic");
-  const beaconProxyAddr = getContractAddr(chain, "UpgradeBeaconProxy");
-  const omnic = await Omnic.attach(beaconProxyAddr);
-
-  const addrs = await ethers.getSigners();
-  let caller = addrs[0].address;
+  const demoAddr = getContractAddr(chain, "Demo");
+  const demo = await ethers.getContractAt("DemoApp", demoAddr);
 
   console.log(`sending message from ${chain} to ${dst_chain}, recipient: ${recipient}, data: ${data}`);
-  let tx = await omnic.sendMessage(
-    getChainId(dst_chain), recipient, data, caller, caller, {
-      value: ethers.utils.parseEther("0.001")
-    }
-  );
+  let tx = await demo.sendMessage(getChainId(dst_chain), recipient, data);
   console.log("txhash:", tx.hash);
-  console.log("new merkle root:", await omnic.getLatestRoot());
 }
 
 async function main() {

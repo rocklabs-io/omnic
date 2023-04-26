@@ -12,7 +12,7 @@ compile:
 npx hardhat compile
 ```
 
-put your infura key & test private key to .env:
+put your infura key & test private key to `.env`:
 ```
 TEST_PRIV_KEY=0x...
 TEST_ADDR=0x..
@@ -20,9 +20,23 @@ INFURA_API_KEY=...
 ETHERSCAN_API_KEY=...
 ```
 
-deployment process:
-1. deploy-impl.ts
-2. deploy-proxy.ts
+## Deploy
+### deployment process:
+  ```shell
+  npx hardhat run scripts/deploy-feemanager.ts
+  npx hardhat run scripts/deploy-impl.ts
+  npx hardhat run scripts/deploy-proxy.ts
+  ```
 
-upgrade process:
+### upgrade process:
+> if you want to upgrade omnic contract, please use this script to upgrade
 1. upgrade-impl.ts
+
+
+## Example
+  ```shell
+  // 1. deplot demo contract
+  npx hardhat run scripts/deploy-demo.ts
+  // 2. send message from goerli to mumbai
+  npx hardhat run scripts/send-msg.ts
+  ```

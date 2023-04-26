@@ -5,12 +5,12 @@ export const getChainId = function(network: string | number) {
     if(typeof network == "number") {
         return network;
     }
-    let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+    let config = JSON.parse(fs.readFileSync('./constants/config.json', 'utf-8'));
     return config.ChainIds[network];
 }
 
 export const updateConfig = function (network: string, contract: string, addr: string) {
-    let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+    let config = JSON.parse(fs.readFileSync('./constants/config.json', 'utf-8'));
     if(config.networks[network] == undefined) {
         config.networks[network] = {
             "UpgradeBeaconController": "",
@@ -26,7 +26,7 @@ export const updateConfig = function (network: string, contract: string, addr: s
 }
 
 export const getContractAddr = function(network: string, contract: string) {
-    let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+    let config = JSON.parse(fs.readFileSync('./constants/config.json', 'utf-8'));
     if(config.networks[network] == undefined) {
         return null;
     }
@@ -41,7 +41,7 @@ export const getContractAddr = function(network: string, contract: string) {
 }
 
 export const getProxyCanisterAddr = function() {
-    let config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+    let config = JSON.parse(fs.readFileSync('./constants/config.json', 'utf-8'));
     return config.OmnicCanisterAddr;
 }
 

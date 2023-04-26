@@ -14,7 +14,7 @@
     "@openzeppelin/contracts": "^4.7.3",
     "@openzeppelin/contracts-upgradeable": "^4.8.0-rc.1",
     "dotenv": "^16.0.1",
-    "hardhat": "^2.11.2"
+    "hardhat": "^2.14.0"
   },
   "devDependencies": {
     "@ethersproject/abi": "^5.4.7",
