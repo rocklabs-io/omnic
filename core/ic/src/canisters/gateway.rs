@@ -31,8 +31,7 @@ ic_cron::implement_cron!();
 
 #[derive(CandidType, Deserialize, Clone)]
 enum Task {
-    FetchRoots,
-    FetchRoot
+    Scan
 }
 
 thread_local! {
@@ -57,12 +56,8 @@ fn get_logs() -> Vec<String> {
     })
 }
 
-fn get_fetch_root_period() -> u64 {
-    STATE_INFO.with(|s| s.borrow().fetch_root_period)
-}
-
-fn get_fetch_roots_period() -> u64 {
-    STATE_INFO.with(|s| s.borrow().fetch_roots_period)
+fn get_scan_event_period() -> u64 {
+    STATE_INFO.with(|s| s.borrow().scan_event_period)
 }
 
 fn get_query_rpc_number() -> u64 {
@@ -80,21 +75,21 @@ fn init() {
 
     // set up cron job
     cron_enqueue(
-        Task::FetchRoots, 
+        Task::Scan, 
         ic_cron::types::SchedulingOptions {
-            delay_nano: get_fetch_roots_period(),
-            interval_nano: get_fetch_roots_period(),
+            delay_nano: get_scan_event_period(),
+            interval_nano: get_scan_event_period(),
             iterations: Iterations::Infinite,
         },
     ).unwrap();
 }
 
 #[update(guard = "is_authorized")]
-#[candid_method(update, rename = "set_fetch_period")]
-async fn set_fetch_period(fetch_root_period: u64, fetch_roots_period: u64) -> Result<bool, String> {
+#[candid_method(update, rename = "set_scan_event_period")]
+async fn set_scan_event_period(scan_event_period: u64) -> Result<bool, String> {
     STATE_INFO.with(|s| {
         let mut s = s.borrow_mut();
-        s.set_fetch_period(fetch_root_period, fetch_roots_period);
+        s.set_scan_period(scan_event_period);
     });
     Ok(true)
 }
@@ -160,19 +155,6 @@ fn add_urls(
     Ok(true)
 }
 
-// set next index
-#[update(guard = "is_authorized")]
-#[candid_method(update, rename = "set_next_index")]
-fn set_next_index(
-    next_index: u32
-) -> Result<bool, String> {
-    CHAINS.with(|chain| {
-        let mut chain = chain.borrow_mut();
-        chain.next_index = next_index;
-    });
-    Ok(true)
-}
-
 #[query(name = "get_chain")]
 #[candid_method(query, rename = "get_chain")]
 fn get_chain() -> Result<ChainState, String> {
@@ -182,30 +164,30 @@ fn get_chain() -> Result<ChainState, String> {
     })
 }
 
-#[query(name = "get_info", guard = "is_authorized")]
-#[candid_method(query, rename = "get_info")]
-fn get_info() -> Result<StateInfo, String> {
+#[query(name = "get_state_info", guard = "is_authorized")]
+#[candid_method(query, rename = "get_state_info")]
+fn get_state_info() -> Result<StateInfo, String> {
     STATE_INFO.with(|info| {
         let info = info.borrow();
         Ok(info.clone())
     })
 }
 
-#[update(name = "fetch_root")]
-#[candid_method(update, rename = "fetch_root")]
-async fn fetch(height: u64) -> Result<String, String> {
-    let (_, omnic_addr, rpc) = CHAINS.with(|chain| {
-        let chain = chain.borrow();
-        (chain.canister_addr.clone(), chain.config.omnic_addr.clone(), chain.config.rpc_urls[0].clone())
-    });
+// #[update(name = "fetch_root")]
+// #[candid_method(update, rename = "fetch_root")]
+// async fn fetch(height: u64) -> Result<String, String> {
+//     let (_, omnic_addr, rpc) = CHAINS.with(|chain| {
+//         let chain = chain.borrow();
+//         (chain.canister_addr.clone(), chain.config.omnic_addr.clone(), chain.config.rpc_urls[0].clone())
+//     });
 
-    let client = EVMChainClient::new(rpc, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
-        .map_err(|e| format!("init client failed: {:?}", e))?;
-    client.get_latest_root(Some(height))
-        .await
-        .map(|v| hex::encode(v))
-        .map_err(|e| format!("get root err: {:?}", e))
-}
+//     let client = EVMChainClient::new(rpc, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
+//         .map_err(|e| format!("init client failed: {:?}", e))?;
+//     client.get_latest_root(Some(height))
+//         .await
+//         .map(|v| hex::encode(v))
+//         .map_err(|e| format!("get root err: {:?}", e))
+// }
 
 #[update(name = "get_tx_count")]
 #[candid_method(update, rename = "get_tx_count")]
@@ -267,44 +249,55 @@ async fn get_gas_price() -> Result<u64, String> {
         .map_err(|e| format!("{:?}", e))
 }
 
-// relayer canister call this to check if a message is valid before process_message
-#[query(name = "is_valid")]
-#[candid_method(query, rename = "is_valid")]
-fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
-    // verify message proof: use proof, message to calculate the merkle root, 
-    // check if the merkle root exists in corresponding chain state
-    let m = Message::from_raw(message.clone()).map_err(|e| {
-        format!("parse message from bytes failed: {:?}", e)
-    })?;
-    let h = m.to_leaf();
-    let p_h256: Vec<H256> = proof.iter().map(|v| H256::from_slice(&v)).collect();
-    let p: [H256; TREE_DEPTH] = p_h256.try_into().map_err(|e| format!("parse proof failed: {:?}", e))?;
-    // calculate root with leaf hash & proof
-    let root = merkle_root_from_branch(h, &p, TREE_DEPTH, leaf_index as usize);
-    // do not add optimistic yet
+// // relayer canister call this to check if a message is valid before process_message
+// #[query(name = "is_valid")]
+// #[candid_method(query, rename = "is_valid")]
+// fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
+//     // verify message proof: use proof, message to calculate the merkle root, 
+//     // check if the merkle root exists in corresponding chain state
+//     let m = Message::from_raw(message.clone()).map_err(|e| {
+//         format!("parse message from bytes failed: {:?}", e)
+//     })?;
+//     let h = m.to_leaf();
+//     let p_h256: Vec<H256> = proof.iter().map(|v| H256::from_slice(&v)).collect();
+//     let p: [H256; TREE_DEPTH] = p_h256.try_into().map_err(|e| format!("parse proof failed: {:?}", e))?;
+//     // calculate root with leaf hash & proof
+//     let root = merkle_root_from_branch(h, &p, TREE_DEPTH, leaf_index as usize);
+//     // do not add optimistic yet
+//     CHAINS.with(|c| {
+//         let chain = c.borrow();
+//         Ok(chain.is_root_exist(root))
+//     })
+// }
+
+#[query(name = "get_last_scanned_block")]
+#[candid_method(query, rename = "get_last_scanned_block")]
+fn get_last_scanned_block() -> String {
     CHAINS.with(|c| {
         let chain = c.borrow();
-        Ok(chain.is_root_exist(root))
+        format!("{:x}", chain.last_scanned_block)
     })
 }
 
-#[query(name = "get_latest_root")]
-#[candid_method(query, rename = "get_latest_root")]
-fn get_latest_root() -> String {
+#[query(name = "get_messages")]
+#[candid_method(query, rename = "get_messages")]
+fn get_messages(start: u64, limit: u64) -> Result<Vec<MessageStable>, String> {
     CHAINS.with(|c| {
         let chain = c.borrow();
-        format!("{:x}", chain.latest_root())
+        Ok(chain.get_messages(start, limit))
     })
 }
 
-#[query(name = "get_next_index")]
-#[candid_method(query, rename = "get_next_index")]
-fn get_next_index() -> Result<u32, String> {
+#[query(name = "get_message_by_hash")]
+#[candid_method(query, rename = "get_message_by_hash")]
+fn get_message_by_hash(hash: &[u8]) -> Result<Vec<MessageStable>, String> {
     CHAINS.with(|c| {
         let chain = c.borrow();
-        Ok(chain.next_index())
+        Ok(chain.get_message_by_hash(hash))
     })
 }
+
+
 
 #[update(name = "add_owner", guard = "is_authorized")]
 #[candid_method(update, rename = "add_owner")]
@@ -322,7 +315,7 @@ async fn remove_owner(owner: Principal) {
     });
 }
 
-async fn fetch_root() {
+async fn scan() {
     // query omnic contract.getLatestRoot, 
     // fetch from multiple rpc providers and aggregrate results, should be exact match
     let state = STATE_MACHINE.with(|s| {
@@ -392,7 +385,7 @@ async fn fetch_root() {
 
     if next_state != State::End && next_state != State::Fail {
         cron_enqueue(
-            Task::FetchRoot, 
+            Task::Scan, 
             ic_cron::types::SchedulingOptions {
                 delay_nano: get_fetch_root_period(),
                 interval_nano: get_fetch_root_period(),
@@ -402,106 +395,14 @@ async fn fetch_root() {
     }
 }
 
-// this is done in heart_beat
-async fn fetch_roots() {
-    let state = STATE_MACHINE.with(|s| {
-        s.borrow().clone()
-    });
-
-    match state.state {
-        State::Init => {
-            // get chain ids
-            let chain_id = CHAINS.with(|c| {
-                c.borrow().config.chain_id
-            });
-            // when chain is set, start fetching
-            if chain_id != 0 {
-                STATE_MACHINE.with(|s| {
-                    let mut state = s.borrow_mut();
-                    state.state = State::Fetching(0);
-                });
-            }
-        }
-        State::Fetching(_) => {
-            match state.sub_state {
-                State::Init => {
-                    // randomly select rpc url to fetch
-                    // call IC raw rand to get random seed
-                    let seed_res = ic_cdk::api::management_canister::main::raw_rand().await;
-                    match seed_res {
-                        Ok((seed, )) => {
-                            let mut rpc_urls = CHAINS.with(|c| {
-                                c.borrow().config.rpc_urls.clone()
-                            });
-                            // shuffle
-                            let seed: [u8; 32] = seed.as_slice().try_into().expect("convert vector to array error");
-                            let mut rng: StdRng = SeedableRng::from_seed(seed);
-                            rpc_urls.shuffle(&mut rng);
-                            let random_urls = rpc_urls[..get_query_rpc_number() as usize].to_vec();
-                            // set random urls for this round
-                            STATE_MACHINE.with(|s| {
-                                s.borrow_mut().set_rpc_urls(random_urls.clone());
-                            });
-                            add_log(format!("start fetching, random rpc urls: {:?}", random_urls));
-                            add_log(format!("start_cycles: {:?},  start_time: {:?}", ic_cdk::api::canister_balance(), ic_cdk::api::time()));
-                            cron_enqueue(
-                                Task::FetchRoot, 
-                                ic_cron::types::SchedulingOptions {
-                                    delay_nano: get_fetch_root_period(),
-                                    interval_nano: get_fetch_root_period(),
-                                    iterations: Iterations::Exact(1),
-                                },
-                            ).unwrap();
-                        },
-                        Err((_code, msg)) => {
-                            // error, do nothing
-                            add_log(format!("Error getting raw rand: {}", msg));
-                        },
-                    }
-                }
-                State::Fetching(_) => {},
-                State::End => {
-                    add_log(format!("end_cycles: {:?},  end_time: {:?}", ic_cdk::api::canister_balance(), ic_cdk::api::time()));
-                    // update root
-                    CHAINS.with(|c| {
-                        let mut chain = c.borrow_mut();
-                        let (check_result, root) = check_roots_result(&state.roots, state.rpc_count());
-                        if check_result {
-                            chain.insert_root(root);
-                        } else {
-                            add_log(format!("invalid roots: {:?}", state.roots))
-                        }
-                    });
-                    // update state
-                    STATE_MACHINE.with(|s| {
-                        let mut state = s.borrow_mut();
-                        (state.state, state.sub_state) = state.get_fetching_next_state();
-                    });
-                },
-                State::Fail => {
-                    // update state
-                    STATE_MACHINE.with(|s| {
-                        let mut state = s.borrow_mut();
-                        (state.state, state.sub_state) = state.get_fetching_next_state();
-                    });
-                },
-            }
-        },
-        _ => { panic!("can't reach here")},
-    }
-}
-
 #[heartbeat]
 fn heart_beat() {
     for task in cron_ready_tasks() {
         let kind = task.get_payload::<Task>().expect("Serialization error");
         match kind {
-            Task::FetchRoots => {
-                ic_cdk::spawn(fetch_roots());
-            },
-            Task::FetchRoot => {
-                ic_cdk::spawn(fetch_root());
-            },
+            Task::Scan => {
+                ic_cdk::spawn(scan());
+            }
         }
     }
 }

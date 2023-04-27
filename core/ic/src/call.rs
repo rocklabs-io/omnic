@@ -38,17 +38,17 @@ pub async fn call_to_chain(
     omnic_addr: String, 
     rpc: String, 
     dst_chain: u32, 
-    msg_bytes: Vec<u8>
+    msg_bytes: Vec<Vec<u8>>
 ) -> Result<String, String> {
     let client = EVMChainClient::new(rpc.clone(), omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL)
         .map_err(|e| format!("init EVMChainClient failed: {:?}", e))?;
     client
-        .dispatch_message(caller, dst_chain, msg_bytes)
+        .dispatch_messages(caller, dst_chain, msg_bytes)
         .await
         .map(|txhash| {
-            // ic_cdk::println!("dispatch_message txhash: {:?}", hex::encode(txhash));
+            // ic_cdk::println!("dispatch_messages txhash: {:?}", hex::encode(txhash));
             // true
             hex::encode(txhash)
         })
-        .map_err(|e| format!("dispatch_message failed: {:?}", e))
+        .map_err(|e| format!("dispatch_messages failed: {:?}", e))
 }

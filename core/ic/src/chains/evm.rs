@@ -45,7 +45,8 @@ impl EVMChainClient {
 
 #[async_trait]
 impl HomeContract for EVMChainClient {
-    async fn dispatch_message(&self, caller: String, dst_chain: u32, msg_bytes: Vec<u8>) -> Result<H256, OmnicError> {
+    // only one item in msgs if dispatching just one message
+    async fn dispatch_messages(&self, caller: String, dst_chain: u32, msg_bytes: Vec<Vec<u8>>) -> Result<H256, OmnicError> {
         let caller_addr = Address::from_str(&caller)
             .map_err(|e| Other(format!("address decode failed: {:?}", e)))?;
         // ecdsa key info
@@ -69,7 +70,7 @@ impl HomeContract for EVMChainClient {
         });
         ic_cdk::println!("gas price: {:?}", gas_price);
         let txhash = self.contract
-            .signed_call("processMessage", (msg_bytes,), options, caller, key_info, dst_chain as u64)
+            .signed_call("processMessageBatch", (msg_bytes,), options, caller, key_info, dst_chain as u64)
             .await
             .map_err(|e| ClientError(format!("processMessage failed: {}", e)))?;
 
@@ -84,24 +85,6 @@ impl HomeContract for EVMChainClient {
             .await
             .map(|res| res.as_bytes().to_vec())
             .map_err(|err| ClientError(format!("send_raw_tx failed: {:?}", err)))
-    }
-
-    async fn get_latest_root(&self, height: Option<u64>) -> Result<H256, OmnicError> {
-        // query root in block height
-        let h = match height {
-            Some(v) => BlockId::Number(BlockNumber::Number(v.into())),
-            None => BlockId::Number(BlockNumber::Latest),
-        };
-        let root: Result<H256, ic_web3::contract::Error> = self.contract
-            .query(
-                "getLatestRoot", (), None, Options::default(), 
-                h
-            )
-            .await;
-        match root {
-            Ok(r) => Ok(r),
-            Err(e) => Err(ClientError(format!("get root error: {:?}", e)))
-        }
     }
 
     async fn get_block_number(&self) -> Result<u64, OmnicError> {
@@ -124,5 +107,9 @@ impl HomeContract for EVMChainClient {
             .await
             .map(|v| v.as_u64())
             .map_err(|e| ClientError(format!("get tx count error: {:?}", e)))
+    }
+
+    async fn scan_chunk(&self, start: u64, end: u64) -> Result<Vec<Vec<u8>>, OmnicError> {
+        Err(OmnicError::Other("uncomplete".to_string()))
     }
 }

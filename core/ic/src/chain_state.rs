@@ -1,14 +1,15 @@
-use std::collections::VecDeque;
-use ic_web3::types::H256;
 use candid::{CandidType, Deserialize};
 use crate::config::{ChainConfig, ChainType};
+use crate::types::{Message, MessageStable};
 
-#[derive(CandidType, Deserialize, Clone, Default)]
+use std::cmp;
+
+#[derive(CandidType, Deserialize, Default)]
 pub struct ChainState {
     pub config: ChainConfig,
-    pub roots: VecDeque<Vec<u8>>,
-    pub next_index: u32, // leaf_index for next message
     pub canister_addr: String, // the address controlled by the proxy canister on this chain
+    pub last_scanned_block: u64,
+    pub events: Vec<([u8;32], MessageStable)>,
     // pub txs: Vec<Message>, // outgoging txs
 }
 
@@ -18,14 +19,18 @@ impl ChainState {
     ) -> ChainState {
         ChainState {
             config: chain_config,
-            roots: VecDeque::new(),
-            next_index: 0,
             canister_addr: "".into(),
+            last_scanned_block: chain_config.omnic_start_block,
+            events: Default::default()
         }
     }
 
     pub fn update_config(&mut self, new_config: ChainConfig) {
         self.config = new_config;
+    }
+
+    pub fn update_last_scanned_block(&mut self, block_num: u64) {
+        self.last_scanned_block = block_num;
     }
 
     pub fn add_urls(&mut self, urls: Vec<String>) {
@@ -44,36 +49,16 @@ impl ChainState {
         self.canister_addr = addr;
     }
 
-    pub fn bump_index(&mut self) {
-        self.next_index += 1;
+    pub fn get_messages(&self, start: u64, limit: u64) -> Vec<MessageStable>{
+
+        let end = cmp::min(start + limit, self.events.len() as u64);
+        let mut events: Vec<MessageStable> = self.events.iter().map(|(x, y)| y.clone()).collect();
+        events.truncate(end as usize);
+        let res: Vec<MessageStable> = events.into_iter().skip(start as usize).collect();
+        res
     }
 
-    pub fn next_index(&self) -> u32 {
-        self.next_index
-    }
-
-    pub fn insert_root(&mut self, r: H256) {
-        let root = r.as_bytes().to_vec();
-        if !self.roots.contains(&root) {
-            self.roots.push_back(root);
-        }
-    }
-
-    pub fn is_root_exist(&self, r: H256) -> bool {
-        let root = r.as_bytes().to_vec();
-        self.roots.contains(&root)
-    }
-
-    pub fn latest_root(&self) -> H256 {
-        match self.roots.back() {
-            Some(v) => H256::from_slice(&v),
-            None => H256::zero(),
-        }
-    }
-
-    pub fn all_roots(&self) -> Vec<H256> {
-        self.roots.iter().map(|r| {
-            H256::from_slice(&r)
-        }).collect()
+    pub fn get_message_by_hash(&self, hash: &[u8]) -> Vec<MessageStable> {
+        self.events.iter().filter(|e| e.0 == hash).map(|(_,y)| y.clone()).collect()
     }
 }
