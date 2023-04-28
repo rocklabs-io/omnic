@@ -19,6 +19,17 @@ use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::StateInfo;
 use omnic::call::{call_to_canister, call_to_chain};
 
+#[derive(CandidType, Deserialize, Default, Clone)]
+struct cacheMessage {
+    msgs: Vec<MessageStable>,
+    interval: usize,
+    capability: usize
+}
+
+impl struct {
+    // todo: implement
+}
+
 thread_local! {
     static STATE_INFO: RefCell<StateInfo> = RefCell::new(StateInfo::default());
     static CHAINS: RefCell<HashMap<u32, ChainState>>  = RefCell::new(HashMap::new());
@@ -370,43 +381,32 @@ async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String>
 
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
-async fn process_message(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<(String, u64), String> {
-    // verify message proof: use proof, message to calculate the merkle root, 
-    // check if the root exists in corresponding chain state
-    // if valid, call dest canister.handleMessage or send tx to dest chain
-    // if invalid, return error
-    let valid = is_valid(message.clone(), proof, leaf_index).await?;
-    if !valid {
-        add_log("message does not pass verification!".to_string());
-        return Err("message does not pass verification!".into());
-    }
-    let m = Message::from_raw(message.clone()).map_err(|e| {
-        format!("parse message from bytes failed: {:?}", e)
-    })?;
-    // check leaf_index == next_index, then bump next_index
-    let next_index = CHAINS.with(|chains| {
-        let chains = chains.borrow();
-        let c = chains.get(&m.origin).expect("chain not found");
-        c.next_index()
-    });
-    if next_index != leaf_index {
-        add_log(format!("next_index: {} != leaf_index: {}, ", next_index, leaf_index));
-        return Err(format!("next_index: {} != leaf_index: {}, ", next_index, leaf_index));
-    }
-    CHAINS.with(|chains| {
-        let mut chains = chains.borrow_mut();
-        let c = chains.get_mut(&m.origin).expect("chain not found");
-        c.bump_index();
-    });
+async fn send_message(dst_chain: u32, recipient: &[u8;32], payload: &[u8]) -> Result<(String, u64), String> {
+    // TODO:
+    // cache message
+    // charge cycles as fee
+}
+
+// only gateway canister call
+#[update(name = "process_message")]
+#[candid_method(update, rename = "process_message")]
+async fn process_message(message: Vec<MessageStable>) -> Result<(String, u64), String> {
+
+    // todo: add controller
+    // is gateway canister?
+
+
     // send msg to destination
     // TODO reset next index after call error?
     if m.destination == 0 {
         // take last 10 bytes
-        let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
-        add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
-        let res = call_to_canister(recipient, &m).await?;
-        let time = ic_cdk::api::time();
-        Ok((res, time))
+        for m in message.iter() {
+            let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
+            add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
+            let res = call_to_canister(recipient, &m).await?;
+            let time = ic_cdk::api::time();
+            Ok((res, time))
+        }
     } else {
         // send tx to dst chain
         // call_to_chain(m.destination, message).await
