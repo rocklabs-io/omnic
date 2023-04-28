@@ -1,6 +1,6 @@
 use candid::{CandidType, Deserialize};
 use crate::config::{ChainConfig, ChainType};
-use crate::types::{Message, MessageStable};
+use crate::types::MessageStable;
 
 use std::cmp;
 
@@ -9,7 +9,7 @@ pub struct ChainState {
     pub config: ChainConfig,
     pub canister_addr: String, // the address controlled by the proxy canister on this chain
     pub last_scanned_block: u64,
-    pub events: Vec<([u8;32], MessageStable)>,
+    pub events: Vec<([u8;32], MessageStable)>, // messageHash => message
     // pub txs: Vec<Message>, // outgoging txs
 }
 
@@ -31,6 +31,10 @@ impl ChainState {
 
     pub fn update_last_scanned_block(&mut self, block_num: u64) {
         self.last_scanned_block = block_num;
+    }
+
+    pub fn get_suggested_start_block(&self) -> u64 {
+        cmp::max(self.last_scanned_block - 10, 0)
     }
 
     pub fn add_urls(&mut self, urls: Vec<String>) {

@@ -1,13 +1,19 @@
 use ic_web3::Web3;
 use ic_web3::transports::ICHttp;
-use ic_web3::contract::{Contract, Options};
 use ic_web3::types::{U256, H256, Bytes, Address, BlockNumber, BlockId};
 use ic_web3::ic::KeyInfo;
+use ic_web3::{
+    contract::{Contract, Options},
+    futures::StreamExt,
+    types::FilterBuilder,
+};
+use hex_literal::hex;
 
 use std::str::FromStr;
 use async_trait::async_trait;
 
 use crate::consts::KEY_NAME;
+use crate::types::MessageStable;
 use crate::error::OmnicError;
 use crate::error::OmnicError::*;
 use crate::traits::chain::HomeContract;
@@ -109,7 +115,26 @@ impl HomeContract for EVMChainClient {
             .map_err(|e| ClientError(format!("get tx count error: {:?}", e)))
     }
 
-    async fn scan_chunk(&self, start: u64, end: u64) -> Result<Vec<Vec<u8>>, OmnicError> {
+    async fn scan_chunk(&self, start: u64, end: u64) -> Result<Vec<MessageStable>, OmnicError> {
+
+        // Filter for SendMessage event in omnic gateway contract
+        let filter = FilterBuilder::default()
+        .address(vec![self.contract.address()])
+        .topics(
+            Some(vec![hex!(
+                "d282f389399565f3671145f5916e51652b60eee8e5c759293a2f5771b8ddfd2e"
+            )
+            .into()]),
+            None,
+            None,
+            None,
+        )
+        .build();
+
+        let filter = self.w3.eth_filter().create_logs_filter(filter).await?;
+
+        // todo: decode events from filter
+
         Err(OmnicError::Other("uncomplete".to_string()))
     }
 }

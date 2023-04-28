@@ -51,6 +51,8 @@ pub struct StateMachine {
     pub chain_id: u32,
     pub rpc_urls: Vec<String>,
     pub omnic_addr: String,
+    pub block_height: u64,
+    pub cache_msg: HashMap<usize, Vec<MessageStable>>,
     pub state: State,
     pub sub_state: State
 }

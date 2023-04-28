@@ -1,6 +1,6 @@
 use ic_web3::types::H256;
 use async_trait::async_trait;
-
+use crate::types::MessageStable;
 use crate::error::OmnicError;
 
 // each chain client should impl this trait
@@ -13,6 +13,6 @@ pub trait HomeContract {
     async fn get_block_number(&self) -> Result<u64, OmnicError>;
 
     // scan events
-    async fn scan_chunk(&self, start: u64, end: u64) -> Result<Vec<Vec<u8>>, OmnicError>;
+    async fn scan_chunk(&self, start: u64, end: u64) -> Result<Vec<MessageStable>, OmnicError>;
     
 }

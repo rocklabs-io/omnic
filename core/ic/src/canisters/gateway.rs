@@ -298,7 +298,6 @@ fn get_message_by_hash(hash: &[u8]) -> Result<Vec<MessageStable>, String> {
 }
 
 
-
 #[update(name = "add_owner", guard = "is_authorized")]
 #[candid_method(update, rename = "add_owner")]
 async fn add_owner(owner: Principal) {
@@ -331,7 +330,7 @@ async fn scan() {
                             STATE_MACHINE.with(|s| {
                                 let mut state = s.borrow_mut();
                                 state.block_height = h;
-                                state.roots = HashMap::default(); // reset roots in this round
+                                state.cache_msg = HashMap::default(); // reset roots in this round
                             });
                             State::Fetching(0)
                         },
@@ -350,22 +349,34 @@ async fn scan() {
             // query root in block height
             match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
                 Ok(client) => {
-                    let root = client.get_latest_root(Some(state.block_height)).await;
-                    add_log(format!("root from {:?}: {:?}", state.rpc_urls[idx], root));
-                    match root {
-                        Ok(r) => {
-                            incr_state_root(r);
-                        },
-                        Err(e) => {
-                            add_log(format!("query root failed: {}", e));
-                            incr_state_root(H256::zero());
-                        },
-                    };
+                    let start_block = clinet.get_suggested_start_block();
+                    let end_block = clinet.get_block_number().await?;
+                    let mut current_block = start_block;
+                    let mut chunk_size = 20; // 
+                    let mut all_events: Vec<MessageStable> = vec![];
+
+                    while current_block <= end_block {
+                        let estimate_end_block = current_block + chunk_size;
+                        add_log(format!("Scanning SendMessage Event for blocks: {:?} - {:?}, chunk size: {:?}", current_block, estimate_end_block, chunk_size));
+
+                        let (actual_end_block, chunk_events) = client.scan_chunk(current_block, estimate_end_block).await?;
+                        // adjust chunk size dynamically
+                        chunk_size = estimate_next_chunk_size(chunk_size, chunk_events.len());
+                        all_events.extend(chunk_events);
+                        current_block = actual_end_block + 1;
+
+                    }
+                    //store to cache messgae
+                    incr_state(all_events);
+
+                    // check msgs with different rpc and store to chainState
                     STATE_MACHINE.with(|s| {
                         let s = s.borrow();
-                        let (check_result, _) = check_roots_result(&s.roots, s.rpc_count());
+                        let (check_result, _) = check_scan_message_results(&s.cache_msg, s.rpc_count());
                         s.get_fetching_next_sub_state(check_result)
                     })
+                    // todo , store to chain state
+
                 },
                 Err(e) => {
                     add_log(format!("init evm chain client failed: {}", e));
@@ -387,8 +398,8 @@ async fn scan() {
         cron_enqueue(
             Task::Scan, 
             ic_cron::types::SchedulingOptions {
-                delay_nano: get_fetch_root_period(),
-                interval_nano: get_fetch_root_period(),
+                delay_nano: get_scan_event_period(),
+                interval_nano: get_scan_event_period(),
                 iterations: Iterations::Exact(1),
             },
         ).unwrap();
@@ -462,15 +473,16 @@ fn is_authorized() -> Result<(), String> {
     })
 }
 
-fn incr_state_root(root: H256) {
-    STATE_MACHINE.with(|s| {
-        let mut state = s.borrow_mut();
-        state
-            .roots
-            .entry(root)
-            .and_modify(|c| *c += 1)
-            .or_insert(1);
-    })
+fn incr_state(msg: Vec<MessageStable>) {
+    // store to STATE_MACHINE cache buffer
+    // STATE_MACHINE.with(|s| {
+    //     let mut state = s.borrow_mut();
+    //     state
+    //         .roots
+    //         .entry(root)
+    //         .and_modify(|c| *c += 1)
+    //         .or_insert(1);
+    // })
 }
 
 fn add_log(log: String) {
@@ -482,6 +494,19 @@ fn add_log(log: String) {
         logs.push_back(log);
     });
 }
+
+fn estimate_next_chunk_size(chunk_size: usize, events_count: usize) -> usize {
+    let min_chunk_size = 10;
+    let max_chunk_size = 30;
+    let chunk_size_descrese = 0.5;
+    let chunk_size_increase = 2.0;
+    let mut current_chuck_size = if events_count > 0 {min_chunk_size} else {chunk_size * chunk_size_increase};
+
+    current_chuck_size = cmp::max(min_chunk_size, current_chuck_size);
+    current_chuck_size = cmp::min(max_chunk_size, current_chuck_size);
+    current_chuck_size
+}
+
 
 #[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {

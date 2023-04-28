@@ -1,6 +1,6 @@
 
 use std::collections::HashMap;
-
+use crate::types::MessageStable;
 use ic_web3::types::H256;
 use tiny_keccak::{Hasher, Keccak};
 
@@ -56,4 +56,13 @@ pub fn check_roots_result(roots: &HashMap<H256, usize>, total_result: usize) -> 
         // otherwise return true and root of most count
         return (true, possible_root.clone())
     }
+}
+
+pub fn check_scan_message_results(messages: &HashMap<usize, Vec<MessageStable>>, rpcs_count) -> (bool, Vec<MessageStable>) {
+    // compare each message for different rpc 
+    // what should be checked?
+    // messageHash ?= keccak256(msg.body)
+    // message block number is same?
+    // others...
+    (false, vec![])
 }

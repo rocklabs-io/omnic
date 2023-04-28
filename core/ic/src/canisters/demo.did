@@ -1,5 +1,0 @@
-type Result = variant { Ok : bool; Err : text };
-service : {
-  handle_message : (nat32, nat32, vec nat8, vec nat8) -> (Result);
-  hex_pid : (principal) -> () query;
-}
