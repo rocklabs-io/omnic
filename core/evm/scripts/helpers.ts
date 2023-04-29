@@ -21,7 +21,7 @@ export const updateConfig = function (network: string, contract: string, addr: s
         };
     }
     config.networks[network][contract] = addr;
-    fs.writeFileSync("config.json", JSON.stringify(config, null, "\t"));
+    fs.writeFileSync("./constants/config.json", JSON.stringify(config, null, "\t"));
     console.log(network, ":", config.networks[network]);
 }
 

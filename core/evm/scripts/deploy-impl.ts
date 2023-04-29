@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { getContractAddr, updateConfig } from "./helpers";
+import { getContractAddr, updateConfig, getProxyCanisterAddr} from "./helpers";
 import fs from 'fs';
 const hre = require("hardhat");
 
@@ -28,7 +28,12 @@ export const deployOmnicImpl = async function (chain: string, upgrade: boolean) 
     // recording omnic contract address
     updateConfig(chain, "Implementation", omnic.address);
   }
-  return omnic;
+  // initialize
+  const proxyAddr = getProxyCanisterAddr()
+  const feeManagerAddr = getContractAddr(chain, "OmnicFeeManager");
+  let result = omnic.initialize(proxyAddr, feeManagerAddr)
+  console.log("initialize: " + result)
+  return result;
 }
 
 const main = async function () {

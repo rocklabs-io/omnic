@@ -27,11 +27,11 @@
 			"Demo": ""
 		},
 		"mumbai": {
-			"UpgradeBeaconController": "",
-			"UpgradeBeacon": "",
-			"UpgradeBeaconProxy": "",
-			"Implementation": "",
-			"Demo": "",
+			"UpgradeBeaconController": "0x60CaC287794f01165E1808192Cc7b2122480a7F2",
+			"UpgradeBeacon": "0x85E645e8704d330A4D3A377dD99c5Fb1E21b6ee2",
+			"UpgradeBeaconProxy": "0x87A157f95B750e9A180B6ce49c22D6338171Dc64",
+			"Implementation": "0xF993fBe85eA8254674b04a4DE16146F51eB5cDc8",
+			"Demo": "0x665A125E5FA6bb323C05F2Eedf92798d9869C1B4",
 			"Bridge": "0xa9513B10bF367948e9cF4122a12B7dc52DFDc6c6",
 			"USDT": "0x4a22D4DEdbF85Ee9F1fbC4aBfD1349D56C905fDC",
 			"OmnicFeeManager": "0xb297C8A1af6981C992De84272BBaBFde3EB1F458"

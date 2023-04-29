@@ -2,11 +2,9 @@
 
 pragma solidity ^0.8.9;
 
-import {IOmnicReciver} from "./IOmnicReciver.sol";
-
 interface IOmnic {
     struct Message {
-        IOmnicReciver.MessageType t; // message type: {SYN, ACK, FAIL_ACK}
+        uint8 t; // message type: {SYN, ACK, FAIL_ACK}
         uint32 srcChainId; // message origin chain
         bytes32 srcSenderAddress; // sender on origin chain
         uint64 nonce; // app current nonce for destination chain
@@ -45,7 +43,7 @@ interface IOmnic {
     ) external returns (bool success);
 
     function retryProcessMessage(
-        IOmnicReciver.MessageType t,
+        uint8 t,
         uint32 _srcChainId,
         bytes32 _srcSenderAddress,
         bytes calldata _message

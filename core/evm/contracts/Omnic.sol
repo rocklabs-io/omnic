@@ -20,6 +20,11 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
+    // Message type
+    uint8 public constant MESSAGE_TYPE_SYN = uint8(IOmnicReciver.MessageType.SYN);
+    uint8 public constant MESSAGE_TYPE_ACK = uint8(IOmnicReciver.MessageType.ACK);
+    uint8 public constant MESSAGE_TYPE_FAIL_ACK = uint8(IOmnicReciver.MessageType.FAIL_ACK);
+
     // ================================ Variables ===================================
     // Maximum bytes per message = 2 KiB
     // (somewhat arbitrarily set to begin)
@@ -58,7 +63,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     modifier sendNonReentrant() {
         require(
             _sendEnteredState == _UN_LOCKED,
-            "OmnicEndpoint: no send reentrancy"
+            "Omnic: no send reentrancy"
         );
         _sendEnteredState = _LOCKED;
         _;
@@ -67,7 +72,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     modifier receiveNonReentrant() {
         require(
             _processEnteredState == _UN_LOCKED,
-            "OmnicEndpoint: no receive reentrancy"
+            "Omnic: no receive reentrancy"
         );
         _processEnteredState = _LOCKED;
         _;
@@ -161,7 +166,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         uint64 _nonce = ++outboundNonce[_dstChainId][msg.sender];
 
         Message memory m = Message (
-            IOmnicReciver.MessageType.SYN,
+            MESSAGE_TYPE_SYN,
             chainId,
             TypeCasts.addressToBytes32(msg.sender),
             _nonce,
@@ -203,7 +208,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         uint64 _nonce = ++outboundNonce[_dstChainId][msg.sender];
 
         Message memory m = Message (
-            IOmnicReciver.MessageType.SYN,
+            MESSAGE_TYPE_SYN,
             chainId,
             TypeCasts.addressToBytes32(msg.sender),
             _nonce,
@@ -271,7 +276,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
 
         try
             IOmnicReciver(dstAddress).handleMessage(
-                m.t,
+                IOmnicReciver.MessageType(m.t),
                 m.srcChainId,
                 m.srcSenderAddress,
                 m.nonce,
@@ -333,7 +338,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     }
 
     function retryProcessMessage(
-        IOmnicReciver.MessageType t,
+        uint8 t,
         uint32 _srcChainId,
         bytes32 _srcSenderAddress,
         bytes calldata _message
@@ -360,7 +365,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         uint64 nonce = inboundNonce[_srcChainId][_srcSenderAddress];
 
         IOmnicReciver(dstAddress).handleMessage(
-            t,
+            IOmnicReciver.MessageType(t),
             _srcChainId,
             _srcSenderAddress,
             nonce,

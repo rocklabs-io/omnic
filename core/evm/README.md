@@ -23,9 +23,9 @@ ETHERSCAN_API_KEY=...
 ## Deploy
 ### deployment process:
   ```shell
-  npx hardhat run scripts/deploy-feemanager.ts
-  npx hardhat run scripts/deploy-impl.ts
-  npx hardhat run scripts/deploy-proxy.ts
+  npx hardhat run scripts/deploy-feemanager.ts --network mumbai
+  npx hardhat run scripts/deploy-impl.ts --network mumbai
+  npx hardhat run scripts/deploy-proxy.ts --network mumbai
   ```
 
 ### upgrade process:
@@ -36,7 +36,7 @@ ETHERSCAN_API_KEY=...
 ## Example
   ```shell
   // 1. deplot demo contract
-  npx hardhat run scripts/deploy-demo.ts
-  // 2. send message from goerli to mumbai
-  npx hardhat run scripts/send-msg.ts
+  npx hardhat run scripts/deploy-demo.ts --network mumbai
+  // 2. send message from mumbai to goerli
+  npx hardhat run scripts/send-msg.ts --network mumbai
   ```
