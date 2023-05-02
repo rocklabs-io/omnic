@@ -55,28 +55,26 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     // ============================== Modifiers ====================================
 
     // send and receive nonreentrant lock
-    uint8 internal constant _UN_LOCKED = 1;
-    uint8 internal constant _LOCKED = 2;
-    uint8 internal _sendEnteredState = 1;
-    uint8 internal _processEnteredState = 1;
+    uint8 internal _sendEnteredState;
+    uint8 internal _processEnteredState;
 
     modifier sendNonReentrant() {
         require(
-            _sendEnteredState == _UN_LOCKED,
+            _sendEnteredState == 1,
             "Omnic: no send reentrancy"
         );
-        _sendEnteredState = _LOCKED;
+        _sendEnteredState = 0;
         _;
-        _sendEnteredState = _UN_LOCKED;
+        _sendEnteredState = 1;
     }
     modifier receiveNonReentrant() {
         require(
-            _processEnteredState == _UN_LOCKED,
+            _processEnteredState == 1,
             "Omnic: no receive reentrancy"
         );
-        _processEnteredState = _LOCKED;
+        _processEnteredState = 0;
         _;
-        _processEnteredState = _UN_LOCKED;
+        _processEnteredState = 1;
     }
 
     modifier onlyProxyCanister() {
@@ -139,6 +137,8 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         chainId = uint32(block.chainid); 
         omnicProxyCanisterAddr = proxyCanisterAddr;
         omnicFeeManager = IOmnicFeeManager(feeManagerAddr);
+        _sendEnteredState = 1;
+        _processEnteredState = 1;
     }
 
     function sendMessage(

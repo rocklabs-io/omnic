@@ -41,7 +41,7 @@ contract DemoApp is Ownable {
         bytes memory _payload
     ) public payable {
         // send message to dst chain, call omnic contract
-        Omnic(omnicAddr).sendMessage(
+        Omnic(omnicAddr).sendMessage{value: msg.value}(
             _dstChainId,
             _recipientAddress,
             _payload,

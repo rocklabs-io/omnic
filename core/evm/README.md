@@ -37,6 +37,8 @@ ETHERSCAN_API_KEY=...
   ```shell
   // 1. deplot demo contract
   npx hardhat run scripts/deploy-demo.ts --network mumbai
-  // 2. send message from mumbai to goerli
+  // 2. set omnic gateway to demo contract
+  npx hardhat run scripts/set-demo-omnic-addr.ts --network mumbai
+  // 3. send message from mumbai to goerli
   npx hardhat run scripts/send-msg.ts --network mumbai
   ```

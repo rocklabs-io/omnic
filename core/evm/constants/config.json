@@ -20,18 +20,20 @@
 			"OmnicFeeManager": "0xcDb431Ce81268767DD05416527ae2076c2b8E693"
 		},
 		"localhost": {
-			"UpgradeBeaconController": "",
-			"UpgradeBeacon": "",
-			"UpgradeBeaconProxy": "",
-			"Implementation": "",
-			"Demo": ""
+			"UpgradeBeaconController": "0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1",
+			"UpgradeBeacon": "0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44",
+			"UpgradeBeaconProxy": "0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f",
+			"Implementation": "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d",
+			"Demo": "",
+			"USDT": "0x4a22D4DEdbF85Ee9F1fbC4aBfD1349D56C905fDC",
+			"OmnicFeeManager": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
 		},
 		"mumbai": {
-			"UpgradeBeaconController": "0x60CaC287794f01165E1808192Cc7b2122480a7F2",
-			"UpgradeBeacon": "0x85E645e8704d330A4D3A377dD99c5Fb1E21b6ee2",
-			"UpgradeBeaconProxy": "0x87A157f95B750e9A180B6ce49c22D6338171Dc64",
-			"Implementation": "0xF993fBe85eA8254674b04a4DE16146F51eB5cDc8",
-			"Demo": "0x665A125E5FA6bb323C05F2Eedf92798d9869C1B4",
+			"UpgradeBeaconController": "0xF5eE05F273045E4301707B5964AC55D1af42CA77",
+			"UpgradeBeacon": "0x702f07fF2DFD35C8d540Bd101DbAf12EDf29c4DE",
+			"UpgradeBeaconProxy": "0x3B7989fB44d964b993280F74A1361a74DC1a27bA",
+			"Implementation": "0x0fF61d304F714444061b7AAd761541AC89Ef10B8",
+			"Demo": "0xFEa3A57CB7a43dD81BB86ED31d7Bf1813eE4391B",
 			"Bridge": "0xa9513B10bF367948e9cF4122a12B7dc52DFDc6c6",
 			"USDT": "0x4a22D4DEdbF85Ee9F1fbC4aBfD1349D56C905fDC",
 			"OmnicFeeManager": "0xb297C8A1af6981C992De84272BBaBFde3EB1F458"

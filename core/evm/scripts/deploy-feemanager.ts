@@ -20,7 +20,7 @@ export const deployFeeManager = async function (chain: string) {
     console.log("deploying OmnicFeeManager...");
     feeManager = await FeeManager.deploy(
       true,
-      true,
+      false,
       erc20FeeToken,
       nativeBaseFee,
       nativeFeePerByte,
