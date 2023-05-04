@@ -1,3 +1,4 @@
+use crate::state::DetailValue;
 
 use std::collections::HashMap;
 use crate::types::MessageStable;
@@ -70,4 +71,31 @@ pub fn check_scan_message_results(messages: &HashMap<usize, Vec<MessageStable>>,
 pub fn decode_log(logs: Vec<Log>) -> Vec<MessageStable> {
     // todo: decode log to MessageStable
     vec![]
+}
+
+/// Allows creating details for an event.
+#[derive(Default, Clone)]
+pub struct DetailsBuilder {
+    inner: Vec<(String, DetailValue)>,
+}
+
+impl DetailsBuilder {
+    /// Creates a new, empty builder.
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Inserts a new element.
+    #[inline(always)]
+    pub fn insert(mut self, key: impl Into<String>, value: impl Into<DetailValue>) -> Self {
+        self.inner.push((key.into(), value.into()));
+
+        self
+    }
+
+    #[inline(always)]
+    pub fn build(self) -> Vec<(String, DetailValue)> {
+        self.inner
+    }
 }

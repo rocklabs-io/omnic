@@ -12,13 +12,9 @@ dfx build demo
 dfx canister install proxy
 dfx canister install demo
 
-dfx canister --network ic call proxy add_chain "(5:nat32, vec {\"https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"; \"https://goerli.infura.io/v3/93ca33aa55d147f08666ac82d7cc69fd\"}, \"F98Ea5ca4BC350739FEd5D39582774D43ae403a8\", 7685333:nat64)"
+dfx canister --network ic call proxy add_chain "(5:nat32, vec {\"https://eth-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"}, principal \"$(dfx canister --network ic id goerli-gateway)\", \"c7D718dC3C9248c91813A98dCbFEC6CF57619520\", 7685333:nat64)"
 
-dfx canister --network ic call proxy add_chain "(80001:nat32, vec{\"https://polygon-mumbai.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"}, \"4DCAA1f4f21333911394e83A075941474859E75E\", 28370114:nat64)"
-
-dfx canister --network ic call proxy add_chain "(421613:nat32, vec{\"https://arb-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"}, \"0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8\", 910917:nat64)"
-
-dfx canister --network ic call proxy add_chain "(420:nat32, vec{\"https://opt-goerli.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"}, \"0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8\", 2377565:nat64)"
+dfx canister --network ic call proxy add_chain "(80001:nat32, vec {\"https://polygon-mumbai.g.alchemy.com/v2/0QCHDmgIEFRV48r1U1QbtOyFInib3ZAm\"}, principal \"$(dfx canister --network ic id mumbai-gateway)\", \"2F711bEbA7a30242f4ba24544eA3869815c41413\", 28370114:nat64)"
 
 dfx canister --network ic call proxy set_canister_addrs
 

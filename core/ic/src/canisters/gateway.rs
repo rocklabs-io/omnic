@@ -113,7 +113,7 @@ async fn set_rpc_number(query_rpc_number: u64) -> Result<bool, String> {
 
 #[update(guard = "is_authorized")]
 #[candid_method(update, rename = "add_chain")]
-fn set_chain(
+fn add_chain(
     chain_id: u32, 
     urls: Vec<String>, 
     omnic_addr: String, 
@@ -147,10 +147,9 @@ fn add_urls(
     urls: Vec<String>
 ) -> Result<bool, String> {
     // set chain config
-    let rpc_urls = CHAINS.with(|c| {
+    CHAINS.with(|c| {
         let mut c = c.borrow_mut();
         c.add_urls(urls);
-        c.rpc_urls()
     });
     Ok(true)
 }

@@ -1,0 +1,54 @@
+{
+	"OmnicCanisterId": "rrkah-fqaaa-aaaaa-aaaaq-cai",
+	"OmnicCanisterAddr": "0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
+	"ChainIds": {
+		"ic": 0,
+		"goerli": 5,
+		"mumbai": 80001,
+		"arbi_goerli": 421613,
+		"op_goerli": 430
+	},
+	"networks": {
+		"goerli": {
+			"UpgradeBeaconController": "0x45C5FEe389Fe5D4405d710057a79678102524EC7",
+			"UpgradeBeacon": "0x7679f2F18d456D1e1119Cf759F1C08bc605938ba",
+			"UpgradeBeaconProxy": "0xc7D718dC3C9248c91813A98dCbFEC6CF57619520",
+			"Implementation": "0x8C43E5977Fc5152f7eFA0283EdDECdE6764D2395",
+			"Demo": "",
+			"Bridge": "0xf3A2370F59703B0948b6454a1b6446cfa3C186eF",
+			"USDT": "0xf972a2E180aB1ee74161b28d173b83987dEF1Af6",
+			"OmnicFeeManager": "0xcDb431Ce81268767DD05416527ae2076c2b8E693"
+		},
+		"localhost": {
+			"UpgradeBeaconController": "0x5b1869D9A4C187F2EAa108f3062412ecf0526b24",
+			"UpgradeBeacon": "0xCfEB869F69431e42cdB54A4F4f105C19C080A601",
+			"UpgradeBeaconProxy": "0x254dffcd3277C0b1660F6d42EFbB754edaBAbC2B",
+			"Implementation": "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab",
+			"Demo": "0xC89Ce4735882C9F0f0FE26686c53074E09B0D550"
+		},
+		"mumbai": {
+			"UpgradeBeaconController": "0xd03dEb5d8d0a661Fd956DC484Db1F98C791Ab5d4",
+			"UpgradeBeacon": "0xbddF29608215D04Ce2631EA9dd248B15CE53d290",
+			"UpgradeBeaconProxy": "0x2F711bEbA7a30242f4ba24544eA3869815c41413",
+			"Implementation": "0xf972a2E180aB1ee74161b28d173b83987dEF1Af6",
+			"Demo": "",
+			"Bridge": "0xD52F83162324422547489699cEF8479B4F548E85",
+			"USDT": "0x4a22D4DEdbF85Ee9F1fbC4aBfD1349D56C905fDC",
+			"OmnicFeeManager": "0xb297C8A1af6981C992De84272BBaBFde3EB1F458"
+		},
+		"arbi_goerli": {
+			"UpgradeBeaconController": "0x0fA355bEEA41d190CAE64F24a58F70ff2912D7df",
+			"UpgradeBeacon": "0x32459C1d39bFdd95A8b7F167FBF2a4ab5A78A41E",
+			"UpgradeBeaconProxy": "0x0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8",
+			"Implementation": "0x430365a65eAC8626AFf329e5B3a549f6C13D0c26",
+			"Demo": ""
+		},
+		"op_goerli": {
+			"UpgradeBeaconController": "0x0fA355bEEA41d190CAE64F24a58F70ff2912D7df",
+			"UpgradeBeacon": "0x32459C1d39bFdd95A8b7F167FBF2a4ab5A78A41E",
+			"UpgradeBeaconProxy": "0x0AA014fB917b93f17E2B98A7ee15D24fE9aD40C8",
+			"Implementation": "0x430365a65eAC8626AFf329e5B3a549f6C13D0c26",
+			"Demo": ""
+		}
+	}
+}
