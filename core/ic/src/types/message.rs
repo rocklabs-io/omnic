@@ -54,7 +54,7 @@ fn decode_body(data: &[u8]) -> Result<Vec<Token>, Error> {
 
 fn encode_body(msg: &Message) -> Vec<u8> {
     let tokens = [
-        Token::Uint((msg.t as u8).into()),
+        Token::Uint((msg.t.clone() as u8).into()),
         Token::Uint(msg.origin.into()),
         Token::FixedBytes(msg.sender.as_bytes().to_vec()),
         Token::Uint(msg.nonce.into()),
@@ -93,7 +93,7 @@ impl Message {
 impl Message {
     // get message type
     pub fn get_msg_type(&self) -> MessageType {
-        self.t
+        self.t.clone()
     }
 }
 

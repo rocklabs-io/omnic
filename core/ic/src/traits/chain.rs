@@ -13,6 +13,6 @@ pub trait HomeContract {
     async fn get_block_number(&self) -> Result<u64, OmnicError>;
 
     // scan events
-    async fn scan_chunk(&self, start: u64, end: u64) -> Result<Vec<MessageStable>, OmnicError>;
+    async fn scan_chunk(&self, start: u64, end: u64) -> Result<(u64, Vec<MessageStable>), OmnicError>;
     
 }

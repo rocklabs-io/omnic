@@ -17,10 +17,11 @@ impl ChainState {
     pub fn new(
         chain_config: ChainConfig,
     ) -> ChainState {
+        let start_block = chain_config.omnic_start_block;
         ChainState {
             config: chain_config,
             canister_addr: "".into(),
-            last_scanned_block: chain_config.omnic_start_block,
+            last_scanned_block: start_block,
             events: Default::default()
         }
     }

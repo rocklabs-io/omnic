@@ -59,7 +59,7 @@ pub fn check_roots_result(roots: &HashMap<H256, usize>, total_result: usize) -> 
     }
 }
 
-pub fn check_scan_message_results(messages: &HashMap<usize, Vec<MessageStable>>, rpcs_count) -> (bool, Vec<MessageStable>) {
+pub fn check_scan_message_results(messages: &HashMap<usize, Vec<MessageStable>>, rpcs_count: usize) -> (bool, Vec<MessageStable>) {
     // compare each message for different rpc 
     // what should be checked?
     // messageHash ?= keccak256(msg.body)

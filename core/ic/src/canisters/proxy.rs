@@ -1,6 +1,7 @@
 /*
 omnic proxy canister:
-    fetch_root: fetch merkel roots from all supported chains and insert to chain state
+    send_message: fetch merkel roots from all supported chains and insert to chain state
+    process_message: process message from gateway
 */
 
 use std::cell::{RefCell};
@@ -21,18 +22,27 @@ use omnic::state::{StateInfo, RecordDB};
 use omnic::call::{call_to_canister, call_to_chain};
 
 #[derive(CandidType, Deserialize, Default, Clone)]
-struct cacheMessage {
-    msgs: Vec<MessageStable>,
-    interval: usize,
-    capability: usize
-}
+pub struct MessageCache {
+    msgs: HashMap<u32, VecDeque<(u64, MessageStable)>> // chain => (timestamp, message)
+} // cache messages for each chain
 
-impl struct {
+impl MessageCache {
     // todo: implement
+    fn get_message_len(&self, chain: u32) -> usize {
+        self.msgs.get(&chain).len()
+    }
+
+    fn clean_messages(&mut self, chain: u32) {
+        self.msgs.get_mut(&chain).clear();
+    }
+
+    fn get_front_msg_ts(&self, chain: u32) -> {
+        self.msgs.get(&chain).front().unwrap_or()
+    }
 }
 
 thread_local! {
-    static STATE_INFO: RefCell<StateInfo> = RefCell::new(StateInfo::default());
+    static OWNERS: RefCell<HashSet<Principal>> = RefCell::new(HashSet::default());
     static CHAINS: RefCell<HashMap<u32, ChainState>>  = RefCell::new(HashMap::new());
     static LOGS: RefCell<VecDeque<String>> = RefCell::new(VecDeque::default());
     static RECORDS: RefCell<RecordDB> = RefCell::new(RecordDB::new());
@@ -50,9 +60,8 @@ fn get_logs() -> Vec<String> {
 #[candid_method(init)]
 fn init() {
     let caller = ic_cdk::api::caller();
-    STATE_INFO.with(|info| {
-        let mut info = info.borrow_mut();
-        info.add_owner(caller);
+    OWNERS.with(|owner| {
+        owner.borrow_mut().insert();
     });
 }
 
@@ -97,16 +106,6 @@ async fn set_canister_addrs() -> Result<bool, String> {
                 }
             }
         }
-    });
-    Ok(true)
-}
-
-#[update(guard = "is_authorized")]
-#[candid_method(update, rename = "set_fetch_period")]
-async fn set_fetch_period(fetch_root_period: u64, fetch_roots_period: u64) -> Result<bool, String> {
-    STATE_INFO.with(|s| {
-        let mut s = s.borrow_mut();
-        s.set_fetch_period(fetch_root_period, fetch_roots_period);
     });
     Ok(true)
 }
@@ -211,28 +210,6 @@ fn update_chain(
     Ok(true)
 }
 
-// update chain settings
-#[update(guard = "is_authorized")]
-#[candid_method(update, rename = "set_next_index")]
-fn set_next_index(
-    chain_id: u32, 
-    next_index: u32
-) -> Result<bool, String> {
-    // add chain config
-    CHAINS.with(|chains| {
-        let mut chains = chains.borrow_mut();
-        let mut chain = chains.get_mut(&chain_id).expect("chain id not found!");
-        chain.next_index = next_index;
-    });
-    add_record(
-        ic_cdk::caller(), 
-        "set_next_index".to_string(), 
-        DetailsBuilder::new()
-            .insert("chain_id", DetailValue::U64(chain_id as u64))
-            .insert("next_index", DetailValue::U64(next_index as u64))
-    );
-    Ok(true)
-}
 
 #[query(name = "get_chains")]
 #[candid_method(query, rename = "get_chains")]
@@ -242,34 +219,6 @@ fn get_chains() -> Result<Vec<ChainState>, String> {
         let chains = chains.borrow();
         Ok(chains.clone().into_iter().map(|(_id, c)| c).collect())
     })
-}
-
-#[update(name = "fetch_root")]
-#[candid_method(update, rename = "fetch_root")]
-async fn fetch(chain_id: u32, height: u64) -> Result<(String, u64, u64), String> {
-    let (_caller, omnic_addr, rpc) = CHAINS.with(|chains| {
-        let chains = chains.borrow();
-        let c = chains.get(&chain_id).expect("chain not found");
-        (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
-    });
-
-    let client = EVMChainClient::new(rpc, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
-        .map_err(|e| format!("init client failed: {:?}", e))?;
-    
-    let start_cycles = ic_cdk::api::canister_balance();
-    let start_time = ic_cdk::api::time();
-
-    let root = client.get_latest_root(Some(height))
-        .await
-        .map(|v| hex::encode(v))
-        .map_err(|e| format!("get root err: {:?}", e))?;
-    
-    let end_cycles = ic_cdk::api::canister_balance();
-    let end_time = ic_cdk::api::time();
-
-    let cycle_cost = start_cycles - end_cycles;
-    let time_cost = end_time - start_time;
-    Ok((root, cycle_cost, time_cost))
 }
 
 #[update(name = "get_tx_count")]
@@ -334,53 +283,6 @@ async fn get_gas_price(chain_id: u32) -> Result<u64, String> {
         .map_err(|e| format!("{:?}", e))
 }
 
-// relayer canister call this to check if a message is valid before process_message
-#[update(name = "is_valid")]
-#[candid_method(query, rename = "is_valid")]
-async fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
-    // verify message proof: use proof, message to calculate the merkle root, 
-    // check if the merkle root exists in corresponding chain state
-    let m = Message::from_raw(message.clone()).map_err(|e| {
-        format!("parse message from bytes failed: {:?}", e)
-    })?;
-    // call to gate way canister
-    let gateway: Principal = CHAINS.with(|c| {
-        let chains = c.borrow();
-        let chain = chains.get(&m.origin).ok_or("src chain id not exist".to_string())?;
-        Ok::<Principal, String>(chain.config.gateway_addr)
-    })?;
-
-    let res = ic_cdk::call(gateway, "is_valid", (message, proof, leaf_index, )).await;
-    match res {
-        Ok((validation_result, )) => {
-            validation_result
-        }
-        Err((_code, msg)) => {
-            Err(msg)
-        }
-    }
-}
-
-#[update(name = "get_latest_root")]
-#[candid_method(query, rename = "get_latest_root")]
-async fn get_latest_root(chain_id: u32) -> Result<String, String> {
-    let gateway: Principal = CHAINS.with(|c| {
-        let chains = c.borrow();
-        let chain = chains.get(&chain_id).ok_or("chain id not exist".to_string())?;
-        Ok::<Principal, String>(chain.config.gateway_addr)
-    })?;
-
-    let res = ic_cdk::call(gateway, "get_latest_root", ()).await;
-    match res {
-        Ok((root, )) => {
-            Ok(root)
-        }
-        Err((_code, msg)) => {
-            Err(msg)
-        }
-    }
-}
-
 // application canister call this method to send tx to destination chain
 #[update(name = "send_raw_tx")]
 #[candid_method(update, rename = "send_raw_tx")]
@@ -417,9 +319,30 @@ async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String>
     // TODO: fetch via client.get_tx_by_hash to make sure the tx is included
 }
 
-#[update(name = "process_message")]
-#[candid_method(update, rename = "process_message")]
+// update chain settings
+// clear existing messages cache immediately
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "trigger_clear_cache")]
+fn trigger_clear_cache(dst_chains: Vec<u32>) -> Result<(String, u64), String> {
+
+}
+
+// call by application
+// cache message and send them as a batch when it reaches the maximum capacity of the cache or
+// the limited time
+#[update(name = "send_message")]
+#[candid_method(update, rename = "send_message")]
 async fn send_message(dst_chain: u32, recipient: &[u8;32], payload: &[u8]) -> Result<(String, u64), String> {
+    // check cycles
+    let available = ic_cdk::api::call::msg_cycles_available();
+    let need_cycles = payload.len() as u64 * CYCLES_PER_BYTE;
+    if available < need_cycles {
+        return Err(format!("Insufficient cycles: require {} cycles. Received {}.", need_cycles, available));
+    }
+    // accept cycles
+    let _accepted = ic_cdk::api::call::msg_cycles_accept(need_cycles);
+
+    c
     // TODO:
     // cache message
     // charge cycles as fee
@@ -432,7 +355,6 @@ async fn process_message(message: Vec<MessageStable>) -> Result<(String, u64), S
 
     // todo: add controller
     // is gateway canister?
-
 
     // send msg to destination
     // TODO reset next index after call error?
@@ -486,16 +408,16 @@ async fn process_message(message: Vec<MessageStable>) -> Result<(String, u64), S
 #[update(name = "add_owner", guard = "is_authorized")]
 #[candid_method(update, rename = "add_owner")]
 async fn add_owner(owner: Principal) {
-    STATE_INFO.with(|s| {
-        s.borrow_mut().add_owner(owner);
+    OWNERS.with(|o| {
+        o.borrow_mut().insert(owner);
     });
 }
 
 #[update(name = "remove_owner", guard = "is_authorized")]
 #[candid_method(update, rename = "remove_owner")]
 async fn remove_owner(owner: Principal) {
-    STATE_INFO.with(|s| {
-        s.borrow_mut().delete_owner(owner);
+    OWNERS.with(|o| {
+        o.borrow_mut().remove(&owner);
     });
 }
 
@@ -555,30 +477,30 @@ fn pre_upgrade() {
     let chains = CHAINS.with(|c| {
         c.replace(HashMap::default())
     });
-    let state_info = STATE_INFO.with(|s| {
-        s.replace(StateInfo::default())
+    let owners = OWNERS.with(|o| {
+        o.replace(HashSet::default())
     });
     let records = RECORDS.with(|r| {
         r.replace(RecordDB::new())
     });
-    ic_cdk::storage::stable_save((chains, state_info, records, )).expect("pre upgrade error");
+    ic_cdk::storage::stable_save((chains, owners, records, )).expect("pre upgrade error");
 }
 
 #[post_upgrade]
 fn post_upgrade() {
     let (chains, 
-        state_info,
+        owners,
         records,
     ): (HashMap<u32, ChainState>, 
-        StateInfo, 
+        HashSet, 
         RecordDB,
     ) = ic_cdk::storage::stable_restore().expect("post upgrade error");
     
     CHAINS.with(|c| {
         c.replace(chains);
     });
-    STATE_INFO.with(|s| {
-        s.replace(state_info);
+    OWNERS.with(|s| {
+        s.replace(owners);
     });
     RECORDS.with(|r| {
         r.replace(records);
@@ -592,9 +514,8 @@ fn get_time() -> u64 {
 
 fn is_authorized() -> Result<(), String> {
     let user = ic_cdk::api::caller();
-    STATE_INFO.with(|info| {
-        let info = info.borrow();
-        if !info.is_owner(user) {
+    OWNERS.with(|owner| {
+        if !owner.borrow().contains(user) {
             Err("unauthorized!".into())
         } else {
             Ok(())

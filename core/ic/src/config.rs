@@ -15,6 +15,8 @@ pub struct ChainConfig {
     pub gateway_addr: Principal, // gateway canister address
     pub omnic_addr: String, // omnic contract address on that chain
     pub omnic_start_block: u64, // omnic contract deployment block
+    pub max_waiting_time: u64, // send msgs once reaching max_waiting_time
+	pub max_cache_msg: u64, // send msgs once reaching max_cache capability
 }
 
 impl Default for ChainConfig {
@@ -25,7 +27,9 @@ impl Default for ChainConfig {
             rpc_urls: Default::default(), 
             gateway_addr: Principal::anonymous(), 
             omnic_addr: Default::default(), 
-            omnic_start_block: Default::default()
+            omnic_start_block: Default::default(),
+            max_waiting_time: 0u64,
+            max_cache_msg: 0u64
         }
     }
 }
@@ -38,14 +42,18 @@ impl ChainConfig {
         gateway_addr: Principal, 
         omnic_addr: String, 
         omnic_start_block: u64,
+        max_waiting_time: u64,
+        max_cache_msg: u64
     ) -> ChainConfig {
         ChainConfig {
-            chain_type: chain_type,
-            chain_id: chain_id,
-            rpc_urls: rpc_urls,
-            gateway_addr: gateway_addr,
-            omnic_addr: omnic_addr,
-            omnic_start_block: omnic_start_block,
+            chain_type,
+            chain_id,
+            rpc_urls,
+            gateway_addr,
+            omnic_addr,
+            omnic_start_block,
+            max_waiting_time,
+            max_cache_msg,
         }
     }
 
@@ -55,5 +63,9 @@ impl ChainConfig {
 
     pub fn add_urls(&mut self, urls: Vec<String>) {
         self.rpc_urls.extend(urls);
+    }
+
+    pub fn get_cache_info(&self) -> (u64, u64) {
+        (self.max_waiting_time, self.max_cache_msg)
     }
 }
