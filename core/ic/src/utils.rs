@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 use crate::types::MessageStable;
-use ic_web3::types::H256;
+use ic_web3::types::{H256, Log};
 use tiny_keccak::{Hasher, Keccak};
 
 pub fn keccak256(msg: &[u8]) -> [u8; 32] {
@@ -65,4 +65,9 @@ pub fn check_scan_message_results(messages: &HashMap<usize, Vec<MessageStable>>,
     // message block number is same?
     // others...
     (false, vec![])
+}
+
+pub fn decode_log(logs: Vec<Log>) -> Vec<MessageStable> {
+    // todo: decode log to MessageStable
+    vec![]
 }

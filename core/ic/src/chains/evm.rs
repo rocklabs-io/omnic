@@ -17,6 +17,7 @@ use crate::types::MessageStable;
 use crate::error::OmnicError;
 use crate::error::OmnicError::*;
 use crate::traits::chain::HomeContract;
+use crate::utils::decode_log;
 
 const OMNIC_ABI: &[u8] = include_bytes!("./omnic.abi");
 
@@ -115,14 +116,16 @@ impl HomeContract for EVMChainClient {
             .map_err(|e| ClientError(format!("get tx count error: {:?}", e)))
     }
 
-    async fn scan_chunk(&self, start: u64, end: u64) -> Result<Vec<MessageStable>, OmnicError> {
+    async fn scan_chunk(&self, start: u64, end: u64) -> Result<(u64, Vec<MessageStable>), OmnicError> {
 
         // Filter for SendMessage event in omnic gateway contract
         let filter = FilterBuilder::default()
+        .from_block(BlockNumber::from(start))
+        .to_block(BlockNumber::from(end))
         .address(vec![self.contract.address()])
         .topics(
             Some(vec![hex!(
-                "d282f389399565f3671145f5916e51652b60eee8e5c759293a2f5771b8ddfd2e"
+                "0xe1a29fbaae32490486942a78b16a495c60ea39a21d49e338e593532e50f93a1d" // keccak256("SendMessage(bytes32,bytes,uint32,address,uint32,bytes32)")
             )
             .into()]),
             None,
@@ -132,9 +135,10 @@ impl HomeContract for EVMChainClient {
         .build();
 
         let filter = self.w3.eth_filter().create_logs_filter(filter).await?;
+        let logs = filter.logs().await?;
 
-        // todo: decode events from filter
-
-        Err(OmnicError::Other("uncomplete".to_string()))
+        // todo: decode events from logs to Vec<MessageStable>
+        let msgs = decode_log(logs);
+        Ok((end, msgs))
     }
 }
