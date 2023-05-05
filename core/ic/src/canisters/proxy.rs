@@ -5,40 +5,50 @@ omnic proxy canister:
 */
 
 use std::cell::{RefCell};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use ic_web3::ic::get_eth_addr;
-
+use ic_web3::types::H256;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
-use ic_cdk::export::candid::{candid_method};
+use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use candid::types::principal::Principal;
 
 use omnic::utils::DetailsBuilder;
-use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
+use omnic::{chains::EVMChainClient, ChainConfig, ChainState, ChainType};
 use omnic::{HomeContract, DetailValue, Record};
 use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::{StateInfo, RecordDB};
+use omnic::types::{Message, MessageType, MessageStable};
 use omnic::call::{call_to_canister, call_to_chain};
 
-#[derive(CandidType, Deserialize, Default, Clone)]
+
+
+#[derive(Default, Clone)]
 pub struct MessageCache {
-    msgs: HashMap<u32, VecDeque<(u64, MessageStable)>> // chain => (timestamp, message)
+    msgs: HashMap<u32, VecDeque<(u64, Message)>> // chain => (timestamp, message)
 } // cache messages for each chain
 
 impl MessageCache {
-    // todo: implement
-    fn get_message_len(&self, chain: u32) -> usize {
-        self.msgs.get(&chain).len()
+    fn get_message_len(&self, chain: u32) -> u64 {
+        self.msgs.get(&chain).map_or(0, |x| x.len() as u64)
+    }
+
+    fn get_front_msg_ts(&self, chain: u32) -> u64 {
+        self.msgs.get(&chain).map_or(0u64, |msg| msg.front().map_or(0u64, |item| item.0))
     }
 
     fn clean_messages(&mut self, chain: u32) {
-        self.msgs.get_mut(&chain).clear();
+        self.msgs.get_mut(&chain).map(|msg| msg.clear());
     }
 
-    fn get_front_msg_ts(&self, chain: u32) -> {
-        self.msgs.get(&chain).front().unwrap_or()
+    fn insert_message(&mut self, chain: u32, msg: Message) -> Result<(), String> {
+        self.msgs.get_mut(&chain).map_or(Err(format!("Invalid chain {}", chain)), |msgs| {
+            msgs.push_back((get_time(), msg));
+            Ok(())
+        })
     }
+
 }
 
 thread_local! {
@@ -46,6 +56,7 @@ thread_local! {
     static CHAINS: RefCell<HashMap<u32, ChainState>>  = RefCell::new(HashMap::new());
     static LOGS: RefCell<VecDeque<String>> = RefCell::new(VecDeque::default());
     static RECORDS: RefCell<RecordDB> = RefCell::new(RecordDB::new());
+    static CACHE: RefCell<MessageCache> = RefCell::new(MessageCache::default());
 }
 
 #[query]
@@ -61,7 +72,7 @@ fn get_logs() -> Vec<String> {
 fn init() {
     let caller = ic_cdk::api::caller();
     OWNERS.with(|owner| {
-        owner.borrow_mut().insert();
+        owner.borrow_mut().insert(caller);
     });
 }
 
@@ -117,7 +128,9 @@ fn add_chain(
     urls: Vec<String>, 
     gateway_canister_addr: Principal,
     omnic_addr: String, 
-    start_block: u64
+    start_block: u64,
+    max_waiting_time: u64,
+    max_cache_msg: u64
 ) -> Result<bool, String> {
     // add chain config
     // need to deploy gateway canister manually
@@ -133,6 +146,8 @@ fn add_chain(
                     gateway_canister_addr,
                     omnic_addr.clone(),
                     start_block,
+                    max_waiting_time,
+                    max_cache_msg
                 )
             ));
         }
@@ -147,6 +162,8 @@ fn add_chain(
             .insert("gatewat_addr", DetailValue::Principal(gateway_canister_addr))
             .insert("omnic_addr", DetailValue::Text(omnic_addr))
             .insert("start_block", DetailValue::U64(start_block))
+            .insert("max_waiting_time", DetailValue::U64(max_waiting_time))
+            .insert("startmax_cache_msg_block", DetailValue::U64(max_cache_msg))
     );
     Ok(true)
 }
@@ -179,7 +196,9 @@ fn update_chain(
     urls: Vec<String>, 
     gateway_canister_addr: Principal,
     omnic_addr: String, 
-    start_block: u64
+    start_block: u64,
+    max_waiting_time: u64,
+    max_cache_msg: u64
 ) -> Result<bool, String> {
     // add chain config
     CHAINS.with(|chains| {
@@ -193,6 +212,8 @@ fn update_chain(
                     gateway_canister_addr,
                     omnic_addr.clone(),
                     start_block,
+                    max_waiting_time,
+                    max_cache_msg
                 )
             ));
         }
@@ -206,6 +227,8 @@ fn update_chain(
             .insert("gateway_addr", DetailValue::Principal(gateway_canister_addr))
             .insert("omnic_addr", DetailValue::Text(omnic_addr))
             .insert("start_block", DetailValue::U64(start_block))
+            .insert("max_waiting_time", DetailValue::U64(max_waiting_time))
+            .insert("startmax_cache_msg_block", DetailValue::U64(max_cache_msg))
     );
     Ok(true)
 }
@@ -325,6 +348,7 @@ async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String>
 #[candid_method(update, rename = "trigger_clear_cache")]
 fn trigger_clear_cache(dst_chains: Vec<u32>) -> Result<(String, u64), String> {
 
+    Err(format!("umcompletely"))
 }
 
 // call by application
@@ -332,7 +356,7 @@ fn trigger_clear_cache(dst_chains: Vec<u32>) -> Result<(String, u64), String> {
 // the limited time
 #[update(name = "send_message")]
 #[candid_method(update, rename = "send_message")]
-async fn send_message(dst_chain: u32, recipient: &[u8;32], payload: &[u8]) -> Result<(String, u64), String> {
+async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Result<(String, u64), String> {
     // check cycles
     let available = ic_cdk::api::call::msg_cycles_available();
     let need_cycles = payload.len() as u64 * CYCLES_PER_BYTE;
@@ -341,8 +365,55 @@ async fn send_message(dst_chain: u32, recipient: &[u8;32], payload: &[u8]) -> Re
     }
     // accept cycles
     let _accepted = ic_cdk::api::call::msg_cycles_accept(need_cycles);
+    
+    let caller = ic_cdk::api::caller();
 
-    c
+    let msg = Message {
+        t: MessageType::SYN,
+        origin: 0u32,
+        sender: H256::from_slice(caller.as_slice()),
+        nonce: 0u32,
+        destination: dst_chain,
+        recipient: H256::from_slice(&recipient.into_bytes()),
+        body: payload
+    };
+
+    let (max_waiting_time, max_cache_msg_cap) = _get_cache_meta(&dst_chain);
+
+    CACHE.with(|cache| {
+        let c = cache.borrow_mut();
+        let front_cache_msg_ts = c.get_front_msg_ts(dst_chain);
+        let current_cache_msg_cap = c.get_message_len(dst_chain);
+        if front_cache_msg_ts + max_waiting_time > get_time() || current_cache_msg_cap >= (max_cache_msg_cap - 1u64) {
+            // add this message then send out
+            
+        }
+
+    });
+
+
+    // send tx
+    let (chain_type, rpc_url, omnic_addr) = CHAINS.with(|c| {
+        let chains = c.borrow();
+        let chain = chains.get(&dst_chain).expect("src chain id not exist");
+        (chain.chain_type(), chain.config.rpc_urls[0].clone(), chain.config.omnic_addr.clone())
+    });
+    match chain_type {
+        ChainType::Evm => {},
+        _ => return Err("chain type not supported yet".into()),
+    }
+
+    let client = EVMChainClient::new(rpc_url, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
+        .map_err(|e| format!("init client failed: {:?}", e))?;
+
+    // client.send_raw_tx will always end up with error because the same tx will be submitted multiple times 
+    // by the node in the subnet, first submission response ok, the rest will response error,
+    // so we should ignore return value of send_raw_tx, then query by the txhash to make sure the tx is correctly sent
+    client.send_raw_tx(raw_tx)
+        .await
+        .map_err(|e| format!("{:?}", e))
+
+    Err("todo".to_string())
     // TODO:
     // cache message
     // charge cycles as fee
@@ -492,7 +563,7 @@ fn post_upgrade() {
         owners,
         records,
     ): (HashMap<u32, ChainState>, 
-        HashSet, 
+        HashSet<Principal>, 
         RecordDB,
     ) = ic_cdk::storage::stable_restore().expect("post upgrade error");
     
@@ -512,10 +583,17 @@ fn get_time() -> u64 {
     ic_cdk::api::time() / 1000000000
 }
 
+fn _get_cache_meta(chain: &u32) -> (u64, u64) {
+    CHAINS.with(|chains| {
+        let chains = chains.borrow();
+        chains.get(chain).map_or((0u64, 0u64), |c| c.config.get_cache_info())
+    })
+}
+
 fn is_authorized() -> Result<(), String> {
     let user = ic_cdk::api::caller();
     OWNERS.with(|owner| {
-        if !owner.borrow().contains(user) {
+        if !owner.borrow().contains(&user) {
             Err("unauthorized!".into())
         } else {
             Ok(())

@@ -4,7 +4,7 @@ use crate::types::MessageStable;
 
 use std::cmp;
 
-#[derive(CandidType, Deserialize, Default)]
+#[derive(CandidType, Deserialize, Default, Clone)]
 pub struct ChainState {
     pub config: ChainConfig,
     pub canister_addr: String, // the address controlled by the proxy canister on this chain
