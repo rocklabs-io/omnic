@@ -19,18 +19,18 @@ use omnic::{chains::EVMChainClient, ChainConfig, ChainState, ChainType};
 use omnic::{HomeContract, DetailValue, Record};
 use omnic::consts::{KEY_NAME, MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::{StateInfo, RecordDB};
-use omnic::types::{Message, MessageType, MessageStable};
+use omnic::types::{Message, MessageType, MessageStable, encode_body};
 use omnic::call::{call_to_canister, call_to_chain};
-
 
 
 #[derive(Default, Clone)]
 pub struct MessageCache {
-    msgs: HashMap<u32, VecDeque<(u64, Message)>> // chain => (timestamp, message)
+    msgs: HashMap<u32, VecDeque<(u64, Message)>>, // chain => (timestamp, message)
+    del_ongoing_msgs: HashMap::<u32, VecDeque<(u64, Message)>> // when sending msgs to evm, cache them and delte them when receiving receipt (ACK message)
 } // cache messages for each chain
 
 impl MessageCache {
-    fn get_message_len(&self, chain: u32) -> u64 {
+    fn get_cache_messages_len(&self, chain: u32) -> u64 {
         self.msgs.get(&chain).map_or(0, |x| x.len() as u64)
     }
 
@@ -38,15 +38,18 @@ impl MessageCache {
         self.msgs.get(&chain).map_or(0u64, |msg| msg.front().map_or(0u64, |item| item.0))
     }
 
-    fn clean_messages(&mut self, chain: u32) {
-        self.msgs.get_mut(&chain).map(|msg| msg.clear());
+    fn clean_ongoing_messages(&mut self, chain: u32) {
+        self.del_ongoing_msgs.get_mut(&chain).map(|msg| msg.clear());
     }
 
-    fn insert_message(&mut self, chain: u32, msg: Message) -> Result<(), String> {
-        self.msgs.get_mut(&chain).map_or(Err(format!("Invalid chain {}", chain)), |msgs| {
-            msgs.push_back((get_time(), msg));
-            Ok(())
-        })
+    fn drain_messages(&mut self, chain: u32) -> Vec<Vec<u8>> {
+        let drained = deque.drain(..).collect::<VecDeque<_>>();
+        self.del_ongoing_msgs.entry(chain).
+        draind.into_iter().map(|(_, msg)| encode_body(msg)).collect()
+    }
+
+    fn insert_message(&mut self, chain: u32, msg: Message) {
+        self.msgs.entry(chain).and_modify(|msg| *msg.push_back(msg)).or_insert(msg);
     }
 
 }
@@ -372,7 +375,7 @@ async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Re
         t: MessageType::SYN,
         origin: 0u32,
         sender: H256::from_slice(caller.as_slice()),
-        nonce: 0u32,
+        nonce: 0u32, // todo: how to handle nonce 
         destination: dst_chain,
         recipient: H256::from_slice(&recipient.into_bytes()),
         body: payload
@@ -380,43 +383,39 @@ async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Re
 
     let (max_waiting_time, max_cache_msg_cap) = _get_cache_meta(&dst_chain);
 
-    CACHE.with(|cache| {
+    let (msgs, send_flag) = CACHE.with(move |cache| {
         let c = cache.borrow_mut();
         let front_cache_msg_ts = c.get_front_msg_ts(dst_chain);
         let current_cache_msg_cap = c.get_message_len(dst_chain);
+        c.insert_message(dst_chain, msg);
         if front_cache_msg_ts + max_waiting_time > get_time() || current_cache_msg_cap >= (max_cache_msg_cap - 1u64) {
-            // add this message then send out
-            
+            // send out
+            (self.drain_messages(dst_chain), true)
+        } else {
+            (vec![], false)
+        }  
+    });
+
+    add_record(
+        caller, 
+        "send_message".to_string(), 
+        DetailsBuilder::new()
+            .insert("nonce", DetailValue::U64(m.nonce as u64))
+            .insert("destination", DetailValue::U64(dst_chain as u64))
+            .insert("recipient", DetailValue::Text(recipient))
+    );
+
+    if send_flags {
+        let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
+            let chains = chains.borrow();
+            let c = chains.get(&dst_chain).expect("chain not found");
+            (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
+        });
+        if caller == "" || omnic_addr == "" {
+            return Err("caller address is empty".into());
         }
-
-    });
-
-
-    // send tx
-    let (chain_type, rpc_url, omnic_addr) = CHAINS.with(|c| {
-        let chains = c.borrow();
-        let chain = chains.get(&dst_chain).expect("src chain id not exist");
-        (chain.chain_type(), chain.config.rpc_urls[0].clone(), chain.config.omnic_addr.clone())
-    });
-    match chain_type {
-        ChainType::Evm => {},
-        _ => return Err("chain type not supported yet".into()),
+        call_to_chain(caller, omnic_addr, rpc, dst_chain, msgs).await
     }
-
-    let client = EVMChainClient::new(rpc_url, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
-        .map_err(|e| format!("init client failed: {:?}", e))?;
-
-    // client.send_raw_tx will always end up with error because the same tx will be submitted multiple times 
-    // by the node in the subnet, first submission response ok, the rest will response error,
-    // so we should ignore return value of send_raw_tx, then query by the txhash to make sure the tx is correctly sent
-    client.send_raw_tx(raw_tx)
-        .await
-        .map_err(|e| format!("{:?}", e))
-
-    Err("todo".to_string())
-    // TODO:
-    // cache message
-    // charge cycles as fee
 }
 
 // only gateway canister call

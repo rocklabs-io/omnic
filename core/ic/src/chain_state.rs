@@ -7,6 +7,7 @@ use std::cmp;
 #[derive(CandidType, Deserialize, Default, Clone)]
 pub struct ChainState {
     pub config: ChainConfig,
+    pub nonce: HashMap<String, u32>, // applicable => nonce
     pub canister_addr: String, // the address controlled by the proxy canister on this chain
     pub last_scanned_block: u64,
     pub events: Vec<([u8;32], MessageStable)>, // messageHash => message
@@ -20,6 +21,7 @@ impl ChainState {
         let start_block = chain_config.omnic_start_block;
         ChainState {
             config: chain_config,
+            nonce: HashMap::new(),
             canister_addr: "".into(),
             last_scanned_block: start_block,
             events: Default::default()
