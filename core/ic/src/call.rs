@@ -5,6 +5,7 @@ use crate::consts::{MAX_RESP_BYTES, CYCLES_PER_CALL};
 use crate::types::MessageStable;
 use crate::chains::EVMChainClient;
 use crate::traits::chain::HomeContract;
+use crate::utils::keccak256;
 
 use crate::utils::keccak256;
 

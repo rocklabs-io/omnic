@@ -382,7 +382,7 @@ async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String>
 
 // update chain settings
 // clear existing messages cache immediately
-#[update(guard = "is_authorized")]
+#[update(name = "trigger_clear_cache", guard = "is_authorized")]
 #[candid_method(update, rename = "trigger_clear_cache")]
 async fn trigger_clear_cache(dst_chains: Vec<u32>) -> Result<bool, String> {
     for dst_chain in dst_chains {

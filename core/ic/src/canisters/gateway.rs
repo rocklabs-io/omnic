@@ -21,7 +21,8 @@ use candid::types::principal::Principal;
 use ic_cron::types::Iterations;
 
 use accumulator::{TREE_DEPTH, merkle_root_from_branch};
-use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
+use omnic::{chains::EVMChainClient, ChainConfig, ChainState, ChainType};
+use omnic::types::{Message, MessageStable};
 use omnic::HomeContract;
 use omnic::consts::{MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::{State, StateMachine, StateInfo};
@@ -348,8 +349,8 @@ async fn scan() {
             // query root in block height
             match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
                 Ok(client) => {
-                    let start_block = clinet.get_suggested_start_block();
-                    let end_block = clinet.get_block_number().await?;
+                    let start_block = client.get_suggested_start_block();
+                    let end_block = client.get_block_number().await;
                     let mut current_block = start_block;
                     let mut chunk_size = 20; // 
                     let mut all_events: Vec<MessageStable> = vec![];
