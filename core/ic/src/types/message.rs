@@ -35,7 +35,7 @@ pub struct Message {
     /// 32  Address in home convention
     pub sender: H256,
     /// 4   Count of all previous messages to destination
-    pub nonce: u32,
+    pub nonce: u64,
     /// 4   SLIP-44 ID
     pub destination: u32,
     /// 32  Address in destination convention
@@ -44,7 +44,7 @@ pub struct Message {
     pub body: Vec<u8>,
 }
 
-fn decode_body(data: &[u8]) -> Result<Vec<Token>, Error> {
+pub fn decode_body(data: &[u8]) -> Result<Vec<Token>, Error> {
     let types = vec![
         ParamType::Uint(8), ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Uint(32), 
         ParamType::Uint(32), ParamType::FixedBytes(32), ParamType::Bytes
@@ -52,7 +52,7 @@ fn decode_body(data: &[u8]) -> Result<Vec<Token>, Error> {
     decode(&types, data)
 }
 
-fn encode_body(msg: &Message) -> Vec<u8> {
+pub fn encode_body(msg: &Message) -> Vec<u8> {
     let tokens = [
         Token::Uint((msg.t.clone() as u8).into()),
         Token::Uint(msg.origin.into()),
@@ -72,7 +72,7 @@ impl Message {
         let origin = res[1].clone().into_uint().ok_or(DecodeError("get origin failed".into()))?.as_u32();
         let sender_bytes = res[2].clone().into_fixed_bytes().ok_or(DecodeError("get sender failed".into()))?;
         let sender = H256::from_slice(&sender_bytes);
-        let nonce = res[3].clone().into_uint().ok_or(DecodeError("get nonce failed".into()))?.as_u32();
+        let nonce = res[3].clone().into_uint().ok_or(DecodeError("get nonce failed".into()))?.as_u64();
         let destination = res[4].clone().into_uint().ok_or(DecodeError("get destination failed".into()))?.as_u32();
         let recipient_bytes = res[5].clone().into_fixed_bytes().ok_or(DecodeError("get recipient failed".into()))?;
         let recipient = H256::from_slice(&recipient_bytes);
@@ -129,7 +129,7 @@ pub struct MessageStable {
     /// 32  Address in home convention
     pub sender: [u8;32],
     /// 4   Count of all previous messages to destination
-    pub nonce: u32,
+    pub nonce: u64,
     /// 4   SLIP-44 ID
     pub destination: u32,
     /// 32  Address in destination convention

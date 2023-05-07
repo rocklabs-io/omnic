@@ -26,7 +26,6 @@ use omnic::call::{call_to_canister, call_to_chain};
 #[derive(Default, Clone)]
 pub struct MessageCache {
     msgs: HashMap<u32, VecDeque<(u64, Message)>>, // chain => (timestamp, message)
-    del_ongoing_msgs: HashMap::<u32, VecDeque<(u64, Message)>> // when sending msgs to evm, cache them and delte them when receiving receipt (ACK message)
 } // cache messages for each chain
 
 impl MessageCache {
@@ -38,18 +37,21 @@ impl MessageCache {
         self.msgs.get(&chain).map_or(0u64, |msg| msg.front().map_or(0u64, |item| item.0))
     }
 
-    fn clean_ongoing_messages(&mut self, chain: u32) {
-        self.del_ongoing_msgs.get_mut(&chain).map(|msg| msg.clear());
+    fn clean_messages(&mut self, chain: u32) {
+        self.msgs.get_mut(&chain).map(|msg| msg.clear());
     }
 
     fn drain_messages(&mut self, chain: u32) -> Vec<Vec<u8>> {
-        let drained = deque.drain(..).collect::<VecDeque<_>>();
-        self.del_ongoing_msgs.entry(chain).
-        draind.into_iter().map(|(_, msg)| encode_body(msg)).collect()
+        let drained = self.msgs.drain(..).collect::<VecDeque<_>>();
+        drained.into_iter().map(|(_, msg)| encode_body(msg)).collect()
+    }
+
+    fn encode_msgs(&self, chain: u32) -> Vec<Vec<u8>> {
+        self.msgs.get(&chain).map_or(vec![], |msg| msg.clone().into_iter().map(|(_, msg)| encode_body(msg)).collect())
     }
 
     fn insert_message(&mut self, chain: u32, msg: Message) {
-        self.msgs.entry(chain).and_modify(|msg| *msg.push_back(msg)).or_insert(msg);
+        self.msgs.entry(chain).and_modify(|msg| *msg.push_back((get_time(), msg))).or_insert(VecDeque::from([(get_time(), msg),]));
     }
 
 }
@@ -349,17 +351,51 @@ async fn send_raw_tx(dst_chain: u32, raw_tx: Vec<u8>) -> Result<Vec<u8>, String>
 // clear existing messages cache immediately
 #[update(guard = "is_authorized")]
 #[candid_method(update, rename = "trigger_clear_cache")]
-fn trigger_clear_cache(dst_chains: Vec<u32>) -> Result<(String, u64), String> {
+async fn trigger_clear_cache(dst_chains: Vec<u32>) -> Result<bool, String> {
+    for dst_chain in dst_chains {
+        let (msgs, msg_len) = CACHE.with(|cache| {
+            let c = cache.borrow();
+            (c.encode_msgs(dst_chain), c.get_message_len(dst_chain))
+        });
+    
+        let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
+            let chains = chains.borrow();
+            let c = chains.get(&dst_chain).expect("chain not found");
+            (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
+        });
+        if caller == "" || omnic_addr == "" {
+            return Err("caller address is empty".into());
+        }
+        match call_to_chain(caller, omnic_addr, rpc, dst_chain, msgs).await {
+            Ok(txhash) => {
+                //clear cache
+                CACHE.with(move |cache| cache.borrow_mut().clean_messages(dst_chain));
+    
+                //add record
+                add_record(
+                    caller, 
+                    "process_message_batch".to_string(), 
+                    DetailsBuilder::new()
+                        .insert("origin", DetailValue::U64(0u64))
+                        .insert("destination", DetailValue::U64(dst_chain as u64))
+                        .insert("message_batch", DetailValue::U64(msg_len))
+                        .insert("result", DetailValue::Text(txhash.to_string())));
+            },
+            Err(err) => {
+                return Err(err);
+            },
+        }
+    }
+    Ok(true)
 
-    Err(format!("umcompletely"))
 }
 
 // call by application
 // cache message and send them as a batch when it reaches the maximum capacity of the cache or
 // the limited time
-#[update(name = "send_message")]
+#[update(name = "send_message", guard = "is_authorized")]
 #[candid_method(update, rename = "send_message")]
-async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Result<(String, u64), String> {
+async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Result<bool, String> {
     // check cycles
     let available = ic_cdk::api::call::msg_cycles_available();
     let need_cycles = payload.len() as u64 * CYCLES_PER_BYTE;
@@ -370,12 +406,13 @@ async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Re
     let _accepted = ic_cdk::api::call::msg_cycles_accept(need_cycles);
     
     let caller = ic_cdk::api::caller();
+    let out_nonce = get_out_nonce(&dst_chain, &caller);
 
     let msg = Message {
         t: MessageType::SYN,
         origin: 0u32,
-        sender: H256::from_slice(caller.as_slice()),
-        nonce: 0u32, // todo: how to handle nonce 
+        sender: H256::from_slice(caller.clone().as_slice()),
+        nonce: out_nonce,
         destination: dst_chain,
         recipient: H256::from_slice(&recipient.into_bytes()),
         body: payload
@@ -383,16 +420,16 @@ async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Re
 
     let (max_waiting_time, max_cache_msg_cap) = _get_cache_meta(&dst_chain);
 
-    let (msgs, send_flag) = CACHE.with(move |cache| {
+    let (msgs, msg_len, send_flag) = CACHE.with(move |cache| {
         let c = cache.borrow_mut();
         let front_cache_msg_ts = c.get_front_msg_ts(dst_chain);
         let current_cache_msg_cap = c.get_message_len(dst_chain);
         c.insert_message(dst_chain, msg);
         if front_cache_msg_ts + max_waiting_time > get_time() || current_cache_msg_cap >= (max_cache_msg_cap - 1u64) {
             // send out
-            (self.drain_messages(dst_chain), true)
+            (c.encode_msgs(dst_chain), c.get_message_len(dst_chain), true)
         } else {
-            (vec![], false)
+            (vec![], 0u64, false)
         }  
     });
 
@@ -400,12 +437,14 @@ async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Re
         caller, 
         "send_message".to_string(), 
         DetailsBuilder::new()
-            .insert("nonce", DetailValue::U64(m.nonce as u64))
+            .insert("nonce", DetailValue::U64(out_nonce))
             .insert("destination", DetailValue::U64(dst_chain as u64))
             .insert("recipient", DetailValue::Text(recipient))
     );
+    // out nonce increment
+    inc_out_nonce(dst_chain, caller.clone());
 
-    if send_flags {
+    if send_flag {
         let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
             let chains = chains.borrow();
             let c = chains.get(&dst_chain).expect("chain not found");
@@ -414,65 +453,79 @@ async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Re
         if caller == "" || omnic_addr == "" {
             return Err("caller address is empty".into());
         }
-        call_to_chain(caller, omnic_addr, rpc, dst_chain, msgs).await
+        match call_to_chain(caller, omnic_addr, rpc, dst_chain, msgs).await {
+            Ok(txhash) => {
+                //clear cache
+                CACHE.with(move |cache| cache.borrow_mut().clean_messages(dst_chain));
+
+                //add record
+                add_record(
+                    caller, 
+                    "process_message_batch".to_string(), 
+                    DetailsBuilder::new()
+                        .insert("origin", DetailValue::U64(0u64))
+                        .insert("destination", DetailValue::U64(dst_chain as u64))
+                        .insert("message_batch", DetailValue::U64(msg_len))
+                        .insert("result", DetailValue::Text(txhash.to_string())));
+                return Ok(true);
+
+            },
+            Err(err) => {
+                return Err(err);
+            },
+        }
     }
+
+    Ok(true)
 }
 
 // only gateway canister call
 #[update(name = "process_message")]
 #[candid_method(update, rename = "process_message")]
-async fn process_message(message: Vec<MessageStable>) -> Result<(String, u64), String> {
-
-    // todo: add controller
-    // is gateway canister?
-
-    // send msg to destination
-    // TODO reset next index after call error?
-    let res = if m.destination == 0 {
-        // take last 10 bytes
-        for m in message.iter() {
+async fn process_message(messages: Vec<Message>) -> Result<Vec<(String, u64)>, String> {
+    // now, proxy handle message one by one and add batch processing in the future
+    let mut rets: Vec<(String, u64)> = vec![];
+    for m in messages {
+        let res = if m.destination == 0u32 {
+            // take last 10 bytes
             let recipient = Principal::from_slice(&m.recipient.as_bytes()[22..]);
             add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
             let res = call_to_canister(recipient, &m).await?;
             let time = ic_cdk::api::time();
             Ok((res, time))
+     
+        } else {
+            // send tx to dst chain
+            // call_to_chain(m.destination, message).await
+            let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
+                let chains = chains.borrow();
+                let c = chains.get(&m.destination).expect("chain not found");
+                (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
+            });
+            if caller == "" || omnic_addr == "" {
+                return Err("caller address is empty".into());
+            }
+
+            call_to_chain(caller, omnic_addr, rpc, m.destination, vec![encode_body(m.clone())]).await
+        };
+
+        add_record(
+            ic_cdk::caller(), 
+            "process_message".to_string(), 
+            DetailsBuilder::new()
+                .insert("origin", DetailValue::U64(m.origin as u64))
+                .insert("send", DetailValue::Text(m.sender.to_string()))
+                .insert("nonce", DetailValue::U64(m.nonce as u64))
+                .insert("destination", DetailValue::U64(m.destination as u64))
+                .insert("recipient", DetailValue::Text(m.recipient.to_string()))
+                .insert("result", DetailValue::Text(res.clone().map_or_else(|e| e, |o| o)))
+        );
+        let r = res.map(|o| (o, ic_cdk::api::time()));
+        if r.is_ok() {
+            rets.insert(r);
         }
-    } else {
-        // send tx to dst chain
-        // call_to_chain(m.destination, message).await
-        let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
-            let chains = chains.borrow();
-            let c = chains.get(&m.destination).expect("chain not found");
-            (c.canister_addr.clone(), c.config.omnic_addr.clone(), c.config.rpc_urls[0].clone())
-        });
-        if caller == "" || omnic_addr == "" {
-            return Err("caller address is empty".into());
-        }
-        call_to_chain(caller, omnic_addr, rpc, m.destination, message).await
-    };
-    
-    add_record(
-        origin_caller, 
-        "process_message".to_string(), 
-        DetailsBuilder::new()
-            .insert("origin", DetailValue::U64(m.origin as u64))
-            .insert("send", DetailValue::Text(m.sender.to_string()))
-            .insert("nonce", DetailValue::U64(m.nonce as u64))
-            .insert("destination", DetailValue::U64(m.destination as u64))
-            .insert("recipient", DetailValue::Text(m.recipient.to_string()))
-            .insert("result", DetailValue::Text(
-                match res.clone() {
-                    Ok(o) => {
-                        o
-                    }
-                    Err(e) => {
-                        e
-                    }
-                }
-            ))
-    );
-    
-    res.map(|o| (o, ic_cdk::api::time()))
+    }
+    rets
 }
 
 #[update(name = "add_owner", guard = "is_authorized")]
@@ -621,6 +674,20 @@ fn add_record(caller: Principal, op: String, details_builder: DetailsBuilder) {
         );
     });
 }
+
+fn get_out_nonce(dst_chain: &u32, canister: &Principal) -> u64 {
+    RECORDS.with(|r| r.borrow().get_out_nonce(dst_chain, canister))
+} 
+
+fn get_in_nonce(dst_chain: &u32, sender: &str) -> u64 {
+    RECORDS.with(|r| r.borrow().get_in_nonce(dst_chain, sender))
+} 
+fn inc_out_nonce(dst_chain: u32, canister: Principal) {
+    RECORDS.with(|r| r.borrow_mut().inc_out_nonce(dst_chain, canister));
+} 
+fn inc_in_nonce(dst_chain: u32, sender: String) {
+    RECORDS.with(|r| r.borrow_mut().inc_in_nonce(dst_chain, sender));
+} 
 
 #[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {

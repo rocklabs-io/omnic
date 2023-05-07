@@ -171,6 +171,9 @@ pub struct RecordDB {
     pub records: Vec<Record>,
     // index
     pub op_index: BTreeMap<String, Vec<usize>>,
+    // nonce
+    pub out_nonce: HashMap<u32, HashMap<Principal, u64>>, // [dst_chain][canister_app] => nonce
+    pub in_nonce: HashMap<u32, HashMap<String, u64>>, // [src_chain][app] => nonce
 }
 
 #[derive(CandidType, Deserialize, Clone)]
@@ -200,6 +203,26 @@ pub enum DetailValue {
 impl RecordDB {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn get_out_nonce(&self, dst_chain: &u32, canister: &Principal) -> u64 {
+        self.out_nonce.get(dst_chain).map_or(0u64, |item| item.get(canister).map_or(0u64, |n| *n))
+    }
+
+    pub fn get_in_nonce(&self, dst_chain: &u32, sender: &str) -> u64 {
+        self.in_nonce.get(dst_chain).map_or(0u64, |item| item.get(sender).map_or(0u64, |n| *n))
+    }
+
+    pub fn inc_out_nonce(&mut self, dst_chain: u32, canister: Principal) {
+        self.out_nonce.entry(dst_chain).and_modify(|item|
+            {item.entry(canister.clone()).and_modify(|n| *n += 1).or_insert(0u64);}
+        ).or_insert(HashMap::from([(canister, 0u64),]));
+    }
+
+    pub fn inc_in_nonce(&mut self, dst_chain: u32, sender: String) {
+        self.in_nonce.entry(dst_chain).and_modify(|item|
+            {item.entry(sender.clone()).and_modify(|n| *n += 1).or_insert(0u64);}
+        ).or_insert(HashMap::from([(sender, 0u64),]));
     }
 
     pub fn size(&self, op: Option<String>) -> usize {

@@ -24,8 +24,8 @@ use accumulator::{TREE_DEPTH, merkle_root_from_branch};
 use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
 use omnic::HomeContract;
 use omnic::consts::{MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
-use omnic::state::{State, StateMachine, StateMachineStable, StateInfo};
-use omnic::utils::check_roots_result;
+use omnic::state::{State, StateMachine, StateInfo};
+use omnic::utils::check_scan_message_results;
 
 ic_cron::implement_cron!();
 
@@ -428,7 +428,7 @@ fn pre_upgrade() {
     let state_machine = STATE_MACHINE.with(|s| {
         s.replace(StateMachine::default())
     });
-    ic_cdk::storage::stable_save((chains, state_info, StateMachineStable::from(state_machine), _take_cron_state())).expect("pre upgrade error");
+    ic_cdk::storage::stable_save((chains, state_info, state_machine, _take_cron_state())).expect("pre upgrade error");
 }
 
 #[post_upgrade]
@@ -439,7 +439,7 @@ fn post_upgrade() {
         cron_state
     ): (ChainState, 
         StateInfo, 
-        StateMachineStable, 
+        StateMachine, 
         Option<TaskScheduler>
     ) = ic_cdk::storage::stable_restore().expect("post upgrade error");
     
