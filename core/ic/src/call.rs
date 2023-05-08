@@ -2,14 +2,16 @@ use candid::Principal;
 use ic_cdk::api::call::{call, CallResult};
 
 use crate::consts::{MAX_RESP_BYTES, CYCLES_PER_CALL};
-use crate::types::Message;
+use crate::types::MessageStable;
 use crate::chains::EVMChainClient;
 use crate::traits::chain::HomeContract;
 
-pub async fn call_to_canister(recipient: Principal, msg_hash: Vec<u8>, m: &Message) -> Result<String, String> {
+use crate::utils::keccak256;
+
+pub async fn call_to_canister(recipient: Principal, m: &MessageStable) -> Result<String, String> {
     // call ic recipient canister
     let ret: CallResult<(Result<String, String>,)> = 
-        call(recipient, "handle_message", (msg_hash, m.origin, m.sender.as_bytes(), m.nonce, m.body.clone(), )).await;
+        call(recipient, "handle_message", (keccak256(&m.body), m.origin, m.sender, m.nonce, m.body.clone(), )).await;
     match ret {
         Ok((res, )) => {
             match res {
