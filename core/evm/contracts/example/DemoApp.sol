@@ -11,6 +11,11 @@ contract DemoApp is Ownable {
 
     address omnicAddr;
 
+    // Message type
+    uint8 public constant MESSAGE_TYPE_SYN = 0;
+    uint8 public constant MESSAGE_TYPE_ACK = 1;
+    uint8 public constant MESSAGE_TYPE_FAIL_ACK = 2;
+
     // ============ Events  ============
     event ReceivedMessage(
         uint32 indexed srcChainId,
@@ -36,12 +41,14 @@ contract DemoApp is Ownable {
     }
 
     function sendMessage(
+        uint8 _msgType, //message type: {SYN, ACK, FAIL_ACK}
         uint32 _dstChainId,
         bytes32 _recipientAddress,
         bytes memory _payload
     ) public payable {
         // send message to dst chain, call omnic contract
         Omnic(omnicAddr).sendMessage{value: msg.value}(
+            _msgType,
             _dstChainId,
             _recipientAddress,
             _payload,
@@ -52,7 +59,7 @@ contract DemoApp is Ownable {
 
     // only omnic canister can call this func
     function handleMessage(
-        IOmnicReciver.MessageType t,
+        uint8 msgType,
         uint32 srcChainId,
         bytes32 srcSender,
         uint32 nonce,
@@ -62,12 +69,12 @@ contract DemoApp is Ownable {
         onlyOmnicContract
         returns (bool success)
     {
-        if(t == IOmnicReciver.MessageType.SYN)
+        if(msgType == MESSAGE_TYPE_SYN)
         {
             //
-        } else if(t == IOmnicReciver.MessageType.ACK){
+        } else if(msgType == MESSAGE_TYPE_ACK){
             //
-        } else if(t == IOmnicReciver.MessageType.FAIL_ACK){
+        } else if(msgType == MESSAGE_TYPE_FAIL_ACK){
             //
         } else {
             //

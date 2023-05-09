@@ -27,8 +27,8 @@ export const setOmnicImpl = async function (chain: string, implAddr: string) {
 const main = async function () {
   let chain = hre.network.name;
   const upgrade = true;
-  const impl  = await deployOmnicImpl(chain, upgrade);
-  await setOmnicImpl(chain, impl.address);
+  const impl_address = await deployOmnicImpl(chain, upgrade);
+  await setOmnicImpl(chain, impl_address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

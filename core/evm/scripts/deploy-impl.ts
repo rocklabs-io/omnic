@@ -33,7 +33,7 @@ export const deployOmnicImpl = async function (chain: string, upgrade: boolean) 
   const feeManagerAddr = getContractAddr(chain, "OmnicFeeManager");
   let result = omnic.initialize(proxyAddr, feeManagerAddr)
   console.log("initialize: " + result)
-  return result;
+  return omnic.address;
 }
 
 const main = async function () {

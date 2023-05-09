@@ -7,8 +7,6 @@ use crate::chains::EVMChainClient;
 use crate::traits::chain::HomeContract;
 use crate::utils::keccak256;
 
-use crate::utils::keccak256;
-
 pub async fn call_to_canister(recipient: Principal, m: &MessageStable) -> Result<String, String> {
     // call ic recipient canister
     let ret: CallResult<(Result<String, String>,)> = 

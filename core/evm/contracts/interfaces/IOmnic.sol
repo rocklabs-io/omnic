@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.9;
 
+import {IOmnicReciver} from "./IOmnicReciver.sol";
+
 interface IOmnic {
     struct Message {
         uint8 t; // message type: {SYN, ACK, FAIL_ACK}
@@ -21,6 +23,7 @@ interface IOmnic {
     }
 
     function sendMessage(
+        uint8 _msgType, // message type
         uint32 _dstChainId,
         bytes32 _recipientAddress,
         bytes memory _payload,
@@ -29,6 +32,7 @@ interface IOmnic {
     ) external payable;
 
     function sendMessageFree(
+        uint8 _msgType, // message type
         uint32 _dstChainId,
         bytes32 _recipientAddress,
         bytes memory _payload

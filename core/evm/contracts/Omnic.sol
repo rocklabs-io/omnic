@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-
 //internal
 import {TypeCasts} from "./utils/Utils.sol";
 import {IOmnic} from "./interfaces/IOmnic.sol";
@@ -21,18 +20,18 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     using SafeERC20 for IERC20;
 
     // Message type
-    uint8 public constant MESSAGE_TYPE_SYN = uint8(IOmnicReciver.MessageType.SYN);
-    uint8 public constant MESSAGE_TYPE_ACK = uint8(IOmnicReciver.MessageType.ACK);
-    uint8 public constant MESSAGE_TYPE_FAIL_ACK = uint8(IOmnicReciver.MessageType.FAIL_ACK);
+    uint8 public constant MESSAGE_TYPE_SYN = 0;
+    uint8 public constant MESSAGE_TYPE_ACK = 1;
+    uint8 public constant MESSAGE_TYPE_FAIL_ACK = 2;
 
     // ================================ Variables ===================================
     // Maximum bytes per message = 2 KiB
     // (somewhat arbitrarily set to begin)
-    uint256 public constant MAX_MESSAGE_BODY_BYTES = 2 * 2**10;
+    uint256 public constant MAX_MESSAGE_BODY_BYTES = 2 * 2 ** 10;
     uint32 public chainId;
     // ic canister which is responsible for message management, verification and update
     address public omnicProxyCanisterAddr;
-     // Token and Contracts
+    // Token and Contracts
     IOmnicFeeManager public omnicFeeManager;
     // Token and Contracts
     IERC20 public erc20FeeToken; // choose a ERC20 token as fee token specified by omnic owner
@@ -59,19 +58,13 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     uint8 internal _processEnteredState;
 
     modifier sendNonReentrant() {
-        require(
-            _sendEnteredState == 1,
-            "Omnic: no send reentrancy"
-        );
+        require(_sendEnteredState == 1, "Omnic: no send reentrancy");
         _sendEnteredState = 0;
         _;
         _sendEnteredState = 1;
     }
     modifier receiveNonReentrant() {
-        require(
-            _processEnteredState == 1,
-            "Omnic: no receive reentrancy"
-        );
+        require(_processEnteredState == 1, "Omnic: no receive reentrancy");
         _processEnteredState = 0;
         _;
         _processEnteredState = 1;
@@ -84,6 +77,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
 
     // ============ Events  ============
     event SendMessage(
+        uint8 msgType,
         bytes32 indexed messageHash,
         bytes message,
         uint32 indexed srcChainId,
@@ -132,9 +126,12 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     // ============== Start ===============
     constructor() {}
 
-    function initialize(address proxyCanisterAddr, address feeManagerAddr) public initializer {
+    function initialize(
+        address proxyCanisterAddr,
+        address feeManagerAddr
+    ) public initializer {
         __Ownable_init();
-        chainId = uint32(block.chainid); 
+        chainId = uint32(block.chainid);
         omnicProxyCanisterAddr = proxyCanisterAddr;
         omnicFeeManager = IOmnicFeeManager(feeManagerAddr);
         _sendEnteredState = 1;
@@ -142,12 +139,14 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     }
 
     function sendMessage(
+        uint8 _msgType,
         uint32 _dstChainId,
         bytes32 _recipientAddress,
         bytes memory _payload,
         address payable _refundAddress,
         address _erc20PaymentAddress
     ) external payable override sendNonReentrant {
+        require(_isSupportedMsgType(_msgType), "only 3 message types");
         require(_payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
         // compute all the fees
         uint256 nativeProtocolFee = _handleProtocolFee(
@@ -165,8 +164,8 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         // get the next nonce for the destination domain, then increment it
         uint64 _nonce = ++outboundNonce[_dstChainId][msg.sender];
 
-        Message memory m = Message (
-            MESSAGE_TYPE_SYN,
+        Message memory m = Message(
+            _msgType,
             chainId,
             TypeCasts.addressToBytes32(msg.sender),
             _nonce,
@@ -178,6 +177,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         bytes32 _messageHash = keccak256(_message);
 
         emit SendMessage(
+            _msgType,
             _messageHash,
             _message,
             chainId,
@@ -197,18 +197,20 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     // fee free function for whitelisted contracts
     // for omnic bridge's CreatePool, Add/RemoveLiquidity operations
     function sendMessageFree(
+        uint8 _msgType,
         uint32 _dstChainId,
         bytes32 _recipientAddress,
         bytes memory _payload
     ) external override sendNonReentrant {
+        require(_isSupportedMsgType(_msgType), "only 3 message types");
         require(whitelisted[msg.sender], "not whitelisted caller");
         require(_payload.length <= MAX_MESSAGE_BODY_BYTES, "msg too long");
         // get the next nonce for the destination domain, then increment it
         // get the next nonce for the destination domain, then increment it
         uint64 _nonce = ++outboundNonce[_dstChainId][msg.sender];
 
-        Message memory m = Message (
-            MESSAGE_TYPE_SYN,
+        Message memory m = Message(
+            _msgType,
             chainId,
             TypeCasts.addressToBytes32(msg.sender),
             _nonce,
@@ -220,6 +222,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         bytes32 _messageHash = keccak256(_message);
 
         emit SendMessage(
+            _msgType,
             _messageHash,
             _message,
             chainId,
@@ -230,6 +233,11 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     }
 
     // ==================================== Internal Func =======================================
+    function _isSupportedMsgType(uint8 msgType) internal pure returns (bool) {
+        return (msgType == MESSAGE_TYPE_SYN ||
+            msgType == MESSAGE_TYPE_ACK ||
+            msgType == MESSAGE_TYPE_FAIL_ACK);
+    }
 
     function _isContract(address addr) internal view returns (bool) {
         uint size;
@@ -239,7 +247,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         return size != 0;
     }
 
-    function _processMessage(Message memory m) internal returns(bool) {
+    function _processMessage(Message memory m) internal returns (bool) {
         require(m.dstChainId == chainId, "!destination");
         require(
             m.payload.length <= MAX_MESSAGE_BODY_BYTES,
@@ -260,7 +268,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
             );
             return false;
         }
-       require(
+        require(
             m.nonce == ++inboundNonce[m.srcChainId][m.srcSenderAddress],
             "Omnic: wrong nonce"
         );
@@ -269,14 +277,11 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         CacheMessage storage cache = cacheMessage[m.srcChainId][
             m.srcSenderAddress
         ];
-        require(
-            cache.msgHash == bytes32(0),
-            "Omnic: in message blocking"
-        );
+        require(cache.msgHash == bytes32(0), "Omnic: in message blocking");
 
         try
             IOmnicReciver(dstAddress).handleMessage(
-                IOmnicReciver.MessageType(m.t),
+                m.t,
                 m.srcChainId,
                 m.srcSenderAddress,
                 m.nonce,
@@ -306,32 +311,32 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     }
 
     // only omnic canister can call this func
-    function processMessage(bytes memory _message)
-        external override
+    function processMessage(
+        bytes memory _message
+    )
+        external
+        override
         onlyProxyCanister
         receiveNonReentrant
         returns (bool success)
     {
         // decode message
-        Message memory m = abi.decode(
-                _message,
-                (Message)
-            );
+        Message memory m = abi.decode(_message, (Message));
 
         return _processMessage(m);
     }
 
-    function processMessageBatch(bytes[] memory _messages)
-        external override
+    function processMessageBatch(
+        bytes[] memory _messages
+    )
+        external
+        override
         onlyProxyCanister
         receiveNonReentrant
         returns (bool success)
     {
-        for(uint i =0; i < _messages.length; i++){
-            Message memory m = abi.decode(
-                _messages[i],
-                (Message)
-            );
+        for (uint i = 0; i < _messages.length; i++) {
+            Message memory m = abi.decode(_messages[i], (Message));
             _processMessage(m);
         }
         return true;
@@ -346,10 +351,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         CacheMessage storage cache = cacheMessage[_srcChainId][
             _srcSenderAddress
         ];
-        require(
-            cache.msgHash != bytes32(0),
-            "Omnic: no stored payload"
-        );
+        require(cache.msgHash != bytes32(0), "Omnic: no stored payload");
         require(
             _message.length == cache.msgLength &&
                 keccak256(_message) == cache.msgHash,
@@ -365,7 +367,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         uint64 nonce = inboundNonce[_srcChainId][_srcSenderAddress];
 
         IOmnicReciver(dstAddress).handleMessage(
-            IOmnicReciver.MessageType(t),
+            t,
             _srcChainId,
             _srcSenderAddress,
             nonce,
@@ -374,22 +376,16 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         emit CacheClean(_srcChainId, _srcSenderAddress, dstAddress, nonce);
     }
 
-    function forceResumeReceive(uint32 _srcChainId, bytes32 _srcSenderAddress)
-        external
-        override
-    {
+    function forceResumeReceive(
+        uint32 _srcChainId,
+        bytes32 _srcSenderAddress
+    ) external override {
         CacheMessage storage cache = cacheMessage[_srcChainId][
             _srcSenderAddress
         ];
         // revert if no messages are cached
-        require(
-            cache.msgHash != bytes32(0),
-            "Omnic: no stored payload"
-        );
-        require(
-            cache.dstAddress == msg.sender,
-            "Omnic: invalid caller"
-        );
+        require(cache.msgHash != bytes32(0), "Omnic: no stored payload");
+        require(cache.dstAddress == msg.sender, "Omnic: invalid caller");
 
         // empty the cacheMessage
         cache.msgLength = 0;
@@ -420,7 +416,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
                         _erc20PaymentAddress == tx.origin,
                     "Omnic: must be paid by sender or origin"
                 );
-                if(protocolFee == 0) {
+                if (protocolFee == 0) {
                     return protocolNativeFee;
                 }
                 // transfer the fee with ERC20 token
@@ -429,7 +425,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
                     address(this),
                     protocolFee
                 );
-                
+
                 address erc20TokenAddr = address(erc20FeeToken);
                 erc20Fees[erc20TokenAddr] = erc20Fees[erc20TokenAddr].add(
                     protocolFee
@@ -457,10 +453,10 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     }
 
     // withdraw native token function.
-    function withdrawNativeFee(address payable _to, uint256 _amount)
-        external
-        onlyOwner
-    {
+    function withdrawNativeFee(
+        address payable _to,
+        uint256 _amount
+    ) external onlyOwner {
         require(_to != address(0x0), "Omnic: _to cannot be zero address");
         nativeFees = nativeFees.sub(_amount);
 
@@ -469,10 +465,9 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
     }
 
     // ============ onlyOwner Set Functions  ============
-    function setOmnicCanisterAddr(address _newProxyCanisterAddr)
-        public
-        onlyOwner
-    {
+    function setOmnicCanisterAddr(
+        address _newProxyCanisterAddr
+    ) public onlyOwner {
         address _oldProxyCanisterAddr = omnicProxyCanisterAddr;
         omnicProxyCanisterAddr = _newProxyCanisterAddr;
         emit UpdateProxyCanister(_oldProxyCanisterAddr, _newProxyCanisterAddr);

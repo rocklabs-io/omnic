@@ -5,21 +5,16 @@ pragma solidity ^0.8.9;
 
 interface IOmnicReciver {
     /** Message type
-     * SYN: message send
-     * ACK: message response
-     * FAIL_ACK: message catch
+     * SYN = 0: message send
+     * ACK = 1: message response
+     * FAIL_ACK = 2: message failure
      */
-    enum MessageType {
-        SYN,
-        ACK,
-        FAIL_ACK
-    }
 
     function handleMessage(
-        MessageType t,
+        uint8 _msgType,
         uint32 _srcChainId,
         bytes32 _srcSenderAddress,
         uint64 _nonce,
-        bytes calldata payload
+        bytes calldata _payload
     ) external;
 }
