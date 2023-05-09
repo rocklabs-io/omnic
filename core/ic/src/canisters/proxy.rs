@@ -428,7 +428,8 @@ async fn trigger_clear_cache(dst_chains: Vec<u32>) -> Result<bool, String> {
 // the limited time
 #[update(name = "send_message", guard = "is_authorized")]
 #[candid_method(update, rename = "send_message")]
-async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Result<bool, String> {
+async fn send_message(msg_type: u8, dst_chain: u32, recipient: String, payload: Vec<u8>) -> Result<bool, String> {
+    let t = MessageType::from_u8(msg_type)?;
     // check cycles
     let available = ic_cdk::api::call::msg_cycles_available();
     let need_cycles = (payload.len() as u64) * CYCLES_PER_BYTE;
@@ -444,7 +445,7 @@ async fn send_message(dst_chain: u32, recipient: String, payload: Vec<u8>) -> Re
     let out_nonce = get_out_nonce(&dst_chain, &caller);
 
     let msg = Message {
-        t: MessageType::SYN,
+        t,
         origin: 0u32,
         sender: H256::from_slice(caller.clone().as_slice()),
         nonce: out_nonce,

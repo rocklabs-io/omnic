@@ -17,12 +17,12 @@ pub enum MessageType {
 }
 
 impl MessageType {
-    fn from_u8(value: u8) -> MessageType {
+    pub fn from_u8(value: u8) -> Result<MessageType, String> {
         match value {
-            1 => MessageType::SYN,
-            2 => MessageType::ACK,
-            3 => MessageType::FAIL_ACK,
-            _ => panic!("Unknown value: {}", value),
+            1 => Ok(MessageType::SYN),
+            2 => Ok(MessageType::ACK),
+            3 => Ok(MessageType::FAIL_ACK),
+            _ => Err(format!("Unknown value: {}", value)),
         }
     }
 }
@@ -78,8 +78,9 @@ impl Message {
         let recipient = H256::from_slice(&recipient_bytes);
         let body = res[6].clone().into_bytes().ok_or(DecodeError("get body failed".into()))?;
 
+        let t = MessageType::from_u8(msg_type).map_err(|e| OmnicError::DecodeError(e))?;
         Ok(Message {
-            t: MessageType::from_u8(msg_type),
+            t,
             origin,
             sender,
             nonce,
@@ -106,7 +107,7 @@ impl Message {
 impl From<MessageStable> for Message {
     fn from(s: MessageStable) -> Self {
         Self {
-            t: MessageType::from_u8(s.t),
+            t: MessageType::from_u8(s.t).unwrap(),
             origin: s.origin,
             sender: H256::from(s.sender),
             nonce: s.nonce,
