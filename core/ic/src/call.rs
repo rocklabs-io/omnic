@@ -10,7 +10,7 @@ use crate::utils::keccak256;
 pub async fn call_to_canister(recipient: Principal, m: &MessageStable) -> Result<String, String> {
     // call ic recipient canister
     let ret: CallResult<(Result<String, String>,)> = 
-        call(recipient, "handle_message", (keccak256(&m.body), m.origin, m.sender, m.nonce, m.body.clone(), )).await;
+        call(recipient, "handle_message", (m.t as u8, keccak256(&m.body), m.origin, m.sender, m.nonce, m.body.clone(), )).await;
     match ret {
         Ok((res, )) => {
             match res {
