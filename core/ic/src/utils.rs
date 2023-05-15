@@ -1,7 +1,7 @@
 use crate::state::DetailValue;
 
 use std::collections::HashMap;
-use crate::types::MessageStable;
+use crate::types::{Message, MessageStable};
 use ic_web3::types::{H256, Log};
 use tiny_keccak::{Hasher, Keccak};
 
@@ -68,9 +68,45 @@ pub fn check_scan_message_results(messages: &HashMap<usize, Vec<MessageStable>>,
     (false, vec![])
 }
 
+
+// pub struct Log {
+//     /// H160
+//     pub address: H160,
+//     /// Topics
+//     pub topics: Vec<H256>,
+//     /// Data
+//     pub data: Bytes,
+//     /// Block Hash
+//     #[serde(rename = "blockHash")]
+//     pub block_hash: Option<H256>,
+//     /// Block Number
+//     #[serde(rename = "blockNumber")]
+//     pub block_number: Option<U64>,
+//     /// Transaction Hash
+//     #[serde(rename = "transactionHash")]
+//     pub transaction_hash: Option<H256>,
+//     /// Transaction Index
+//     #[serde(rename = "transactionIndex")]
+//     pub transaction_index: Option<Index>,
+//     /// Log Index in Block
+//     #[serde(rename = "logIndex")]
+//     pub log_index: Option<U256>,
+//     /// Log Index in Transaction
+//     #[serde(rename = "transactionLogIndex")]
+//     pub transaction_log_index: Option<U256>,
+//     /// Log Type
+//     #[serde(rename = "logType")]
+//     pub log_type: Option<String>,
+//     /// Removed
+//     pub removed: Option<bool>,
+// }
+
 pub fn decode_log(logs: Vec<Log>) -> Vec<MessageStable> {
     // todo: decode log to MessageStable
-    vec![]
+    logs.into_iter().map(|l| {
+        let m = Message::from_raw(l.data.0).unwrap();
+        MessageStable::from(m)
+    }).collect()
 }
 
 /// Allows creating details for an event.
