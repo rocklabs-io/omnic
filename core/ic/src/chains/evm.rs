@@ -124,7 +124,7 @@ impl HomeContract for EVMChainClient {
         .address(vec![self.contract.address()])
         .topics(
             Some(vec![hex!(
-                "e1a29fbaae32490486942a78b16a495c60ea39a21d49e338e593532e50f93a1d" // keccak256("SendMessage(bytes32,bytes,uint32,address,uint32,bytes32)")
+                "6af285265b4ffbc4610a57fcae62985a5581e63261ff3b4cb41eec6387c1c551" // keccak256("SendMessage(uint8,bytes32,bytes,uint32,address,uint32,bytes32)")
             )
             .into()]),
             None,
