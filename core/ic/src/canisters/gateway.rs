@@ -1,12 +1,13 @@
 /*
 omnic proxy canister:
-    fetch_root: fetch merkel roots from all supported chains and insert to chain state
+    fetch_root: fetch messages from all supported chains and insert to chain state
 */
 
 use std::cell::{RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 
+use ic_cdk::api::call::CallResult;
 use rand::{rngs::StdRng, SeedableRng};
 use rand::seq::SliceRandom;
 
@@ -20,19 +21,18 @@ use candid::types::principal::Principal;
 
 use ic_cron::types::Iterations;
 
-use accumulator::{TREE_DEPTH, merkle_root_from_branch};
-use omnic::{chains::EVMChainClient, ChainConfig, ChainState, ChainType};
-use omnic::types::{Message, MessageStable};
-use omnic::HomeContract;
+use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType};
+use omnic::{HomeContract, MessageStable};
 use omnic::consts::{MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::{State, StateMachine, StateInfo};
-use omnic::utils::check_scan_message_results;
+use omnic::utils::{check_roots_result, check_scan_message_results};
 
 ic_cron::implement_cron!();
 
 #[derive(CandidType, Deserialize, Clone)]
 enum Task {
-    Scan
+    FetchRoots,
+    FetchRoot
 }
 
 thread_local! {
@@ -57,8 +57,12 @@ fn get_logs() -> Vec<String> {
     })
 }
 
-fn get_scan_event_period() -> u64 {
-    STATE_INFO.with(|s| s.borrow().scan_event_period)
+fn get_fetch_msg_period() -> u64 {
+    STATE_INFO.with(|s| s.borrow().fetch_msg_period)
+}
+
+fn get_fetch_msgs_period() -> u64 {
+    STATE_INFO.with(|s| s.borrow().fetch_msgs_period)
 }
 
 fn get_query_rpc_number() -> u64 {
@@ -67,30 +71,31 @@ fn get_query_rpc_number() -> u64 {
 
 #[init]
 #[candid_method(init)]
-fn init() {
+fn init(proxy: Principal) {
     let caller = ic_cdk::api::caller();
     STATE_INFO.with(|info| {
         let mut info = info.borrow_mut();
         info.add_owner(caller);
+        info.set_proxy_addr(proxy);
     });
 
     // set up cron job
     cron_enqueue(
-        Task::Scan, 
+        Task::FetchRoots, 
         ic_cron::types::SchedulingOptions {
-            delay_nano: get_scan_event_period(),
-            interval_nano: get_scan_event_period(),
+            delay_nano: get_fetch_msgs_period(),
+            interval_nano: get_fetch_msgs_period(),
             iterations: Iterations::Infinite,
         },
     ).unwrap();
 }
 
 #[update(guard = "is_authorized")]
-#[candid_method(update, rename = "set_scan_event_period")]
-async fn set_scan_event_period(scan_event_period: u64) -> Result<bool, String> {
+#[candid_method(update, rename = "set_fetch_period")]
+async fn set_fetch_period(fetch_root_period: u64, fetch_roots_period: u64) -> Result<bool, String> {
     STATE_INFO.with(|s| {
         let mut s = s.borrow_mut();
-        s.set_scan_period(scan_event_period);
+        s.set_fetch_period(fetch_root_period, fetch_roots_period);
     });
     Ok(true)
 }
@@ -130,6 +135,8 @@ fn add_chain(
                 ic_cdk::id(),
                 omnic_addr.clone(),
                 start_block,
+                0,
+                0,
             )
         ));
     });
@@ -138,6 +145,7 @@ fn add_chain(
         state_machine.set_chain_id(chain_id);
         state_machine.set_rpc_urls(urls.clone());
         state_machine.set_omnic_addr(omnic_addr.clone());
+        state_machine.set_last_block_height(start_block-1);
     });
     Ok(true)
 }
@@ -164,30 +172,14 @@ fn get_chain() -> Result<ChainState, String> {
     })
 }
 
-#[query(name = "get_state_info", guard = "is_authorized")]
-#[candid_method(query, rename = "get_state_info")]
-fn get_state_info() -> Result<StateInfo, String> {
+#[query(name = "get_info", guard = "is_authorized")]
+#[candid_method(query, rename = "get_info")]
+fn get_info() -> Result<StateInfo, String> {
     STATE_INFO.with(|info| {
         let info = info.borrow();
         Ok(info.clone())
     })
 }
-
-// #[update(name = "fetch_root")]
-// #[candid_method(update, rename = "fetch_root")]
-// async fn fetch(height: u64) -> Result<String, String> {
-//     let (_, omnic_addr, rpc) = CHAINS.with(|chain| {
-//         let chain = chain.borrow();
-//         (chain.canister_addr.clone(), chain.config.omnic_addr.clone(), chain.config.rpc_urls[0].clone())
-//     });
-
-//     let client = EVMChainClient::new(rpc, omnic_addr, MAX_RESP_BYTES, CYCLES_PER_CALL)
-//         .map_err(|e| format!("init client failed: {:?}", e))?;
-//     client.get_latest_root(Some(height))
-//         .await
-//         .map(|v| hex::encode(v))
-//         .map_err(|e| format!("get root err: {:?}", e))
-// }
 
 #[update(name = "get_tx_count")]
 #[candid_method(update, rename = "get_tx_count")]
@@ -249,55 +241,6 @@ async fn get_gas_price() -> Result<u64, String> {
         .map_err(|e| format!("{:?}", e))
 }
 
-// // relayer canister call this to check if a message is valid before process_message
-// #[query(name = "is_valid")]
-// #[candid_method(query, rename = "is_valid")]
-// fn is_valid(message: Vec<u8>, proof: Vec<Vec<u8>>, leaf_index: u32) -> Result<bool, String> {
-//     // verify message proof: use proof, message to calculate the merkle root, 
-//     // check if the merkle root exists in corresponding chain state
-//     let m = Message::from_raw(message.clone()).map_err(|e| {
-//         format!("parse message from bytes failed: {:?}", e)
-//     })?;
-//     let h = m.to_leaf();
-//     let p_h256: Vec<H256> = proof.iter().map(|v| H256::from_slice(&v)).collect();
-//     let p: [H256; TREE_DEPTH] = p_h256.try_into().map_err(|e| format!("parse proof failed: {:?}", e))?;
-//     // calculate root with leaf hash & proof
-//     let root = merkle_root_from_branch(h, &p, TREE_DEPTH, leaf_index as usize);
-//     // do not add optimistic yet
-//     CHAINS.with(|c| {
-//         let chain = c.borrow();
-//         Ok(chain.is_root_exist(root))
-//     })
-// }
-
-#[query(name = "get_last_scanned_block")]
-#[candid_method(query, rename = "get_last_scanned_block")]
-fn get_last_scanned_block() -> String {
-    CHAINS.with(|c| {
-        let chain = c.borrow();
-        format!("{:x}", chain.last_scanned_block)
-    })
-}
-
-#[query(name = "get_messages")]
-#[candid_method(query, rename = "get_messages")]
-fn get_messages(start: u64, limit: u64) -> Result<Vec<MessageStable>, String> {
-    CHAINS.with(|c| {
-        let chain = c.borrow();
-        Ok(chain.get_messages(start, limit))
-    })
-}
-
-#[query(name = "get_message_by_hash")]
-#[candid_method(query, rename = "get_message_by_hash")]
-fn get_message_by_hash(hash: &[u8]) -> Result<Vec<MessageStable>, String> {
-    CHAINS.with(|c| {
-        let chain = c.borrow();
-        Ok(chain.get_message_by_hash(hash))
-    })
-}
-
-
 #[update(name = "add_owner", guard = "is_authorized")]
 #[candid_method(update, rename = "add_owner")]
 async fn add_owner(owner: Principal) {
@@ -314,7 +257,7 @@ async fn remove_owner(owner: Principal) {
     });
 }
 
-async fn scan() {
+async fn fetch_msg() {
     // query omnic contract.getLatestRoot, 
     // fetch from multiple rpc providers and aggregrate results, should be exact match
     let state = STATE_MACHINE.with(|s| {
@@ -329,10 +272,16 @@ async fn scan() {
                         Ok(h) => {
                             STATE_MACHINE.with(|s| {
                                 let mut state = s.borrow_mut();
-                                state.block_height = h;
-                                state.cache_msg = HashMap::default(); // reset roots in this round
-                            });
-                            State::Fetching(0)
+                                if state.last_block_height == h {
+                                    // if the block height is the same as before, skip this round
+                                    add_log(format!("block height is not changed: {}", h));
+                                    State::Fail
+                                } else {
+                                    state.block_height = h;
+                                    state.cache_msg = HashMap::default(); // reset msgs in this round
+                                    State::Fetching(0)
+                                }
+                            })
                         },
                         Err(e) => {
                             add_log(format!("init contract failed: {}", e));
@@ -346,37 +295,27 @@ async fn scan() {
             }
         },
         State::Fetching(idx) => {
-            // query root in block height
-            match EVMChainClient::new(state.rpc_urls[0].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
+            // query messags in [last block height + 1, block height]
+            match EVMChainClient::new(state.rpc_urls[idx].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
                 Ok(client) => {
-                    let start_block = client.get_suggested_start_block();
-                    let end_block = client.get_block_number().await;
-                    let mut current_block = start_block;
-                    let mut chunk_size = 20; // 
-                    let mut all_events: Vec<MessageStable> = vec![];
-
-                    while current_block <= end_block {
-                        let estimate_end_block = current_block + chunk_size;
-                        add_log(format!("Scanning SendMessage Event for blocks: {:?} - {:?}, chunk size: {:?}", current_block, estimate_end_block, chunk_size));
-
-                        let (actual_end_block, chunk_events) = client.scan_chunk(current_block, estimate_end_block).await?;
-                        // adjust chunk size dynamically
-                        chunk_size = estimate_next_chunk_size(chunk_size, chunk_events.len());
-                        all_events.extend(chunk_events);
-                        current_block = actual_end_block + 1;
-
+                    let scan_results: Result<Vec<MessageStable>, omnic::OmnicError> = client.scan_chunk(state.last_block_height+1, state.block_height).await;
+                    match scan_results {
+                        Ok(msgs) => {
+                            msgs.into_iter().for_each(|msg| {
+                                incr_state_message(msg);
+                            });
+                        },
+                        Err(e) => {
+                            add_log(format!("query messages from {} failed: {}", state.rpc_urls[idx].clone(), e));
+                            // increase the default message, as the count of query RPC failed
+                            incr_state_message(MessageStable::default());
+                        },
                     }
-                    //store to cache messgae
-                    incr_state(all_events);
-
-                    // check msgs with different rpc and store to chainState
+                    
                     STATE_MACHINE.with(|s| {
                         let s = s.borrow();
-                        let (check_result, _) = check_scan_message_results(&s.cache_msg, s.rpc_count());
-                        s.get_fetching_next_sub_state(check_result)
+                        s.get_fetching_next_sub_state()
                     })
-                    // todo , store to chain state
-
                 },
                 Err(e) => {
                     add_log(format!("init evm chain client failed: {}", e));
@@ -396,13 +335,111 @@ async fn scan() {
 
     if next_state != State::End && next_state != State::Fail {
         cron_enqueue(
-            Task::Scan, 
+            Task::FetchRoot, 
             ic_cron::types::SchedulingOptions {
-                delay_nano: get_scan_event_period(),
-                interval_nano: get_scan_event_period(),
+                delay_nano: get_fetch_msg_period(),
+                interval_nano: get_fetch_msg_period(),
                 iterations: Iterations::Exact(1),
             },
         ).unwrap();
+    }
+}
+
+// this is done in heart_beat
+async fn fetch_msgs() {
+    let state = STATE_MACHINE.with(|s| {
+        s.borrow().clone()
+    });
+
+    match state.state {
+        State::Init => {
+            // get chain ids
+            let chain_id = CHAINS.with(|c| {
+                c.borrow().config.chain_id
+            });
+            // when chain is set, start fetching
+            if chain_id != 0 {
+                STATE_MACHINE.with(|s| {
+                    let mut state = s.borrow_mut();
+                    state.state = State::Fetching(0);
+                });
+            }
+        }
+        State::Fetching(_) => {
+            match state.sub_state {
+                State::Init => {
+                    // randomly select rpc url to fetch
+                    // call IC raw rand to get random seed
+                    let seed_res = ic_cdk::api::management_canister::main::raw_rand().await;
+                    match seed_res {
+                        Ok((seed, )) => {
+                            let mut rpc_urls = CHAINS.with(|c| {
+                                c.borrow().config.rpc_urls.clone()
+                            });
+                            // shuffle
+                            let seed: [u8; 32] = seed.as_slice().try_into().expect("convert vector to array error");
+                            let mut rng: StdRng = SeedableRng::from_seed(seed);
+                            rpc_urls.shuffle(&mut rng);
+                            let random_urls = rpc_urls[..get_query_rpc_number() as usize].to_vec();
+                            // set random urls for this round
+                            STATE_MACHINE.with(|s| {
+                                s.borrow_mut().set_rpc_urls(random_urls.clone());
+                            });
+                            add_log(format!("start fetching, random rpc urls: {:?}", random_urls));
+                            add_log(format!("start_cycles: {:?},  start_time: {:?}", ic_cdk::api::canister_balance(), ic_cdk::api::time()));
+                            cron_enqueue(
+                                Task::FetchRoot, 
+                                ic_cron::types::SchedulingOptions {
+                                    delay_nano: get_fetch_msg_period(),
+                                    interval_nano: get_fetch_msg_period(),
+                                    iterations: Iterations::Exact(1),
+                                },
+                            ).unwrap();
+                        },
+                        Err((_code, msg)) => {
+                            // error, do nothing
+                            add_log(format!("Error getting raw rand: {}", msg));
+                        },
+                    }
+                }
+                State::Fetching(_) => {},
+                State::End => {
+                    add_log(format!("end_cycles: {:?},  end_time: {:?}", ic_cdk::api::canister_balance(), ic_cdk::api::time()));
+                    // get the valid message
+                    let (check_results, valid_msgs) = check_scan_message_results(&state.cache_msg, state.rpc_count());
+                    if check_results {
+                        // store the message
+                        CHAINS.with(|c| {
+                            let mut chain = c.borrow_mut();
+                            valid_msgs.iter().for_each(|msg| {
+                                chain.insert_message(msg.clone());
+                            });
+                        });
+                        // call proxy to send message
+                        // TODO how to handle send failed?
+                        ic_cdk::spawn(send_message_to_proxy(valid_msgs));
+                    }
+                    
+                    
+                    // update state, and the last block number if pass
+                    STATE_MACHINE.with(|s| {
+                        let mut state = s.borrow_mut();
+                        (state.state, state.sub_state) = state.get_fetching_next_state();
+                        if check_results {
+                            state.last_block_height = state.block_height;
+                        }
+                    });
+                },
+                State::Fail => {
+                    // update state, dont update the last block number so that it can re-fetch again
+                    STATE_MACHINE.with(|s| {
+                        let mut state = s.borrow_mut();
+                        (state.state, state.sub_state) = state.get_fetching_next_state();
+                    });
+                },
+            }
+        },
+        _ => { panic!("can't reach here")},
     }
 }
 
@@ -411,9 +448,12 @@ fn heart_beat() {
     for task in cron_ready_tasks() {
         let kind = task.get_payload::<Task>().expect("Serialization error");
         match kind {
-            Task::Scan => {
-                ic_cdk::spawn(scan());
-            }
+            Task::FetchRoots => {
+                ic_cdk::spawn(fetch_msgs());
+            },
+            Task::FetchRoot => {
+                ic_cdk::spawn(fetch_msg());
+            },
         }
     }
 }
@@ -473,16 +513,26 @@ fn is_authorized() -> Result<(), String> {
     })
 }
 
-fn incr_state(msg: Vec<MessageStable>) {
-    // store to STATE_MACHINE cache buffer
-    // STATE_MACHINE.with(|s| {
-    //     let mut state = s.borrow_mut();
-    //     state
-    //         .roots
-    //         .entry(root)
-    //         .and_modify(|c| *c += 1)
-    //         .or_insert(1);
-    // })
+async fn send_message_to_proxy(msgs: Vec<MessageStable>) {
+    let proxy = STATE_INFO.with(|s| {
+        s.borrow().proxy_addr
+    });
+
+    let call_res: CallResult<(Result<Vec<(String, u64)>, String>,)> = ic_cdk::call(proxy, "process_message", (msgs, )).await;
+    if call_res.is_err() {
+        add_log(format!("call proxy failed: {:?}", call_res.err()))
+    }
+}
+
+fn incr_state_message(msg: MessageStable) {
+    STATE_MACHINE.with(|s| {
+        let mut state = s.borrow_mut();
+        state
+            .cache_msg
+            .entry(msg)
+            .and_modify(|c| *c += 1)
+            .or_insert(1);
+    })
 }
 
 fn add_log(log: String) {
@@ -494,19 +544,6 @@ fn add_log(log: String) {
         logs.push_back(log);
     });
 }
-
-fn estimate_next_chunk_size(chunk_size: usize, events_count: usize) -> usize {
-    let min_chunk_size = 10;
-    let max_chunk_size = 30;
-    let chunk_size_descrese = 0.5;
-    let chunk_size_increase = 2.0;
-    let mut current_chuck_size = if events_count > 0 {min_chunk_size} else {chunk_size * chunk_size_increase};
-
-    current_chuck_size = cmp::max(min_chunk_size, current_chuck_size);
-    current_chuck_size = cmp::min(max_chunk_size, current_chuck_size);
-    current_chuck_size
-}
-
 
 #[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {

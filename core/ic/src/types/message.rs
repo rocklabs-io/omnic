@@ -6,7 +6,7 @@ use crate::OmnicError::DecodeError;
 use ic_web3::ethabi::{decode, encode, ParamType, Token, Error};
 
 
-#[derive(PartialEq, Debug, Default, Clone, Deserialize, CandidType)]
+#[derive(PartialEq, Debug, Default, Clone, Deserialize, CandidType, Hash)]
 #[allow(non_camel_case_types)]
 #[repr(u8)]
 pub enum MessageType {
@@ -27,7 +27,7 @@ impl MessageType {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, Hash)]
 pub struct Message {
     pub t: MessageType,
     /// 4   SLIP-44 ID
@@ -95,6 +95,12 @@ impl Message {
     pub fn get_msg_type(&self) -> MessageType {
         self.t.clone()
     }
+
+    /// Convert the message to a leaf
+    pub fn to_leaf(&self) -> H256 {
+        let raw = encode_body(&self);
+        keccak256(&raw).into()
+    }
 }
 
 impl From<MessageStable> for Message {
@@ -121,7 +127,7 @@ impl std::fmt::Display for Message {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone)]
+#[derive(CandidType, Deserialize, Clone, Hash, Eq, PartialEq, Default)]
 pub struct MessageStable {
     pub t: u8,
     /// 4   SLIP-44 ID

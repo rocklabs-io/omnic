@@ -52,8 +52,9 @@ pub struct StateMachine {
     pub chain_id: u32,
     pub rpc_urls: Vec<String>,
     pub omnic_addr: String,
+    pub last_block_height: u64,
     pub block_height: u64,
-    pub cache_msg: HashMap<usize, Vec<MessageStable>>,
+    pub cache_msg: HashMap<MessageStable, usize>,
     pub state: State,
     pub sub_state: State
 }
@@ -71,6 +72,9 @@ impl StateMachine {
         self.omnic_addr = omnic_addr;
     }
 
+    pub fn set_last_block_height(&mut self, h: u64) {
+        self.last_block_height = h;
+    }
 
     pub fn rpc_count(&self) -> usize {
         self.rpc_urls.len()
@@ -85,11 +89,9 @@ impl StateMachine {
         }
     }
 
-    pub fn get_fetching_next_sub_state(&self, check_result: bool) -> State {
+    pub fn get_fetching_next_sub_state(&self) -> State {
         if let State::Fetching(idx) = self.sub_state {
-            if!check_result {
-                State::Fail
-            } else if idx + 1 == self.rpc_count() {
+            if idx + 1 == self.rpc_count() {
                 State::End
             } else {
                 State::Fetching(idx + 1)
@@ -130,17 +132,20 @@ impl StateMachine {
 
 #[derive(CandidType, Deserialize, Clone)]
 pub struct StateInfo {
-    owners: HashSet<Principal>,
-    scan_event_period: u64,
-    query_rpc_number: u64,
-
+    pub owners: HashSet<Principal>,
+    pub proxy_addr: Principal,
+    pub fetch_msg_period: u64,
+    pub fetch_msgs_period: u64,
+    pub query_rpc_number: u64,
 }
 
 impl StateInfo {
     pub fn default() -> StateInfo {
         StateInfo {
             owners: HashSet::default(),
-            scan_event_period: 1_000_000_000 * 10,
+            proxy_addr: Principal::anonymous(),
+            fetch_msg_period: 1_000_000_000 * 60,
+            fetch_msgs_period: 1_000_000_000 * 90,
             query_rpc_number: 1,
         }
     }
@@ -157,12 +162,17 @@ impl StateInfo {
         self.owners.contains(&user)
     }
 
-    pub fn set_scan_period(&mut self, period: u64) {
-        self.scan_event_period = period;
+    pub fn set_fetch_period(&mut self, v1: u64, v2: u64) {
+        self.fetch_msg_period = v1;
+        self.fetch_msgs_period = v2;
     }
 
     pub fn set_rpc_number(&mut self, n: u64) {
         self.query_rpc_number = n
+    }
+
+    pub fn set_proxy_addr(&mut self, a: Principal) {
+        self.proxy_addr = a
     }
 }
 

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use candid::{CandidType, Deserialize};
+use crate::Message;
 use crate::config::{ChainConfig, ChainType};
 use crate::types::MessageStable;
 
@@ -57,8 +58,12 @@ impl ChainState {
         self.canister_addr = addr;
     }
 
-    pub fn get_messages(&self, start: u64, limit: u64) -> Vec<MessageStable>{
+    pub fn insert_message(&mut self, msg: MessageStable) {
+        let hash = Message::from(msg.clone()).to_leaf();
+        self.events.push((hash.to_fixed_bytes(), msg))
+    }
 
+    pub fn get_messages(&self, start: u64, limit: u64) -> Vec<MessageStable>{
         let end = cmp::min(start + limit, self.events.len() as u64);
         let mut events: Vec<MessageStable> = self.events.iter().map(|(x, y)| y.clone()).collect();
         events.truncate(end as usize);

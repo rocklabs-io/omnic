@@ -1,10 +1,9 @@
 use ic_web3::Web3;
 use ic_web3::transports::ICHttp;
-use ic_web3::types::{U256, H256, Bytes, Address, BlockNumber, BlockId};
+use ic_web3::types::{U256, H256, Bytes, Address, BlockNumber};
 use ic_web3::ic::KeyInfo;
 use ic_web3::{
     contract::{Contract, Options},
-    futures::StreamExt,
     types::FilterBuilder,
 };
 use hex_literal::hex;
@@ -116,7 +115,7 @@ impl HomeContract for EVMChainClient {
             .map_err(|e| ClientError(format!("get tx count error: {:?}", e)))
     }
 
-    async fn scan_chunk(&self, start: u64, end: u64) -> Result<(u64, Vec<MessageStable>), OmnicError> {
+    async fn scan_chunk(&self, start: u64, end: u64) -> Result<Vec<MessageStable>, OmnicError> {
 
         // Filter for SendMessage event in omnic gateway contract
         let filter = FilterBuilder::default()
@@ -139,6 +138,6 @@ impl HomeContract for EVMChainClient {
 
         // todo: decode events from logs to Vec<MessageStable>
         let msgs = decode_log(logs);
-        Ok((end, msgs))
+        Ok(msgs)
     }
 }

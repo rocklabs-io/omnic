@@ -59,13 +59,29 @@ pub fn check_roots_result(roots: &HashMap<H256, usize>, total_result: usize) -> 
     }
 }
 
-pub fn check_scan_message_results(messages: &HashMap<usize, Vec<MessageStable>>, rpcs_count: usize) -> (bool, Vec<MessageStable>) {
-    // compare each message for different rpc 
-    // what should be checked?
-    // messageHash ?= keccak256(msg.body)
-    // message block number is same?
-    // others...
-    (false, vec![])
+pub fn check_scan_message_results(messages: &HashMap<MessageStable, usize>, rpcs_count: usize) -> (bool, Vec<MessageStable>) {
+    let threshold = if rpcs_count <= 2 {
+        // rpc len <= 2, all roots must match
+        rpcs_count
+    } else {
+        // rpc len > 2, half of the rpc result should be the same
+        (rpcs_count + 1) / 2 // ceiling
+    };
+
+    let mut valid_msgs: Vec<MessageStable> = vec![];
+    // check the failed time of querying rpc
+    let failed_times = messages.get(&MessageStable::default()).unwrap_or(&0);
+    if failed_times > &(rpcs_count - threshold) {
+        return (false, valid_msgs);
+    }
+
+    for (k ,v) in messages {
+        if v >= &threshold {
+            valid_msgs.push(k.to_owned())
+        }        
+    }
+
+    return (true, valid_msgs);
 }
 
 pub fn decode_log(logs: Vec<Log>) -> Vec<MessageStable> {
