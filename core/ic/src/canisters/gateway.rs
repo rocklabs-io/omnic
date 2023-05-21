@@ -277,6 +277,7 @@ async fn fetch_msg() {
                                     add_log(format!("block height is not changed: {}", h));
                                     State::Fail
                                 } else {
+                                    add_log(format!("block height update to {}", h));
                                     state.block_height = h;
                                     state.cache_msg = HashMap::default(); // reset msgs in this round
                                     State::Fetching(0)
@@ -306,6 +307,7 @@ async fn fetch_msg() {
                             });
                         },
                         Err(e) => {
+                            add_log(format!("failed to scan block from {} to {}", state.last_block_height+1, state.block_height));
                             add_log(format!("query messages from {} failed: {}", state.rpc_urls[idx].clone(), e));
                             // increase the default message, as the count of query RPC failed
                             incr_state_message(MessageStable::default());

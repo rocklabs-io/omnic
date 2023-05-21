@@ -9,12 +9,99 @@
       "inputs": [
         {
           "indexed": false,
+          "internalType": "uint32",
+          "name": "srcChainId",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "srcAddress",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "dstAddress",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "nonce",
+          "type": "uint64"
+        }
+      ],
+      "name": "CacheClean",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint32",
+          "name": "chainId",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "srcAddress",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ForceResumeReceive",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
           "internalType": "uint8",
           "name": "version",
           "type": "uint8"
         }
       ],
       "name": "Initialized",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint32",
+          "name": "srcChainId",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "srcAddress",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "dstAddress",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "nonce",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "messageHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "InvalidTransaction",
       "type": "event"
     },
     {
@@ -65,37 +152,92 @@
       "anonymous": false,
       "inputs": [
         {
+          "indexed": false,
+          "internalType": "uint8",
+          "name": "msgType",
+          "type": "uint8"
+        },
+        {
           "indexed": true,
           "internalType": "bytes32",
           "name": "messageHash",
           "type": "bytes32"
         },
         {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "leafIndex",
-          "type": "uint256"
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "message",
+          "type": "bytes"
         },
         {
           "indexed": true,
           "internalType": "uint32",
-          "name": "dstChainId",
+          "name": "srcChainId",
           "type": "uint32"
         },
         {
           "indexed": false,
+          "internalType": "address",
+          "name": "sender",
+          "type": "address"
+        },
+        {
+          "indexed": true,
           "internalType": "uint32",
-          "name": "nonce",
+          "name": "destChainId",
           "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "receiptAddress",
+          "type": "bytes32"
+        }
+      ],
+      "name": "SendMessage",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint32",
+          "name": "srcChainId",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "srcAddress",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "dstAddress",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "nonce",
+          "type": "uint64"
         },
         {
           "indexed": false,
           "internalType": "bytes",
           "name": "message",
           "type": "bytes"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "exceptions",
+          "type": "bytes"
         }
       ],
-      "name": "SendMessage",
+      "name": "SetCacheMessage",
       "type": "event"
     },
     {
@@ -132,6 +274,79 @@
     },
     {
       "inputs": [],
+      "name": "MESSAGE_TYPE_ACK",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MESSAGE_TYPE_FAIL_ACK",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MESSAGE_TYPE_SYN",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint32",
+          "name": "",
+          "type": "uint32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "cacheMessage",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "msgLength",
+          "type": "uint64"
+        },
+        {
+          "internalType": "address",
+          "name": "dstAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "msgHash",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
       "name": "chainId",
       "outputs": [
         {
@@ -145,25 +360,12 @@
     },
     {
       "inputs": [],
-      "name": "committedRoot",
+      "name": "erc20FeeToken",
       "outputs": [
         {
-          "internalType": "bytes32",
+          "internalType": "contract IERC20",
           "name": "",
-          "type": "bytes32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getLatestRoot",
-      "outputs": [
-        {
-          "internalType": "bytes32",
-          "name": "",
-          "type": "bytes32"
+          "type": "address"
         }
       ],
       "stateMutability": "view",
@@ -173,11 +375,35 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "_proxyCanisterAddr",
+          "name": "",
           "type": "address"
         }
       ],
-      "name": "initialize",
+      "name": "erc20Fees",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint32",
+          "name": "_srcChainId",
+          "type": "uint32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_srcSenderAddress",
+          "type": "bytes32"
+        }
+      ],
+      "name": "forceResumeReceive",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -188,14 +414,63 @@
           "internalType": "uint32",
           "name": "",
           "type": "uint32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
         }
       ],
-      "name": "nonces",
+      "name": "inboundNonce",
       "outputs": [
         {
-          "internalType": "uint32",
+          "internalType": "uint64",
           "name": "",
-          "type": "uint32"
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "proxyCanisterAddr",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "feeManagerAddr",
+          "type": "address"
+        }
+      ],
+      "name": "initialize",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nativeFees",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "omnicFeeManager",
+      "outputs": [
+        {
+          "internalType": "contract IOmnicFeeManager",
+          "name": "",
+          "type": "address"
         }
       ],
       "stateMutability": "view",
@@ -209,6 +484,30 @@
           "internalType": "address",
           "name": "",
           "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint32",
+          "name": "",
+          "type": "uint32"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "outboundNonce",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
         }
       ],
       "stateMutability": "view",
@@ -249,46 +548,20 @@
     {
       "inputs": [
         {
-          "internalType": "bytes32",
-          "name": "_item",
-          "type": "bytes32"
+          "internalType": "bytes[]",
+          "name": "_messages",
+          "type": "bytes[]"
         }
       ],
-      "name": "queueContains",
+      "name": "processMessageBatch",
       "outputs": [
         {
           "internalType": "bool",
-          "name": "",
+          "name": "success",
           "type": "bool"
         }
       ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "queueEnd",
-      "outputs": [
-        {
-          "internalType": "bytes32",
-          "name": "",
-          "type": "bytes32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "queueLength",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -301,24 +574,38 @@
     {
       "inputs": [
         {
-          "internalType": "bytes32",
-          "name": "_root",
-          "type": "bytes32"
-        }
-      ],
-      "name": "rootExists",
-      "outputs": [
+          "internalType": "uint8",
+          "name": "t",
+          "type": "uint8"
+        },
         {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
+          "internalType": "uint32",
+          "name": "_srcChainId",
+          "type": "uint32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_srcSenderAddress",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes",
+          "name": "_message",
+          "type": "bytes"
         }
       ],
-      "stateMutability": "view",
+      "name": "retryProcessMessage",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
       "inputs": [
+        {
+          "internalType": "uint8",
+          "name": "_msgType",
+          "type": "uint8"
+        },
         {
           "internalType": "uint32",
           "name": "_dstChainId",
@@ -330,9 +617,42 @@
           "type": "bytes32"
         },
         {
-          "internalType": "bool",
-          "name": "_waitOptimistic",
-          "type": "bool"
+          "internalType": "bytes",
+          "name": "_payload",
+          "type": "bytes"
+        },
+        {
+          "internalType": "address payable",
+          "name": "_refundAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_erc20PaymentAddress",
+          "type": "address"
+        }
+      ],
+      "name": "sendMessage",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint8",
+          "name": "_msgType",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint32",
+          "name": "_dstChainId",
+          "type": "uint32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_recipientAddress",
+          "type": "bytes32"
         },
         {
           "internalType": "bytes",
@@ -340,7 +660,7 @@
           "type": "bytes"
         }
       ],
-      "name": "sendMessage",
+      "name": "sendMessageFree",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -359,16 +679,21 @@
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "state",
-      "outputs": [
+      "inputs": [
         {
-          "internalType": "enum Omnic.States",
-          "name": "",
-          "type": "uint8"
+          "internalType": "address",
+          "name": "addr",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "value",
+          "type": "bool"
         }
       ],
-      "stateMutability": "view",
+      "name": "setWhitelist",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -385,16 +710,63 @@
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "tree",
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "whitelisted",
       "outputs": [
         {
-          "internalType": "uint256",
-          "name": "count",
-          "type": "uint256"
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_to",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_erc20FeeToken",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "withdrawERC20Fee",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address payable",
+          "name": "_to",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "withdrawNativeFee",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     }
   ]
