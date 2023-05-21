@@ -137,6 +137,8 @@ pub struct StateInfo {
     pub fetch_msg_period: u64,
     pub fetch_msgs_period: u64,
     pub query_rpc_number: u64,
+    pub confirm_block: u64,
+    pub scan_block_size: u64,
 }
 
 impl StateInfo {
@@ -147,6 +149,8 @@ impl StateInfo {
             fetch_msg_period: 1_000_000_000 * 60,
             fetch_msgs_period: 1_000_000_000 * 90,
             query_rpc_number: 1,
+            confirm_block: 0,
+            scan_block_size: 100,
         }
     }
 
@@ -165,6 +169,14 @@ impl StateInfo {
     pub fn set_fetch_period(&mut self, v1: u64, v2: u64) {
         self.fetch_msg_period = v1;
         self.fetch_msgs_period = v2;
+    }
+
+    pub fn set_confirm_block(&mut self, c: u64) {
+        self.confirm_block = c;
+    }
+
+    pub fn set_scan_block_size(&mut self, s: u64) {
+        self.scan_block_size = s;
     }
 
     pub fn set_rpc_number(&mut self, n: u64) {

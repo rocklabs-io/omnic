@@ -68,7 +68,7 @@ pub fn encode_body(msg: &Message) -> Vec<u8> {
 impl Message {
     pub fn from_raw(raw_bytes: Vec<u8>) -> Result<Self, OmnicError> {
         let res = decode_body(&raw_bytes)?;
-        let msg_type = res[0].clone().into_uint().ok_or(DecodeError("get origin failed".into()))?.as_u32() as u8;
+        let msg_type = res[0].clone().into_uint().ok_or(DecodeError("get message type failed".into()))?.as_u32() as u8;
         let origin = res[1].clone().into_uint().ok_or(DecodeError("get origin failed".into()))?.as_u32();
         let sender_bytes = res[2].clone().into_fixed_bytes().ok_or(DecodeError("get sender failed".into()))?;
         let sender = H256::from_slice(&sender_bytes);

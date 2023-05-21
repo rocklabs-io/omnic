@@ -25,7 +25,7 @@ use omnic::{Message, chains::EVMChainClient, ChainConfig, ChainState, ChainType}
 use omnic::{HomeContract, MessageStable};
 use omnic::consts::{MAX_RESP_BYTES, CYCLES_PER_CALL, CYCLES_PER_BYTE};
 use omnic::state::{State, StateMachine, StateInfo};
-use omnic::utils::{check_roots_result, check_scan_message_results};
+use omnic::utils::{check_roots_result, check_scan_message_results, get_batch_next_block};
 
 ic_cron::implement_cron!();
 
@@ -65,6 +65,14 @@ fn get_fetch_msgs_period() -> u64 {
     STATE_INFO.with(|s| s.borrow().fetch_msgs_period)
 }
 
+fn get_confirm_block() -> u64 {
+    STATE_INFO.with(|s| s.borrow().confirm_block)
+}
+
+fn get_scan_block_size() -> u64 {
+    STATE_INFO.with(|s| s.borrow().scan_block_size)
+}
+
 fn get_query_rpc_number() -> u64 {
     STATE_INFO.with(|s| s.borrow().query_rpc_number)
 }
@@ -96,6 +104,16 @@ async fn set_fetch_period(fetch_root_period: u64, fetch_roots_period: u64) -> Re
     STATE_INFO.with(|s| {
         let mut s = s.borrow_mut();
         s.set_fetch_period(fetch_root_period, fetch_roots_period);
+    });
+    Ok(true)
+}
+
+#[update(guard = "is_authorized")]
+#[candid_method(update, rename = "set_confirm_block")]
+async fn set_confirm_block(confirm_block: u64) -> Result<bool, String> {
+    STATE_INFO.with(|s| {
+        let mut s = s.borrow_mut();
+        s.set_confirm_block(confirm_block);
     });
     Ok(true)
 }
@@ -272,13 +290,15 @@ async fn fetch_msg() {
                         Ok(h) => {
                             STATE_MACHINE.with(|s| {
                                 let mut state = s.borrow_mut();
-                                if state.last_block_height == h {
+                                let last_block_height = state.last_block_height;
+                                if last_block_height == h {
                                     // if the block height is the same as before, skip this round
                                     add_log(format!("block height is not changed: {}", h));
                                     State::Fail
                                 } else {
-                                    add_log(format!("block height update to {}", h));
-                                    state.block_height = h;
+                                    let next_block  = get_batch_next_block(last_block_height, h, get_confirm_block(), get_scan_block_size());
+                                    add_log(format!("block height update to {}", next_block));
+                                    state.block_height = next_block;
                                     state.cache_msg = HashMap::default(); // reset msgs in this round
                                     State::Fetching(0)
                                 }

@@ -1,6 +1,7 @@
 use crate::state::DetailValue;
 
 use std::collections::HashMap;
+use std::cmp;
 use crate::types::{Message, MessageStable};
 use ic_web3::types::{H256, Log};
 use tiny_keccak::{Hasher, Keccak};
@@ -123,6 +124,10 @@ pub fn decode_log(logs: Vec<Log>) -> Vec<MessageStable> {
         let m = Message::from_raw(l.data.0).unwrap();
         MessageStable::from(m)
     }).collect()
+}
+
+pub fn get_batch_next_block(last_block: u64, cur_block: u64, confirm_block:u64, batch_size:u64) -> u64 {
+    cmp::min(last_block + batch_size, cur_block - confirm_block)
 }
 
 /// Allows creating details for an event.
