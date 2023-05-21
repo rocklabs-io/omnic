@@ -1,4 +1,5 @@
 use ic_web3::Web3;
+use ic_web3::ethabi;
 use ic_web3::transports::ICHttp;
 use ic_web3::types::{U256, H256, Bytes, Address, BlockNumber};
 use ic_web3::ic::KeyInfo;
@@ -12,7 +13,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 
 use crate::consts::KEY_NAME;
-use crate::types::MessageStable;
+use crate::types::{Message, MessageStable};
 use crate::error::OmnicError;
 use crate::error::OmnicError::*;
 use crate::traits::chain::HomeContract;
@@ -137,7 +138,21 @@ impl HomeContract for EVMChainClient {
         let logs = filter.logs().await?;
 
         // todo: decode events from logs to Vec<MessageStable>
-        let msgs = decode_log(logs);
+        let res = self.contract.abi().event("SendMessage").and_then(|ev| Ok(ev.clone()));
+        let ev = match res {
+            Ok(x) => x,
+            Err(e) => return Err(e.into()),
+        };
+        let msgs =logs.into_iter().map(move |l| {
+            let log = ev.parse_log(ethabi::RawLog {
+                topics: l.topics,
+                data: l.data.0,
+            }).map_err(|e| Other(format!("parse log failed: {}", e))).unwrap();
+            ic_cdk::println!("log info: {:?}", log);
+            let msg = log.params.into_iter().find(|x| x.name == "message").unwrap();
+            let m = Message::from_raw(msg.value.into_bytes().unwrap()).unwrap();
+            MessageStable::from(m)
+        }).collect();
         Ok(msgs)
     }
 }
