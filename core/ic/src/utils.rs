@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::cmp;
 use crate::types::{Message, MessageStable};
 use ic_web3::types::{H256, Log};
+use ic_web3::ethabi::{decode, ParamType};
 use tiny_keccak::{Hasher, Keccak};
 
 pub fn keccak256(msg: &[u8]) -> [u8; 32] {
@@ -121,9 +122,19 @@ pub fn check_scan_message_results(messages: &HashMap<MessageStable, usize>, rpcs
 pub fn decode_log(logs: Vec<Log>) -> Vec<MessageStable> {
     // todo: decode log to MessageStable
     logs.into_iter().map(|l| {
-        let m = Message::from_raw(l.data.0).unwrap();
+        let message_bytes = get_raw_message_from_log(l);
+        let m = Message::from_raw(message_bytes).unwrap();
         MessageStable::from(m)
     }).collect()
+}
+
+fn get_raw_message_from_log(log: Log) -> Vec<u8> {
+    let types = vec![
+        ParamType::Uint(8), ParamType::Bytes, ParamType::Address, ParamType::FixedBytes(32)
+    ];
+    let data = decode(&types, log.data.0.as_ref()).expect("decode log failed");
+
+    data[1].clone().into_bytes().expect("get message bytes failed")
 }
 
 pub fn get_batch_next_block(last_block: u64, cur_block: u64, confirm_block:u64, batch_size:u64) -> u64 {

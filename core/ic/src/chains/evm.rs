@@ -13,7 +13,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 
 use crate::consts::KEY_NAME;
-use crate::types::{Message, MessageStable};
+use crate::types::{MessageStable};
 use crate::error::OmnicError;
 use crate::error::OmnicError::*;
 use crate::traits::chain::HomeContract;
@@ -136,23 +136,8 @@ impl HomeContract for EVMChainClient {
 
         let filter = self.w3.eth_filter().create_logs_filter(filter).await?;
         let logs = filter.logs().await?;
-
-        // todo: decode events from logs to Vec<MessageStable>
-        let res = self.contract.abi().event("SendMessage").and_then(|ev| Ok(ev.clone()));
-        let ev = match res {
-            Ok(x) => x,
-            Err(e) => return Err(e.into()),
-        };
-        logs.into_iter().map(move |l| {
-            let log = ev.parse_log(ethabi::RawLog {
-                topics: l.topics,
-                data: l.data.0,
-            })?;
-
-            let message = log.params.into_iter().find(|x| x.name == "message").unwrap();
-            let val = message.value.into_bytes().unwrap();
-            let m: Message = Message::from_raw(val)?;
-            Ok(MessageStable::from(m))
-        }).collect()
+        
+        let msgs = decode_log(logs);
+        Ok(msgs)
     }
 }
