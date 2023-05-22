@@ -13,7 +13,6 @@ use rand::seq::SliceRandom;
 
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use ic_cron::task_scheduler::TaskScheduler;
-use ic_web3::types::H256;
 
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update, heartbeat};
 use ic_cdk::export::candid::{candid_method, CandidType, Deserialize};
@@ -439,7 +438,9 @@ async fn fetch_msgs() {
                         });
                         // call proxy to send message
                         // TODO how to handle send failed?
-                        ic_cdk::spawn(send_message_to_proxy(valid_msgs));
+                        if valid_msgs.len() > 0 {
+                            ic_cdk::spawn(send_message_to_proxy(valid_msgs));
+                        }
                     }
                     
                     
