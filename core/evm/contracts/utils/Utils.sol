@@ -13,3 +13,40 @@ library TypeCasts {
         return address(uint160(uint256(_buf)));
     }
 }
+
+/**
+ * @title Types Library
+ **/
+library Types {
+
+    /**
+     * @notice Returns formatted (packed) message with provided fields
+     * @param _srcChainId source chain id
+     * @param _srcSenderAddress Address of sender, address length/format may vary by chains
+     * @param _nonce Destination-specific nonce
+     * @param _dstChainId  destination chain id
+     * @param _recipientAddress Address of recipient on destination chain
+     * @param _payload Raw bytes of message body
+     * @return Formatted message
+     **/
+    function formatMessage(
+        uint8 _msg_type,
+        uint32 _srcChainId,
+        bytes32 _srcSenderAddress,
+        uint64 _nonce,
+        uint32 _dstChainId,
+        bytes32 _recipientAddress,
+        bytes memory _payload
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encode(
+                _msg_type,
+                _srcChainId,
+                _srcSenderAddress,
+                _nonce,
+                _dstChainId,
+                _recipientAddress,
+                _payload
+            );
+    }
+}

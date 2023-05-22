@@ -9,7 +9,7 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 //internal
-import {TypeCasts} from "./utils/Utils.sol";
+import {TypeCasts, Types} from "./utils/Utils.sol";
 import {IOmnic} from "./interfaces/IOmnic.sol";
 import {IOmnicReciver} from "./interfaces/IOmnicReciver.sol";
 import {IOmnicFeeManager} from "./interfaces/IOmnicFeeManager.sol";
@@ -164,7 +164,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         // get the next nonce for the destination domain, then increment it
         uint64 _nonce = ++outboundNonce[_dstChainId][msg.sender];
 
-        Message memory m = Message(
+        bytes memory _message = Types.formatMessage(
             _msgType,
             chainId,
             TypeCasts.addressToBytes32(msg.sender),
@@ -173,7 +173,6 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
             _recipientAddress,
             _payload
         );
-        bytes memory _message = abi.encode(m);
         bytes32 _messageHash = keccak256(_message);
 
         emit SendMessage(
@@ -209,7 +208,7 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         // get the next nonce for the destination domain, then increment it
         uint64 _nonce = ++outboundNonce[_dstChainId][msg.sender];
 
-        Message memory m = Message(
+        bytes memory _message = Types.formatMessage(
             _msgType,
             chainId,
             TypeCasts.addressToBytes32(msg.sender),
@@ -218,7 +217,6 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
             _recipientAddress,
             _payload
         );
-        bytes memory _message = abi.encode(m);
         bytes32 _messageHash = keccak256(_message);
 
         emit SendMessage(
