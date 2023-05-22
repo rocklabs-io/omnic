@@ -19,9 +19,9 @@ pub enum MessageType {
 impl MessageType {
     pub fn from_u8(value: u8) -> Result<MessageType, String> {
         match value {
-            1 => Ok(MessageType::SYN),
-            2 => Ok(MessageType::ACK),
-            3 => Ok(MessageType::FAIL_ACK),
+            0 => Ok(MessageType::SYN),
+            1 => Ok(MessageType::ACK),
+            2 => Ok(MessageType::FAIL_ACK),
             _ => Err(format!("Unknown value: {}", value)),
         }
     }

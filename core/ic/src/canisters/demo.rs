@@ -6,9 +6,9 @@ use ic_cdk::export::Principal;
 
 #[update(name = "handle_message")]
 #[candid_method(update, rename = "handle_message")]
-fn handle_message(msg_type: u8, msg_hash: Vec<u8>, origin: u32, sender: Vec<u8>, nonce: u32, body: Vec<u8>) -> Result<bool, String> {
+fn handle_message(msg_type: u8, msg_hash: Vec<u8>, origin: u32, sender: Vec<u8>, nonce: u64, body: Vec<u8>) -> Result<String, String> {
     ic_cdk::println!("demo app got message: {:?}", (origin, nonce, hex::encode(&sender), str::from_utf8(&body)));
-    Ok(true)
+    Ok("success".into())
 }
 
 #[query(name = "hex_pid")]
