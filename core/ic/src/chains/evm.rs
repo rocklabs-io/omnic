@@ -143,16 +143,16 @@ impl HomeContract for EVMChainClient {
             Ok(x) => x,
             Err(e) => return Err(e.into()),
         };
-        let msgs =logs.into_iter().map(move |l| {
+        logs.into_iter().map(move |l| {
             let log = ev.parse_log(ethabi::RawLog {
                 topics: l.topics,
                 data: l.data.0,
-            }).map_err(|e| Other(format!("parse log failed: {}", e))).unwrap();
-            ic_cdk::println!("log info: {:?}", log);
-            let msg = log.params.into_iter().find(|x| x.name == "message").unwrap();
-            let m = Message::from_raw(msg.value.into_bytes().unwrap()).unwrap();
-            MessageStable::from(m)
-        }).collect();
-        Ok(msgs)
+            })?;
+
+            let message = log.params.into_iter().find(|x| x.name == "message").unwrap();
+            let val = message.value.into_bytes().unwrap();
+            let m: Message = Message::from_raw(val)?;
+            Ok(MessageStable::from(m))
+        }).collect()
     }
 }
