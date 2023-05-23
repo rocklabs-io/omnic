@@ -19,7 +19,7 @@ async fn handle_message(msg_type: u8, msg_hash: Vec<u8>, origin: u32, sender: Ve
     if sender.len() == recipient.len() {
         recipient.copy_from_slice(&sender);
     }
-    let ret = _send_receipt(MESSAGE_TYPE_ACK, origin, recipient, vec![]).await;
+    let ret = _send_receipt(MESSAGE_TYPE_ACK, origin, recipient, "success!".to_string().as_bytes().to_vec()).await;
     match ret {
         Ok(_) => Ok("send receipt success".into()),
         Err(e) => Err(format!("send receipt error, {}", e))
