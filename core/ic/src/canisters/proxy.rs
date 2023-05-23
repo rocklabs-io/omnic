@@ -426,9 +426,9 @@ async fn trigger_clear_cache(dst_chains: Vec<u32>) -> Result<bool, String> {
 // call by application
 // cache message and send them as a batch when it reaches the maximum capacity of the cache or
 // the limited time
-#[update(name = "send_message", guard = "is_authorized")]
+#[update(name = "send_message")]
 #[candid_method(update, rename = "send_message")]
-async fn send_message(msg_type: u8, dst_chain: u32, recipient: String, payload: Vec<u8>) -> Result<bool, String> {
+async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload: Vec<u8>) -> Result<bool, String> {
     let t = MessageType::from_u8(msg_type)?;
     // check cycles
     let available = ic_cdk::api::call::msg_cycles_available();
@@ -443,14 +443,18 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: String, payload: 
 
     let caller = ic_cdk::api::caller();
     let out_nonce = get_out_nonce(&dst_chain, &caller);
+    add_log(format!("send message caller:{:?}, out bound nonce: {}", Principal::to_text(&caller), out_nonce));
 
+    // padding caller to 32 bytes
+    let mut sender = caller.clone().as_slice().to_owned();
+    sender.resize(32, 0);
     let msg = Message {
         t,
         origin: 0u32,
-        sender: H256::from_slice(caller.clone().as_slice()),
+        sender: H256::from_slice(&sender),
         nonce: out_nonce,
         destination: dst_chain,
-        recipient: H256::from_slice(&recipient.clone().into_bytes()),
+        recipient: H256::from_slice(&recipient),
         body: payload,
     };
 
@@ -478,7 +482,7 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: String, payload: 
         DetailsBuilder::new()
             .insert("nonce", DetailValue::U64(out_nonce))
             .insert("destination", DetailValue::U64(dst_chain as u64))
-            .insert("recipient", DetailValue::Text(recipient))
+            .insert("recipient", DetailValue::Text(hex::encode(&recipient)))
     );
     // out nonce increment
     inc_out_nonce(dst_chain, caller.clone());
@@ -523,6 +527,7 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: String, payload: 
 #[candid_method(update, rename = "process_message")]
 async fn process_message(messages: Vec<MessageStable>) -> Result<Vec<(String, u64)>, String> {
     // now, proxy handle message one by one and add batch processing in the future
+    let caller = ic_cdk::caller();
     let mut rets: Vec<(String, u64)> = vec![];
     for m in messages {
         let res = if m.destination == 0u32 {
@@ -552,7 +557,7 @@ async fn process_message(messages: Vec<MessageStable>) -> Result<Vec<(String, u6
         };
 
         add_record(
-            ic_cdk::caller(),
+            caller,
             "process_message".to_string(),
             DetailsBuilder::new()
                 .insert("origin", DetailValue::U64(m.origin as u64))
