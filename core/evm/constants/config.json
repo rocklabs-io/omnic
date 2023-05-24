@@ -1,6 +1,6 @@
 {
 	"OmnicCanisterId": "rrkah-fqaaa-aaaaa-aaaaq-cai",
-	"OmnicCanisterAddr": "0x8b6da33954f9a2f9cb9f97a0449f5200be8b3905",
+	"OmnicCanisterAddr": "0xF6C6FC3A0b3Bf682E17e6f45f4F4721e84A8ec70",
 	"ChainIds": {
 		"ic": 0,
 		"goerli": 5,
@@ -32,7 +32,7 @@
 			"UpgradeBeaconController": "0xF62b59AC5bEABBf64183B7AC595d58cF03279f1F",
 			"UpgradeBeacon": "0x2016F0c0463E5FD8f5c3E08fc284a18061109D56",
 			"UpgradeBeaconProxy": "0xefD7ccC9EaEA2B527F5BcAF7cf1372f34f411b1f",
-			"Implementation": "0x1504C663cEDe5c9Ac9DcC9d949251d9c73D25115",
+			"Implementation": "0x2323974db795D25Fe3d1ca064Faaa365BCc9816c",
 			"Demo": "0x2B4B4618B29c6E994A20A1Eaa926710a920d5176",
 			"Bridge": "",
 			"USDT": "0x4a22D4DEdbF85Ee9F1fbC4aBfD1349D56C905fDC",

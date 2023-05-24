@@ -319,7 +319,27 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         returns (bool success)
     {
         // decode message
-        Message memory m = abi.decode(_message, (Message));
+        (
+            uint8 _msg_type,
+            uint32 _srcChainId,
+            bytes32 _srcSenderAddress,
+            uint64 _nonce,
+            uint32 _dstChainId,
+            bytes32 _recipientAddress,
+            bytes memory _payload
+        ) = abi.decode(
+            _message,
+            (uint8, uint32, bytes32, uint64, uint32, bytes32, bytes)
+        );
+        Message memory m = Message(
+            _msg_type,
+            _srcChainId,
+            _srcSenderAddress,
+            _nonce,
+            _dstChainId,
+            _recipientAddress,
+            _payload
+        );
 
         return _processMessage(m);
     }
@@ -334,7 +354,28 @@ contract Omnic is IOmnic, Initializable, OwnableUpgradeable {
         returns (bool success)
     {
         for (uint i = 0; i < _messages.length; i++) {
-            Message memory m = abi.decode(_messages[i], (Message));
+            // decode message
+            (
+                uint8 _msg_type,
+                uint32 _srcChainId,
+                bytes32 _srcSenderAddress,
+                uint64 _nonce,
+                uint32 _dstChainId,
+                bytes32 _recipientAddress,
+                bytes memory _payload
+            ) = abi.decode(
+                _messages[i],
+                (uint8, uint32, bytes32, uint64, uint32, bytes32, bytes)
+            );
+            Message memory m = Message(
+                _msg_type,
+                _srcChainId,
+                _srcSenderAddress,
+                _nonce,
+                _dstChainId,
+                _recipientAddress,
+                _payload
+            );
             _processMessage(m);
         }
         return true;
