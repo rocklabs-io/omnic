@@ -170,22 +170,26 @@ fn add_chain(
                     )
                 )
             );
+
+            // add record
+            add_record(
+                ic_cdk::caller(),
+                "add_chain".to_string(),
+                DetailsBuilder::new()
+                    .insert("chain_id", DetailValue::U64(chain_id as u64))
+                    .insert("urls", DetailValue::Text(urls.join(",")))
+                    .insert("gatewat_addr", DetailValue::Principal(gateway_canister_addr))
+                    .insert("omnic_addr", DetailValue::Text(omnic_addr))
+                    .insert("start_block", DetailValue::U64(start_block))
+                    .insert("max_waiting_time", DetailValue::U64(max_waiting_time))
+                    .insert("startmax_cache_msg_block", DetailValue::U64(max_cache_msg))
+            );
+            Ok(true)
+        } else {
+            Err(format!("chain {} has been added!", chain_id))
         }
-    });
-    // add record
-    add_record(
-        ic_cdk::caller(),
-        "add_chain".to_string(),
-        DetailsBuilder::new()
-            .insert("chain_id", DetailValue::U64(chain_id as u64))
-            .insert("urls", DetailValue::Text(urls.join(",")))
-            .insert("gatewat_addr", DetailValue::Principal(gateway_canister_addr))
-            .insert("omnic_addr", DetailValue::Text(omnic_addr))
-            .insert("start_block", DetailValue::U64(start_block))
-            .insert("max_waiting_time", DetailValue::U64(max_waiting_time))
-            .insert("startmax_cache_msg_block", DetailValue::U64(max_cache_msg))
-    );
-    Ok(true)
+    })
+
 }
 
 #[update(name = "delete_chain", guard = "is_authorized")]
@@ -240,21 +244,23 @@ fn update_chain(
                     )
                 )
             );
+            add_record(
+                ic_cdk::caller(),
+                "update_chain".to_string(),
+                DetailsBuilder::new()
+                    .insert("chain_id", DetailValue::U64(chain_id as u64))
+                    .insert("urls", DetailValue::Text(urls.join(",")))
+                    .insert("gateway_addr", DetailValue::Principal(gateway_canister_addr))
+                    .insert("omnic_addr", DetailValue::Text(omnic_addr))
+                    .insert("start_block", DetailValue::U64(start_block))
+                    .insert("max_waiting_time", DetailValue::U64(max_waiting_time))
+                    .insert("startmax_cache_msg_block", DetailValue::U64(max_cache_msg))
+            );
+            Ok(true)
+        } else {
+            Err("chain not exists, please add chain first".into())
         }
-    });
-    add_record(
-        ic_cdk::caller(),
-        "update_chain".to_string(),
-        DetailsBuilder::new()
-            .insert("chain_id", DetailValue::U64(chain_id as u64))
-            .insert("urls", DetailValue::Text(urls.join(",")))
-            .insert("gateway_addr", DetailValue::Principal(gateway_canister_addr))
-            .insert("omnic_addr", DetailValue::Text(omnic_addr))
-            .insert("start_block", DetailValue::U64(start_block))
-            .insert("max_waiting_time", DetailValue::U64(max_waiting_time))
-            .insert("startmax_cache_msg_block", DetailValue::U64(max_cache_msg))
-    );
-    Ok(true)
+    })
 }
 
 #[query(name = "get_chains")]
@@ -441,12 +447,12 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload:
     // accept cycles
     let _accepted = ic_cdk::api::call::msg_cycles_accept(need_cycles);
 
-    let caller = ic_cdk::api::caller();
-    let out_nonce = get_out_nonce(&dst_chain, &caller);
-    add_log(format!("send message caller:{:?}, out bound nonce: {}", Principal::to_text(&caller), out_nonce));
+    let api_caller = ic_cdk::api::caller();
+    let out_nonce = get_out_nonce(&dst_chain, &api_caller);
+    add_log(format!("send message caller:{:?}, out bound nonce: {}", Principal::to_text(&api_caller), out_nonce));
 
     // padding caller to 32 bytes
-    let mut sender = caller.clone().as_slice().to_owned();
+    let mut sender = api_caller.clone().as_slice().to_owned();
     sender.resize(32, 0);
     let msg = Message {
         t,
@@ -462,8 +468,9 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload:
 
     let (msgs, msg_len, send_flag) = CACHE.with(move |cache| {
         let mut c = cache.borrow_mut();
-        let front_cache_msg_ts = c.get_front_msg_ts(dst_chain);
-        let current_cache_msg_cap = c.get_cache_messages_len(dst_chain);
+        let front_cache_msg_ts = c.get_front_msg_ts(dst_chain); // the first msg timestamp
+        let current_cache_msg_cap = c.get_cache_messages_len(dst_chain); // current message capacity
+        ic_cdk::println!("first msg timestamp: {}, cap: {}", front_cache_msg_ts, current_cache_msg_cap);
         c.insert_message(dst_chain, msg);
         if
             front_cache_msg_ts + max_waiting_time > get_time() ||
@@ -477,7 +484,7 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload:
     });
 
     add_record(
-        caller,
+        api_caller,
         "send_message".to_string(),
         DetailsBuilder::new()
             .insert("nonce", DetailValue::U64(out_nonce))
@@ -485,7 +492,7 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload:
             .insert("recipient", DetailValue::Text(hex::encode(&recipient)))
     );
     // out nonce increment
-    inc_out_nonce(dst_chain, caller.clone());
+    inc_out_nonce(dst_chain, api_caller.clone());
 
     if send_flag {
         let (caller, omnic_addr, rpc) = CHAINS.with(|chains| {
@@ -503,7 +510,7 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload:
 
                 //add record
                 add_record(
-                    ic_cdk::caller(),
+                    api_caller,
                     "process_message_batch".to_string(),
                     DetailsBuilder::new()
                         .insert("origin", DetailValue::U64(0u64))
@@ -534,6 +541,7 @@ async fn process_message(messages: Vec<MessageStable>) -> Result<Vec<(String, u6
             // take last 10 bytes
             let recipient = Principal::from_slice(&m.recipient[22..]);
             add_log(format!("recipient: {:?}", Principal::to_text(&recipient)));
+            ic_cdk::println!("dispatch message to destinated canister!");
             call_to_canister(recipient, &m).await
         } else {
             // send tx to dst chain
