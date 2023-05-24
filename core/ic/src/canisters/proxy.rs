@@ -448,7 +448,7 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload:
     let _accepted = ic_cdk::api::call::msg_cycles_accept(need_cycles);
 
     let api_caller = ic_cdk::api::caller();
-    let out_nonce = get_out_nonce(&dst_chain, &api_caller);
+    let out_nonce = get_out_nonce(&dst_chain, &api_caller) + 1;
     add_log(format!("send message caller:{:?}, out bound nonce: {}", Principal::to_text(&api_caller), out_nonce));
 
     // padding caller to 32 bytes
@@ -537,6 +537,9 @@ async fn process_message(messages: Vec<MessageStable>) -> Result<Vec<(String, u6
     let caller = ic_cdk::caller();
     let mut rets: Vec<(String, u64)> = vec![];
     for m in messages {
+        if m.nonce != get_in_nonce(&m.origin, H256::from(m.sender).to_string().as_ref()) {
+            return Err(format!("expected nonce != current nonce: {} != {}", m.origin, m.nonce));
+        }
         let res = if m.destination == 0u32 {
             // take last 10 bytes
             let recipient = Principal::from_slice(&m.recipient[22..]);
@@ -563,7 +566,8 @@ async fn process_message(messages: Vec<MessageStable>) -> Result<Vec<(String, u6
                 vec![encode_body(&Message::from(m.clone()))]
             ).await
         };
-
+        //update
+        inc_in_nonce(m.origin, H256::from(m.sender).to_string());
         add_record(
             caller,
             "process_message".to_string(),
