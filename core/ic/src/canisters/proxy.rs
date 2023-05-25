@@ -537,7 +537,7 @@ async fn process_message(messages: Vec<MessageStable>) -> Result<Vec<(String, u6
     let caller = ic_cdk::caller();
     let mut rets: Vec<(String, u64)> = vec![];
     for m in messages {
-        if m.nonce != get_in_nonce(&m.origin, H256::from(m.sender).to_string().as_ref()) {
+        if m.nonce != get_in_nonce(&m.origin, H256::from(m.sender).to_string().as_ref()) + 1 {
             return Err(format!("expected nonce != current nonce: {} != {}", m.origin, m.nonce));
         }
         let res = if m.destination == 0u32 {
