@@ -178,7 +178,7 @@ fn add_chain(
                 DetailsBuilder::new()
                     .insert("chain_id", DetailValue::U64(chain_id as u64))
                     .insert("urls", DetailValue::Text(urls.join(",")))
-                    .insert("gatewat_addr", DetailValue::Principal(gateway_canister_addr))
+                    .insert("gateway_addr", DetailValue::Principal(gateway_canister_addr))
                     .insert("omnic_addr", DetailValue::Text(omnic_addr))
                     .insert("start_block", DetailValue::U64(start_block))
                     .insert("max_waiting_time", DetailValue::U64(max_waiting_time))
@@ -452,12 +452,14 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload:
     add_log(format!("send message caller:{:?}, out bound nonce: {}", Principal::to_text(&api_caller), out_nonce));
 
     // padding caller to 32 bytes
-    let mut sender = api_caller.clone().as_slice().to_owned();
-    sender.resize(32, 0);
+    let sender = api_caller.clone().as_slice().to_owned();
+    let mut padding_sender = vec![];
+    padding_sender.resize(32 - sender.len(), 0);
+    padding_sender.extend_from_slice(&sender);
     let msg = Message {
         t,
         origin: 0u32,
-        sender: H256::from_slice(&sender),
+        sender: H256::from_slice(&padding_sender),
         nonce: out_nonce,
         destination: dst_chain,
         recipient: H256::from_slice(&recipient),
@@ -503,6 +505,7 @@ async fn send_message(msg_type: u8, dst_chain: u32, recipient: [u8;32], payload:
         if caller == "" || omnic_addr == "" {
             return Err("caller address is empty".into());
         }
+        ic_cdk::println!("send msg {:?} to chain {}", msgs, dst_chain);
         match call_to_chain(caller, omnic_addr, rpc, dst_chain, msgs).await {
             Ok(txhash) => {
                 //clear cache
@@ -538,6 +541,7 @@ async fn process_message(messages: Vec<MessageStable>) -> Result<Vec<(String, u6
     let mut rets: Vec<(String, u64)> = vec![];
     for m in messages {
         if m.nonce != get_in_nonce(&m.origin, H256::from(m.sender).to_string().as_ref()) + 1 {
+            add_log(format!("expected nonce != current nonce: {} != {}", m.origin, m.nonce));
             return Err(format!("expected nonce != current nonce: {} != {}", m.origin, m.nonce));
         }
         let res = if m.destination == 0u32 {

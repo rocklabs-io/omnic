@@ -318,9 +318,10 @@ async fn fetch_msg() {
             // query messags in [last block height + 1, block height]
             match EVMChainClient::new(state.rpc_urls[idx].clone(), state.omnic_addr.clone(), MAX_RESP_BYTES, CYCLES_PER_CALL) {
                 Ok(client) => {
-                    let scan_results: Result<Vec<MessageStable>, omnic::OmnicError> = client.scan_chunk(state.last_block_height+1, state.block_height).await;
+                    let scan_results: Result<Vec<MessageStable>, omnic::OmnicError> = client.scan_chunk(state.last_block_height, state.block_height).await;
                     match scan_results {
                         Ok(msgs) => {
+                            add_log(format!("scan block from {} to {}, get {} events", state.last_block_height, state.block_height, msgs.len()));
                             msgs.into_iter().for_each(|msg| {
                                 incr_state_message(msg);
                             });
@@ -438,6 +439,7 @@ async fn fetch_msgs() {
                         });
                         // call proxy to send message
                         // TODO how to handle send failed?
+                        ic_cdk::println!("valid message amount: {}", valid_msgs.len());
                         if valid_msgs.len() > 0 {
                             ic_cdk::spawn(send_message_to_proxy(valid_msgs));
                         }
@@ -541,6 +543,7 @@ async fn send_message_to_proxy(msgs: Vec<MessageStable>) {
         s.borrow().proxy_addr
     });
 
+    ic_cdk::println!("call proxy to process: {}", proxy.clone());
     let call_res: CallResult<(Result<Vec<(String, u64)>, String>,)> = ic_cdk::call(proxy, "process_message", (msgs, )).await;
     if call_res.is_err() {
         add_log(format!("call proxy failed: {:?}", call_res.err()))
