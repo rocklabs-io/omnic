@@ -29,11 +29,11 @@
 			"OmnicFeeManager": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
 		},
 		"mumbai": {
-			"UpgradeBeaconController": "0xF62b59AC5bEABBf64183B7AC595d58cF03279f1F",
-			"UpgradeBeacon": "0x2016F0c0463E5FD8f5c3E08fc284a18061109D56",
-			"UpgradeBeaconProxy": "0xefD7ccC9EaEA2B527F5BcAF7cf1372f34f411b1f",
-			"Implementation": "0x2323974db795D25Fe3d1ca064Faaa365BCc9816c",
-			"Demo": "0x2B4B4618B29c6E994A20A1Eaa926710a920d5176",
+			"UpgradeBeaconController": "0xa2422f99d3aCb60053f9f23881c43eeE2DDCC890",
+			"UpgradeBeacon": "0x02cE9C9F8Aa849cF69229053Be5BeaB6C6Dbe38B",
+			"UpgradeBeaconProxy": "0x385F27cb1b920cC6170cbF62740aE1B4A707cFd0",
+			"Implementation": "0x0C6A207CE45d9303fC24de720f36c457bF384E08",
+			"Demo": "0x46faD0795a61C4C87cD936ff09a24f0a37267a0D",
 			"Bridge": "",
 			"USDT": "0x4a22D4DEdbF85Ee9F1fbC4aBfD1349D56C905fDC",
 			"OmnicFeeManager": "0xb297C8A1af6981C992De84272BBaBFde3EB1F458"

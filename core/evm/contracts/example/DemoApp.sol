@@ -9,7 +9,7 @@ import {Omnic} from "../Omnic.sol";
 
 contract DemoApp is Ownable {
 
-    address omnicAddr;
+    address public omnicAddr;
 
     // Message type
     uint8 public constant MESSAGE_TYPE_SYN = 0;
@@ -20,7 +20,7 @@ contract DemoApp is Ownable {
     event ReceivedMessage(
         uint32 indexed srcChainId,
         bytes32 srcSender,
-        uint32 nonce,
+        uint64 nonce,
         bytes payload
     );
 
@@ -62,7 +62,7 @@ contract DemoApp is Ownable {
         uint8 msgType,
         uint32 srcChainId,
         bytes32 srcSender,
-        uint32 nonce,
+        uint64 nonce,
         bytes memory payload
     )
         public

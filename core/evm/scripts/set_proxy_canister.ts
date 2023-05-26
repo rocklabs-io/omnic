@@ -13,7 +13,8 @@ const deployProxy = async function (chain: string) {
   console.log("found deployed UpgradeBeaconProxy:", proxyAddr);
   let proxy = await ethers.getContractAt("Omnic", proxyAddr);
 
-  const proxyCanisterAddr = "0xF6C6FC3A0b3Bf682E17e6f45f4F4721e84A8ec70"
+  const proxyCanisterAddr = "0x012709e1293b5fb2476a0d6a6011a4944d97bdbf"
+  // const proxyCanisterAddr = "0x385F27cb1b920cC6170cbF62740aE1B4A707cFd0"
   let old_val = await proxy.omnicProxyCanisterAddr()
   console.log("get proxy address:", old_val)
   let result = await proxy.setOmnicCanisterAddr(proxyCanisterAddr)
